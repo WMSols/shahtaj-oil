@@ -18,11 +18,10 @@ export class WarehouseInventory extends Component {
             warehouseForm: { name: '', type: '', location: '', manager: '' },
             adjustmentForm: { product_id: '', qty: 0 },
             
-            // This is now safe to call because we added optional chaining to getEmptyProductForm
             productForm: this.getEmptyProductForm(),
             currentProduct: null,
             saleTaxes: [],
-            defaultTaxIds: [],
+            defaultTaxId: "", // Store single default instead of array
 
             warehouses: [
                 { id: "WH-MAIN", name: "Central Hub - Lahore", type: "Main Warehouse", location: "Sundar Industrial Estate", manager: "Zafar Iqbal", status: "Active" },
@@ -49,8 +48,7 @@ export class WarehouseInventory extends Component {
             list_price: 0.0, standard_price: 0.0,
             invoice_policy: 'order', type: 'consu',
             shahtaj_sale_uom: 'piece', shahtaj_kg_per_unit: 1.0,
-            // FIXED: Added optional chaining to prevent undefined crash during setup
-            tax_ids: [...(this.state?.defaultTaxIds || [])],
+            tax_id: this.state?.defaultTaxId || "", // Initialize with single string
             barcode: '', weight: 0.0, volume: 0.0,
             income_account: 'static_inc', expense_account: 'static_exp',
             image_1920: false
@@ -74,43 +72,27 @@ export class WarehouseInventory extends Component {
             ...tax,
             label: this.formatTaxLabel(tax),
         }));
-        this.state.defaultTaxIds = this.state.saleTaxes
-            .filter((tax) => tax.is_default)
-            .map((tax) => tax.id);
+        
+        // Find the first default tax to auto-populate the dropdown
+        const defaultTax = this.state.saleTaxes.find((tax) => tax.is_default);
+        if (defaultTax) {
+            this.state.defaultTaxId = defaultTax.id.toString();
+        }
             
-        // If the form initialized empty before the taxes loaded, inject the defaults now
-        if (!this.state.productForm.tax_ids.length && this.state.defaultTaxIds.length) {
-            this.state.productForm.tax_ids = [...this.state.defaultTaxIds];
+        // If the form initialized before taxes loaded, inject the default now
+        if (!this.state.productForm.tax_id && this.state.defaultTaxId) {
+            this.state.productForm.tax_id = this.state.defaultTaxId;
         }
-    }
-
-    toggleProductTax(formTarget, taxId, checked) {
-        const form = formTarget === 'edit' ? this.state.currentProduct : this.state.productForm;
-        if (!form) {
-            return;
-        }
-        const ids = new Set(form.tax_ids || []);
-        if (checked) {
-            ids.add(taxId);
-        } else {
-            ids.delete(taxId);
-        }
-        form.tax_ids = Array.from(ids);
-    }
-
-    isTaxSelected(formTarget, taxId) {
-        const form = formTarget === 'edit' ? this.state.currentProduct : this.state.productForm;
-        return (form?.tax_ids || []).includes(taxId);
     }
 
     getTaxLabel(taxIds) {
         if (!taxIds || !taxIds.length) {
             return 'No tax';
         }
-        return taxIds
-            .map((id) => this.state.saleTaxes.find((tax) => tax.id === id)?.label)
-            .filter(Boolean)
-            .join(', ');
+        // Since we allow only one tax visually, we just map the first one for the list view
+        const primaryTaxId = taxIds[0];
+        const tax = this.state.saleTaxes.find((t) => t.id === primaryTaxId);
+        return tax ? tax.label : 'No tax';
     }
 
     onSaleUomChange(formTarget) {
@@ -134,7 +116,6 @@ export class WarehouseInventory extends Component {
         );
         this.state.inventory = products.map((product) => ({
             ...product,
-            tax_ids: product.taxes_id || [],
             tax_label: this.getTaxLabel(product.taxes_id || []),
         }));
     }
@@ -181,7 +162,8 @@ export class WarehouseInventory extends Component {
             is_storable: this.state.productForm.track_inventory,
             shahtaj_sale_uom: this.state.productForm.shahtaj_sale_uom,
             shahtaj_kg_per_unit: parseFloat(this.state.productForm.shahtaj_kg_per_unit || 1),
-            taxes_id: [[6, 0, (this.state.productForm.tax_ids || []).map((id) => parseInt(id, 10))]],
+            // Link single ID if present, else clear
+            taxes_id: this.state.productForm.tax_id ? [[6, 0, [parseInt(this.state.productForm.tax_id, 10)]]] : [[5, 0, 0]],
         };
 
         if (this.state.productForm.image_1920) {
@@ -220,9 +202,15 @@ export class WarehouseInventory extends Component {
     }
 
     viewProductDetails(product) {
+        // Extract the first tax ID as a string for the dropdown model
+        let currentTaxId = "";
+        if (product.taxes_id && product.taxes_id.length > 0) {
+            currentTaxId = product.taxes_id[0].toString();
+        }
+        
         this.state.currentProduct = {
             ...product,
-            tax_ids: [...(product.tax_ids || product.taxes_id || [])],
+            tax_id: currentTaxId,
         };
         this.state.showProductDetails = true;
         this.state.showProductAddForm = false;
@@ -240,7 +228,8 @@ export class WarehouseInventory extends Component {
             type: this.state.currentProduct.type,
             shahtaj_sale_uom: this.state.currentProduct.shahtaj_sale_uom,
             shahtaj_kg_per_unit: parseFloat(this.state.currentProduct.shahtaj_kg_per_unit || 1),
-            taxes_id: [[6, 0, (this.state.currentProduct.tax_ids || []).map((id) => parseInt(id, 10))]],
+            // Link single ID if present, else clear
+            taxes_id: this.state.currentProduct.tax_id ? [[6, 0, [parseInt(this.state.currentProduct.tax_id, 10)]]] : [[5, 0, 0]],
         };
 
         if (this.state.currentProduct.image_1920) {

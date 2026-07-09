@@ -33,7 +33,7 @@ class ResUsers(models.Model):
         ],
         string='Online Status',
         compute='_compute_shahtaj_online_status',
-        store=True,
+        # store=True,
     )
     shahtaj_im_status = fields.Char(
         related='partner_id.im_status',

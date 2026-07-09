@@ -1,11 +1,16 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart } from "@odoo/owl";
+// 1. Added useEffect and useRef to the imports
+import { Component, useState, onWillStart, useEffect, useRef } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 
 export class TerritoryRoutes extends Component {
     setup() {
         this.orm = useService("orm");
+
+        // 2. Setup the reference for our Map HTML element
+        this.mapRef = useRef("mapContainer");
+        this.mapInstance = null; // Holds the Leaflet map instance
 
         this.state = useState({
             activeSubTab: 'routes', 
@@ -16,12 +21,10 @@ export class TerritoryRoutes extends Component {
             selectedShopDetails: null,
             shopCategoryEdit: 'credit',
 
-            // Edit Tracking States
             editingAreaId: null,
             editingRouteId: null,
             editingShopId: null,
 
-            // Form Data States
             areaForm: { name: '', is_active: true },
             routeForm: { name: '', zone_id: '', is_active: true }, 
             shopForm: { 
@@ -35,11 +38,53 @@ export class TerritoryRoutes extends Component {
                 preview_owner_photo: null, preview_shop_exterior_photo: null
             },
 
-            // Real Data Arrays
             areas: [],
             routes: [],
             shops: []
         });
+
+        // 3. The OWL Effect Hook: This watches for changes and draws the map
+        useEffect(() => {
+            // Cleanup the previous map if it exists
+            if (this.mapInstance) {
+                this.mapInstance.remove();
+                this.mapInstance = null;
+            }
+
+            const mapEl = this.mapRef.el;
+            const shop = this.state.selectedShopDetails;
+
+            // Only draw if we have the HTML element, the shop data, and valid GPS coordinates
+            if (mapEl && shop && shop.partner_latitude && shop.partner_longitude) {
+                // Ensure Leaflet ('L') was successfully loaded from the manifest
+                if (typeof L !== 'undefined') {
+                    // Initialize the map and set the view to the shop's coordinates
+                    this.mapInstance = L.map(mapEl).setView([shop.partner_latitude, shop.partner_longitude], 16);
+                    
+                    // Load the visual map tiles from OpenStreetMap
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 19,
+                        attribution: '© OpenStreetMap'
+                    }).addTo(this.mapInstance);
+
+                    // Drop the pin and add a popup with the shop name!
+                    L.marker([shop.partner_latitude, shop.partner_longitude])
+                        .addTo(this.mapInstance)
+                        .bindPopup(`<b>${shop.name}</b><br/>${shop.owner_name}`)
+                        .openPopup();
+                } else {
+                    console.warn("Leaflet library is missing! Check your __manifest__.py assets.");
+                }
+            }
+            
+            // Cleanup function when the component unmounts
+            return () => {
+                if (this.mapInstance) {
+                    this.mapInstance.remove();
+                    this.mapInstance = null;
+                }
+            };
+        }, () => [this.mapRef.el, this.state.selectedShopDetails]);
 
         onWillStart(async () => {
             await this.fetchDashboardData();
@@ -200,7 +245,6 @@ export class TerritoryRoutes extends Component {
     }
 
     async editShop(shop) {
-        // Fetch full shop details for editing
         const details = await this.orm.read("res.partner", [shop.id], [
             "name", "owner_name", "phone", "owner_cnic_number", "zone_id", "route_id",
             "partner_latitude", "partner_longitude", "shahtaj_shop_category", "credit_limit", "legacy_balance"
@@ -220,7 +264,6 @@ export class TerritoryRoutes extends Component {
                 shopCategory: d.shahtaj_shop_category || 'credit',
                 creditLimit: d.credit_limit || '',
                 legacyBalance: d.legacy_balance || '',
-                // Keep image state clear unless user decides to upload new ones during edit
                 owner_cnic_front: null, owner_cnic_back: null, 
                 owner_photo: null, shop_exterior_photo: null,
                 preview_owner_cnic_front: null, preview_owner_cnic_back: null, 
@@ -287,8 +330,8 @@ export class TerritoryRoutes extends Component {
             shahtaj_shop_category: this.state.shopForm.shopCategory || 'credit',
             name: this.state.shopForm.name,
             owner_name: this.state.shopForm.owner_name,
-            owner_phone: this.state.shopForm.owner_phone, // Custom field if it exists
-            phone: this.state.shopForm.owner_phone,       // Standard Odoo field
+            owner_phone: this.state.shopForm.owner_phone,
+            phone: this.state.shopForm.owner_phone,
             owner_cnic_number: this.state.shopForm.owner_cnic_number || false,
             zone_id: this.state.shopForm.zone_id ? parseInt(this.state.shopForm.zone_id) : false,
             route_id: this.state.shopForm.route_id ? parseInt(this.state.shopForm.route_id) : false,
@@ -300,7 +343,6 @@ export class TerritoryRoutes extends Component {
             legacy_balance: parseFloat(this.state.shopForm.legacyBalance) || 0.0,
         };
 
-        // Only update photos if a new one was uploaded during edit, or if creating new
         if (this.state.shopForm.owner_cnic_front) payload.owner_cnic_front = this.state.shopForm.owner_cnic_front;
         if (this.state.shopForm.owner_cnic_back) payload.owner_cnic_back = this.state.shopForm.owner_cnic_back;
         if (this.state.shopForm.owner_photo) payload.owner_photo = this.state.shopForm.owner_photo;
@@ -309,7 +351,7 @@ export class TerritoryRoutes extends Component {
         if (this.state.editingShopId) {
             await this.orm.write("res.partner", [this.state.editingShopId], payload);
         } else {
-            payload.shop_approval_state = 'pending'; // Reset state on new creation
+            payload.shop_approval_state = 'pending';
             await this.orm.create("res.partner", [payload]);
         }
 

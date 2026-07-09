@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart } from "@odoo/owl";
+import { Component, useState, onWillStart,onMounted, onWillUnmount } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 
 export class StaffManagement extends Component {
@@ -14,11 +14,15 @@ export class StaffManagement extends Component {
             showForm: false,
             isLoading: false,
             
-            editingStaffId: null, // Tracks if we are editing an existing record
+            editingStaffId: null,
             
             staffList: [],
             detailSchedules: [],
             detailTargets: [],
+            
+            // New state properties for Search and Filter
+            searchQuery: '',
+            filterStatus: 'all', // 'all', 'online', 'active', 'suspended'
             
             formData: { 
                 name: '', 
@@ -29,13 +33,53 @@ export class StaffManagement extends Component {
             }
         });
 
+       // 2. Variable to hold our interval ID
+        this.pollingInterval = null;
+
         onWillStart(async () => {
             await this.fetchStaffData();
+        });
+
+        // 3. Start polling when the component loads
+        onMounted(() => {
+            // Fetch fresh data every 15 seconds (15000 ms)
+            this.pollingInterval = setInterval(() => {
+                this.fetchStaffData();
+            }, 15000);
+        });
+
+        // 4. Clean up the interval if the user navigates away
+        onWillUnmount(() => {
+            if (this.pollingInterval) {
+                clearInterval(this.pollingInterval);
+            }
+        });
+    }
+
+    // New Getter to handle dynamic searching and filtering
+    get filteredStaffList() {
+        return this.state.staffList.filter(staff => {
+            // 1. Search Logic
+            const searchLower = this.state.searchQuery.toLowerCase();
+            const nameMatch = staff.name.toLowerCase().includes(searchLower);
+            const codeMatch = staff.employee_code && staff.employee_code.toLowerCase().includes(searchLower);
+            const matchesSearch = nameMatch || codeMatch;
+
+            // 2. Filter Logic
+            let matchesFilter = true;
+            if (this.state.filterStatus === 'online') {
+                matchesFilter = staff.status === 'online';
+            } else if (this.state.filterStatus === 'active') {
+                matchesFilter = staff.active === true;
+            } else if (this.state.filterStatus === 'suspended') {
+                matchesFilter = staff.active === false;
+            }
+
+            return matchesSearch && matchesFilter;
         });
     }
 
     async fetchStaffData() {
-        // Included 'login' in the fields to pre-fill the email when editing
         const bookers = await this.orm.searchRead(
             "res.users",
             [["shahtaj_is_order_booker", "=", true], ["active", "in", [true, false]]],
@@ -126,7 +170,7 @@ export class StaffManagement extends Component {
             name: staff.name,
             employee_code: staff.employee_code || '',
             email: staff.login || '',
-            password: '', // Kept blank for security; only update if user types a new one
+            password: '', 
             role: 'order_booker'
         };
         this.state.editingStaffId = staff.id;
@@ -134,7 +178,6 @@ export class StaffManagement extends Component {
     }
 
     async saveStaff() {
-        // Name and Email are always required
         if (!this.state.formData.name || !this.state.formData.email) {
             alert("Name and App Login Email are required.");
             return;
@@ -142,14 +185,12 @@ export class StaffManagement extends Component {
 
         try {
             if (this.state.editingStaffId) {
-                // --- UPDATE EXISTING STAFF ---
                 const payload = {
                     name: this.state.formData.name,
                     login: this.state.formData.email,
                     shahtaj_employee_code: this.state.formData.employee_code,
                 };
                 
-                // Only include the password in the update if they actually typed a new one
                 if (this.state.formData.password) {
                     payload.password = this.state.formData.password;
                 }
@@ -157,7 +198,6 @@ export class StaffManagement extends Component {
                 await this.orm.write("res.users", [this.state.editingStaffId], payload);
 
             } else {
-                // --- CREATE NEW STAFF ---
                 if (!this.state.formData.password) {
                     alert("Password is required for new accounts.");
                     return;

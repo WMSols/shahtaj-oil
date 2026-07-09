@@ -141,10 +141,11 @@
                 <field name="shahtaj_employee_code"/>
                 <filter string="Active" name="active" domain="[('active', '=', True)]"/>
                 <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
-                <filter string="Online" name="online"
+                <!-- Removed these because we need live updates for order booker online status -->
+                <!-- <filter string="Online" name="online"
                         domain="[('shahtaj_online_status', '=', 'online')]"/>
                 <filter string="Offline" name="offline"
-                        domain="[('shahtaj_online_status', '=', 'offline')]"/>
+                        domain="[('shahtaj_online_status', '=', 'offline')]"/> -->
             </search>
         </field>
     </record>

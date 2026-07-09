@@ -71,14 +71,32 @@
         </t>
 
         <t t-if="!this.state.showForm and this.state.viewMode === 'list'">
-            
-            <ul class="nav nav-pills mb-4 border-bottom pb-2 flex-column flex-sm-row gap-2">
-                <li class="nav-item">
-                    <button class="nav-link rounded-pill fw-bold px-4 py-2 border-0 active bg-dark text-white shadow-sm w-100" disabled="1">
-                        Order Bookers
-                    </button>
-                </li>
-            </ul>
+            <!-- Updated Header area with Search and Filters -->
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 border-bottom pb-3 gap-3">
+                <ul class="nav nav-pills flex-column flex-sm-row gap-2 mb-0 w-100 w-md-auto">
+                    <li class="nav-item">
+                        <button class="nav-link rounded-pill fw-bold px-4 py-2 border-0 active bg-dark text-white shadow-sm w-100" disabled="1">
+                            Order Bookers
+                        </button>
+                    </li>
+                </ul>
+                <div class="d-flex flex-column flex-md-row gap-2 w-100 w-md-auto">
+                    <!-- Search Input -->
+                    <div class="input-group shadow-sm">
+                        <span class="input-group-text bg-white border-end-0 text-muted">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></svg>
+                        </span>
+                        <input type="text" class="form-control border-start-0 ps-0" placeholder="Search name or code..." t-model="this.state.searchQuery" />
+                    </div>
+                    <!-- Filter Dropdown -->
+                    <select class="form-select shadow-sm w-100 w-md-auto" t-model="this.state.filterStatus">
+                        <option value="all">All Statuses</option>
+                        <option value="active">Active Users</option>
+                        <option value="online">Currently Online</option>
+                        <option value="suspended">Suspended</option>
+                    </select>
+                </div>
+            </div>
 
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
@@ -91,10 +109,11 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <t t-if="this.state.staffList.length === 0">
-                            <tr><td colspan="4" class="text-center py-4 text-muted">No staff found in this category.</td></tr>
+                        <!-- Loop updated to target this.filteredStaffList -->
+                        <t t-if="this.filteredStaffList.length === 0">
+                            <tr><td colspan="4" class="text-center py-5 text-muted fw-bold">No staff found matching your search or filter.</td></tr>
                         </t>
-                        <t t-foreach="this.state.staffList" t-as="staff" t-key="staff.id">
+                        <t t-foreach="this.filteredStaffList" t-as="staff" t-key="staff.id">
                             <tr>
                                 <td class="ps-4 text-nowrap">
                                     <div class="fw-bold text-dark d-flex align-items-center">
@@ -151,7 +170,7 @@
         </t>
 
         <t t-if="this.state.viewMode === 'detail'">
-            
+            <!-- Detail view remains entirely untouched -->
             <div class="mb-4 mb-md-5 py-3 py-md-4 border-bottom">
                 <button class="btn btn-sm btn-light border shadow-sm fw-bold text-dark px-3 mb-4 d-flex align-items-center w-100 w-sm-auto justify-content-center" t-on-click="goBack">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left me-2"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>

@@ -93,6 +93,8 @@
             'shahtaj_oil/static/src/js/components/schedules_targets.js',
             'shahtaj_oil/static/src/js/components/dashboard.js',
             'shahtaj_oil/static/src/xml/*.xml',
+            'shahtaj_oil/static/src/lib/leaflet/leaflet.css',
+            'shahtaj_oil/static/src/lib/leaflet/leaflet.js',
         ],
     },
     'application': True,
