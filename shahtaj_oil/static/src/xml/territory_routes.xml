@@ -16,7 +16,6 @@
             </div>
         </div>
 
-        <!-- Navigation Tabs -->
         <div class="p-3 border-bottom">
             <ul class="nav nav-pills nav-fill">
                 <li class="nav-item">
@@ -46,17 +45,27 @@
             </ul>
         </div>
 
-        <!-- ZONES TAB -->
         <t t-if="this.state.activeSubTab === 'areas'">
-            <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center">
+            <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div>
                     <h6 class="fw-bold mb-0">Geographical Zones</h6>
-                    <small class="text-muted">Zones represent the highest level of your territory (e.g., 'North Region', 'Lahore Central').</small>
+                    <small class="text-muted">Zones represent the highest level of your territory.</small>
                 </div>
-                <button class="btn btn-sm btn-dark d-flex align-items-center text-white" t-on-click="() => this.state.showAreaForm = true" title="Create a new overarching zone">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus me-1"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-                    Add New Zone
-                </button>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="input-group input-group-sm shadow-sm" style="width: 250px;">
+                        <span class="input-group-text bg-white text-muted border-end-0"><i class="fa fa-search"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0" placeholder="Search zone name..." t-model="this.state.areaSearchQuery" />
+                    </div>
+                    <select class="form-select form-select-sm shadow-sm" style="width: 140px;" t-model="this.state.areaFilterStatus" title="Filter zones by active status">
+                        <option value="all">All Statuses</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                    <button class="btn btn-sm btn-dark d-flex align-items-center text-white ms-2 shadow-sm" t-on-click="() => this.state.showAreaForm = true" title="Create a new overarching zone">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus me-1"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                        New Zone
+                    </button>
+                </div>
             </div>
 
             <t t-if="this.state.showAreaForm">
@@ -102,7 +111,12 @@
                                 </td>
                             </tr>
                         </t>
-                        <t t-foreach="this.state.areas" t-as="area" t-key="area.id">
+                        <t t-elif="this.displayAreas.length === 0">
+                            <tr>
+                                <td colspan="5" class="text-center py-4 text-muted fw-bold">No zones match your search or filter criteria.</td>
+                            </tr>
+                        </t>
+                        <t t-foreach="this.displayAreas" t-as="area" t-key="area.id">
                             <tr>
                                 <td class="ps-4 fw-bold align-middle"><t t-esc="area.id"/></td>
                                 <td class="align-middle">
@@ -124,17 +138,27 @@
             </div>
         </t>
 
-        <!-- ROUTES TAB -->
         <t t-if="this.state.activeSubTab === 'routes'">
-            <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center">
+            <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div>
                     <h6 class="fw-bold mb-0">Route Configurations</h6>
-                    <small class="text-muted">Routes are specific paths or sub-areas within a Zone that are assigned to Order Bookers.</small>
+                    <small class="text-muted">Routes are specific paths within a Zone.</small>
                 </div>
-                <button class="btn btn-sm btn-dark d-flex align-items-center text-white" t-on-click="() => this.state.showRouteForm = true" title="Create a new travel route">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus me-1"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-                    Create Route
-                </button>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="input-group input-group-sm shadow-sm" style="width: 250px;">
+                        <span class="input-group-text bg-white text-muted border-end-0"><i class="fa fa-search"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0" placeholder="Search route name..." t-model="this.state.routeSearchQuery" />
+                    </div>
+                    <select class="form-select form-select-sm shadow-sm" style="width: 140px;" t-model="this.state.routeFilterStatus" title="Filter routes by active status">
+                        <option value="all">All Statuses</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                    <button class="btn btn-sm btn-dark d-flex align-items-center text-white ms-2 shadow-sm" t-on-click="() => this.state.showRouteForm = true" title="Create a new travel route">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus me-1"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                        New Route
+                    </button>
+                </div>
             </div>
 
             <t t-if="this.state.showRouteForm">
@@ -152,9 +176,8 @@
                                     <option t-att-value="a.id"><t t-esc="a.name"/></option>
                                 </t>
                             </select>
-                            <small class="text-muted d-block mt-1">A route must belong to a single zone.</small>
                         </div>
-                        <div class="col-md-2 pb-4">
+                        <div class="col-md-2">
                             <div class="form-check form-switch" title="Disable to temporarily pause visits on this route">
                                 <input class="form-check-input cursor-pointer" type="checkbox" id="routeActiveSwitch" t-model="this.state.routeForm.is_active"/>
                                 <label class="form-check-label small fw-bold cursor-pointer" for="routeActiveSwitch">Active Status</label>
@@ -189,7 +212,12 @@
                                 </td>
                             </tr>
                         </t>
-                        <t t-foreach="this.state.routes" t-as="route" t-key="route.id">
+                        <t t-elif="this.displayRoutes.length === 0">
+                            <tr>
+                                <td colspan="4" class="text-center py-4 text-muted fw-bold">No routes match your search or filter criteria.</td>
+                            </tr>
+                        </t>
+                        <t t-foreach="this.displayRoutes" t-as="route" t-key="route.id">
                             <tr>
                                 <td class="ps-4 align-middle">
                                     <div class="text-dark fw-bold"><t t-esc="route.name"/></div>
@@ -214,10 +242,8 @@
             </div>
         </t>
 
-        <!-- SHOPS TAB -->
         <t t-if="this.state.activeSubTab === 'shops'">
             
-            <!-- Shop Details / Map View -->
             <t t-if="this.state.selectedShopDetails">
                 <div class="p-4 bg-light border-bottom d-flex justify-content-between align-items-center">
                     <div>
@@ -327,17 +353,34 @@
                 </div>
             </t>
 
-            <!-- Shop Table View -->
             <t t-elif="!this.state.showShopForm">
-                <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center">
+                <div class="p-4 bg-white border-bottom d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
                     <div>
                         <h6 class="fw-bold mb-0">Registered Shops</h6>
-                        <small class="text-muted">Review, approve, and manage the retail shops registered by you or your field staff.</small>
+                        <small class="text-muted">Review, approve, and manage the retail shops.</small>
                     </div>
-                    <button class="btn btn-sm btn-dark d-flex align-items-center text-white" t-on-click="() => this.state.showShopForm = true" title="Manually register a new shop to the database">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus me-1"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-                        Register New Shop
-                    </button>
+                    
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <div class="input-group input-group-sm shadow-sm" style="min-width: 250px; flex-grow: 1;">
+                            <span class="input-group-text bg-white text-muted border-end-0"><i class="fa fa-search"></i></span>
+                            <input type="text" class="form-control border-start-0 ps-0" placeholder="Search by shop or owner..." t-model="this.state.shopSearchQuery" />
+                        </div>
+                        <select class="form-select form-select-sm shadow-sm" style="width: 140px;" t-model="this.state.shopFilterCategory" title="Filter by payment category">
+                            <option value="all">All Types</option>
+                            <option value="cash">Cash Only</option>
+                            <option value="credit">Credit Only</option>
+                        </select>
+                        <select class="form-select form-select-sm shadow-sm" style="width: 140px;" t-model="this.state.shopFilterStatus" title="Filter by approval status">
+                            <option value="all">All Statuses</option>
+                            <option value="approved">Approved</option>
+                            <option value="pending">Pending Review</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                        <button class="btn btn-sm btn-dark d-flex align-items-center text-white ms-2 shadow-sm" t-on-click="() => this.state.showShopForm = true" title="Manually register a new shop to the database">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus me-1"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                            Register New Shop
+                        </button>
+                    </div>
                 </div>
 
                 <div class="table-responsive">
@@ -361,7 +404,12 @@
                                     </td>
                                 </tr>
                             </t>
-                            <t t-foreach="this.state.shops" t-as="shop" t-key="shop.id">
+                            <t t-elif="this.displayShops.length === 0">
+                                <tr>
+                                    <td colspan="6" class="text-center py-4 text-muted fw-bold">No shops match your search or filter criteria.</td>
+                                </tr>
+                            </t>
+                            <t t-foreach="this.displayShops" t-as="shop" t-key="shop.id">
                                 <tr>
                                     <td class="ps-4 align-middle">
                                         <div class="text-dark fw-bold"><t t-esc="shop.name"/></div>
@@ -412,7 +460,6 @@
                 </div>
             </t>
 
-            <!-- Shop Form (Add/Edit) -->
             <t t-else="">
                 <div class="p-4 bg-light">
                     <div class="d-flex justify-content-between align-items-center mb-4">

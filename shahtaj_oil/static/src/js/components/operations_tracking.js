@@ -8,7 +8,9 @@ export class OperationsTracking extends Component {
         this.orm = useService("orm");
         this.notification = useService("notification");
         this.state = useState({
-            activeSubTab: 'orders',
+            // Main Tab Navigation
+            activeSubTab: 'orders', // 'checkins', 'orders', 'performance'
+            
             selectedOrder: null,    
             selectedCheckin: null,  
             
@@ -36,32 +38,38 @@ export class OperationsTracking extends Component {
 
             checkins: [],
             orders: [],
-            activeSubTab: 'orders',
-            selectedOrder: null,    
-            selectedCheckin: null,  
-            
-            itemsPerPage: 5,
-            
-            deliveryFilters: { search: '', status: '' },
-            deliveryPage: 1,
-            
-            checkinFilters: { search: '', status: '' },
-            checkinPage: 1,
-            
-            orderFilters: { search: '', status: '' },
-            orderPage: 1,
-            
             isCreatingInvoice: false,
+
+            // --- NEW: PERFORMANCE TRACKING STATES ---
+            perfSubTab: 'schedules', // 'schedules', 'targets'
+            selectedSchedule: null,
+            selectedTarget: null,
+            
+            // Filters for Schedules
+            schedFilterBooker: 'all',
+            schedFilterDay: 'all',
+            schedFilterDateFrom: '',
+            schedFilterDateTo: '',
+            
+            // Filters for Targets
+            targetFilterBooker: 'all',
+            targetFilterType: 'all',
+            
+            bookers: [],
+            schedules: [],
+            targets: []
         });
-        
 
         onWillStart(async () => {
             await Promise.all([
                 this.fetchLiveVisits(),
-                this.fetchLiveOrders()
+                this.fetchLiveOrders(),
+                this.fetchPerformanceData()
             ]);
         });
     }
+
+    // --- DATA FETCHING (EXISTING) ---
 
     async fetchLiveVisits() {
         const visits = await this.orm.searchRead(
@@ -111,42 +119,150 @@ export class OperationsTracking extends Component {
         const orders = await this.orm.searchRead(
             "sale.order",
             [["shahtaj_visit_id", "!=", false]], 
-            ["name", "partner_id", "user_id", "date_order", "amount_total", "state", "order_line"]
+            ["name", "partner_id", "user_id", "date_order", "amount_total", "state", "order_line", "invoice_status"] 
         );
 
         this.state.orders = orders.map(o => {
-            let status = o.state;
-            if (status === 'draft') status = 'Draft';
-            if (status === 'sale') status = 'Confirmed';
-            if (status === 'done') status = 'Delivered'; 
+            let status = 'Unknown';
+            if (o.state === 'draft') {
+                status = 'Draft';
+            } else if (o.state === 'sale') {
+                if (o.invoice_status === 'to invoice') status = 'To Invoice';
+                else if (o.invoice_status === 'invoiced') status = 'Invoiced';
+                else status = 'Confirmed'; 
+            } else if (o.state === 'done') {
+                status = 'Delivered'; 
+            }
 
             return {
                 odoo_id: o.id,
                 id: o.name,
                 shop: o.partner_id ? o.partner_id[1] : 'Unknown Shop',
-                shopId: o.partner_id ? o.partner_id[0] : false,
                 partner_id: o.partner_id,
                 booker: o.user_id ? o.user_id[1] : 'Unknown Booker',
-                bookerId: o.user_id ? o.user_id[0] : false,
                 address: "Loading...", 
                 phone: "Loading...",
                 email: "Loading...",
                 date: o.date_order || 'Unknown',
                 items: o.order_line.length,
                 total: `Rs. ${o.amount_total.toLocaleString(undefined, {minimumFractionDigits: 2})}`,
-                status: status,
+                status: status, 
+                invoice_status: o.invoice_status, 
                 line_ids: o.order_line,
                 lines: [] 
             };
         });
     }
 
+    // --- NEW: PERFORMANCE DATA FETCHING ---
+    async fetchPerformanceData() {
+        // Load Order Bookers
+        const bookers = await this.orm.searchRead('res.users', [['shahtaj_is_order_booker', '=', true]], ['id', 'name']);
+        this.state.bookers = bookers;
+
+        // Load All Weekly Schedules
+        const scheds = await this.orm.searchRead('shahtaj.weekly.schedule', [], [
+            'id', 'name', 'day_of_week', 'route_id', 'zone_id', 'active', 'shop_count',
+            'week_tasks_planned', 'week_tasks_completed', 'week_tasks_progress',
+            'week_occurrence_date', 'order_booker_id'
+        ]);
+        const dayMap = { '0': 'Monday', '1': 'Tuesday', '2': 'Wednesday', '3': 'Thursday', '4': 'Friday', '5': 'Saturday', '6': 'Sunday' };
+        this.state.schedules = scheds.map(r => ({
+            id: r.id,
+            name: r.name,
+            bookerId: r.order_booker_id ? r.order_booker_id[0] : null,
+            bookerName: r.order_booker_id ? r.order_booker_id[1] : 'Unknown Booker',
+            day_raw: r.day_of_week,
+            day: dayMap[r.day_of_week] || r.day_of_week,
+            route: r.route_id ? r.route_id[1] : 'Unassigned',
+            zone: r.zone_id ? r.zone_id[1] : 'Unassigned',
+            shops: r.shop_count,
+            active: r.active,
+            planned: r.week_tasks_planned,
+            done: r.week_tasks_completed,
+            progress: r.week_tasks_progress || 0,
+            occurrenceDate: r.week_occurrence_date || ''
+        }));
+
+        // Load All Targets
+        const tgts = await this.orm.searchRead('shahtaj.visit.target', [], [
+            'id', 'name', 'date_start', 'date_end', 'target_type', 'target_value',
+            'achieved_value', 'remaining_value', 'progress_percent', 'product_id',
+            'currency_id', 'target_weight_uom', 'active', 'order_booker_id'
+        ]);
+        this.state.targets = tgts.map(r => ({
+            id: r.id,
+            name: r.name,
+            bookerId: r.order_booker_id ? r.order_booker_id[0] : null,
+            bookerName: r.order_booker_id ? r.order_booker_id[1] : 'Unknown Booker',
+            startDate: r.date_start,
+            endDate: r.date_end,
+            type: r.target_type,
+            displayType: r.target_type ? r.target_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown',
+            targetValue: r.target_value,
+            achievedValue: r.achieved_value,
+            remainingValue: r.remaining_value,
+            progress: r.progress_percent || 0,
+            product: r.product_id ? r.product_id[1] : null,
+            currency: r.currency_id ? r.currency_id[1] : null,
+            weightUom: r.target_weight_uom || '',
+            active: r.active
+        }));
+    }
+
+    // --- NAVIGATION & FILTERS ---
+
     setSubTab(tabName) {
         this.state.activeSubTab = tabName;
         this.state.selectedOrder = null;
         this.state.selectedCheckin = null;
+        this.state.selectedSchedule = null;
+        this.state.selectedTarget = null;
     }
 
+    setPerfSubTab(tabName) {
+        this.state.perfSubTab = tabName;
+        this.state.selectedSchedule = null;
+        this.state.selectedTarget = null;
+    }
+
+    // Performance Getters
+    get filteredSchedules() {
+        return this.state.schedules.filter(s => {
+            const matchBooker = this.state.schedFilterBooker === 'all' || s.bookerId == this.state.schedFilterBooker;
+            const matchDay = this.state.schedFilterDay === 'all' || String(s.day_raw) === this.state.schedFilterDay;
+            const matchDateFrom = !this.state.schedFilterDateFrom || s.occurrenceDate >= this.state.schedFilterDateFrom;
+            const matchDateTo = !this.state.schedFilterDateTo || s.occurrenceDate <= this.state.schedFilterDateTo;
+            return matchBooker && matchDay && matchDateFrom && matchDateTo;
+        });
+    }
+
+    get filteredTargets() {
+        return this.state.targets.filter(t => {
+            const matchBooker = this.state.targetFilterBooker === 'all' || t.bookerId == this.state.targetFilterBooker;
+            const matchType = this.state.targetFilterType === 'all' || t.type === this.state.targetFilterType;
+            return matchBooker && matchType;
+        });
+    }
+
+    get uniqueTargetTypes() {
+        const types = new Set(this.state.targets.map(t => t.type));
+        return Array.from(types).map(type => {
+            return {
+                value: type,
+                label: type ? type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown'
+            };
+        });
+    }
+
+    viewSchedule(sched) { this.state.selectedSchedule = sched; }
+    closeSchedule() { this.state.selectedSchedule = null; }
+
+    viewTarget(tgt) { this.state.selectedTarget = tgt; }
+    closeTarget() { this.state.selectedTarget = null; }
+
+
+    // --- ORDERS & CHECK-INS PAGINATION GETTERS (EXISTING) ---
     get filteredDeliveries() {
         return this.state.deliveries.filter(d => {
             const matchSearch = d.driver.toLowerCase().includes(this.state.deliveryFilters.search.toLowerCase()) || 
@@ -208,15 +324,15 @@ export class OperationsTracking extends Component {
         }
     }
 
+    // --- ORDER ACTIONS (EXISTING) ---
     async viewOrder(order) { 
         this.state.selectedOrder = order; 
         
-        // Lazy-load order lines if they haven't been fetched yet
         if (order.line_ids && order.line_ids.length > 0 && order.lines.length === 0) {
             const lines = await this.orm.searchRead(
                 "sale.order.line",
                 [["id", "in", order.line_ids]],
-                ["name", "product_uom_qty", "product_uom_id", "price_unit", "price_subtotal"] // Fixed product_uom_id
+                ["name", "product_uom_qty", "product_uom_id", "price_unit", "price_subtotal"] 
             );
             
             order.lines = lines.map(l => ({
@@ -228,7 +344,6 @@ export class OperationsTracking extends Component {
             }));
         }
 
-        // Lazy-load shop (partner) details if not fetched yet
         if (order.partner_id && order.phone === "Loading...") {
             const partners = await this.orm.searchRead(
                 "res.partner",
@@ -264,46 +379,6 @@ export class OperationsTracking extends Component {
             }
         }
     }
-    async fetchLiveOrders() {
-        const orders = await this.orm.searchRead(
-            "sale.order",
-            [["shahtaj_visit_id", "!=", false]], 
-            ["name", "partner_id", "user_id", "date_order", "amount_total", "state", "order_line", "invoice_status"] 
-        );
-
-        this.state.orders = orders.map(o => {
-            let status = 'Unknown';
-            
-            // Merge Odoo's 'state' and 'invoice_status' into a single readable string
-            if (o.state === 'draft') {
-                status = 'Draft';
-            } else if (o.state === 'sale') {
-                if (o.invoice_status === 'to invoice') status = 'To Invoice';
-                else if (o.invoice_status === 'invoiced') status = 'Invoiced';
-                else status = 'Confirmed'; // Fallback if nothing to invoice
-            } else if (o.state === 'done') {
-                status = 'Delivered'; 
-            }
-
-            return {
-                odoo_id: o.id,
-                id: o.name,
-                shop: o.partner_id ? o.partner_id[1] : 'Unknown Shop',
-                partner_id: o.partner_id,
-                booker: o.user_id ? o.user_id[1] : 'Unknown Booker',
-                address: "Loading...", 
-                phone: "Loading...",
-                email: "Loading...",
-                date: o.date_order || 'Unknown',
-                items: o.order_line.length,
-                total: `Rs. ${o.amount_total.toLocaleString(undefined, {minimumFractionDigits: 2})}`,
-                status: status, // Now reflects "To Invoice" or "Invoiced"
-                invoice_status: o.invoice_status, 
-                line_ids: o.order_line,
-                lines: [] 
-            };
-        });
-    }
 
     async createInvoice() {
         if (!this.state.selectedOrder || this.state.isCreatingInvoice) return;
@@ -311,7 +386,6 @@ export class OperationsTracking extends Component {
         this.state.isCreatingInvoice = true;
         
         try {
-            // Point to the new PUBLIC wrapper method instead of the private _create_invoices
             await this.orm.call("sale.order", "action_create_invoice_portal", [[this.state.selectedOrder.odoo_id]]);
             
             this.notification.add(`Draft invoice generated for ${this.state.selectedOrder.id}.`, {
@@ -319,7 +393,6 @@ export class OperationsTracking extends Component {
                 type: "success",
             });
 
-            // Optimistically update BOTH tracking variables
             this.state.selectedOrder.invoice_status = 'invoiced';
             this.state.selectedOrder.status = 'Invoiced'; 
             

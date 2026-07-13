@@ -13,7 +13,7 @@ export class StaffManagement extends Component {
             selectedStaff: null,
             showForm: false,
             isLoading: false,
-            
+            showPassword: false,
             editingStaffId: null,
             
             staffList: [],
@@ -161,6 +161,7 @@ export class StaffManagement extends Component {
 
     cancelForm() {
         this.state.showForm = false;
+        this.state.showPassword = false;
         this.state.editingStaffId = null;
         this.state.formData = { name: '', employee_code: '', email: '', password: '', role: 'order_booker' };
     }

@@ -68,6 +68,12 @@
                         </span>
                         Schedules &amp; Targets
                     </button>
+                     <button t-on-click="() => this.switchTab('transactions')" class="list-group-item list-group-item-action border-0 rounded mb-2 text-start d-flex align-items-center transition-all" t-att-style="this.state.activeTab === 'transactions' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
+                        <span class="me-3 d-flex align-items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-landmark-icon lucide-landmark"><path d="M10 18v-7"/><path d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z"/><path d="M14 18v-7"/><path d="M18 18v-7"/><path d="M3 22h18"/><path d="M6 18v-7"/></svg>
+                        </span>
+                        Bank Transactions
+                    </button>
 
                     <hr class="my-2"/>
 
@@ -310,6 +316,8 @@
 
                     <t t-if="this.state.activeTab === 'schedules'">
                         <SchedulesTargets />
+                    </t><t t-if="this.state.activeTab === 'transactions'">
+                        <BankTransactions />
                     </t>
 
                 </div>

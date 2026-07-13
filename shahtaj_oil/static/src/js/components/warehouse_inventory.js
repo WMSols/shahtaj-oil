@@ -15,13 +15,20 @@ export class WarehouseInventory extends Component {
             showProductAddForm: false,
             showProductDetails: false,
 
+            // --- Search & Filter States ---
+            productSearchQuery: '',
+            productSortFilter: 'default', // 'price_asc', 'price_desc', 'qty_asc', 'qty_desc'
+
+            stockSearchQuery: '',
+            stockFilterStatus: 'all', // 'in_stock', 'out_of_stock'
+
             warehouseForm: { name: '', type: '', location: '', manager: '' },
             adjustmentForm: { product_id: '', qty: 0 },
             
             productForm: this.getEmptyProductForm(),
             currentProduct: null,
             saleTaxes: [],
-            defaultTaxId: "", // Store single default instead of array
+            defaultTaxId: "", 
 
             warehouses: [
                 { id: "WH-MAIN", name: "Central Hub - Lahore", type: "Main Warehouse", location: "Sundar Industrial Estate", manager: "Zafar Iqbal", status: "Active" },
@@ -38,6 +45,44 @@ export class WarehouseInventory extends Component {
         });
     }
 
+    // --- Dynamic Search, Filter, and Sort Getters ---
+    get displayProducts() {
+        // 1. Filter by Search Query
+        let filtered = this.state.inventory.filter(product =>
+            product.name.toLowerCase().includes(this.state.productSearchQuery.toLowerCase())
+        );
+
+        // 2. Apply Sorting
+        if (this.state.productSortFilter === 'price_asc') {
+            filtered.sort((a, b) => (a.list_price || 0) - (b.list_price || 0));
+        } else if (this.state.productSortFilter === 'price_desc') {
+            filtered.sort((a, b) => (b.list_price || 0) - (a.list_price || 0));
+        } else if (this.state.productSortFilter === 'qty_asc') {
+            filtered.sort((a, b) => (a.qty_available || 0) - (b.qty_available || 0));
+        } else if (this.state.productSortFilter === 'qty_desc') {
+            filtered.sort((a, b) => (b.qty_available || 0) - (a.qty_available || 0));
+        }
+
+        return filtered;
+    }
+
+    get displayStock() {
+        // 1. Filter by Search Query
+        let filtered = this.state.inventory.filter(product =>
+            product.name.toLowerCase().includes(this.state.stockSearchQuery.toLowerCase())
+        );
+
+        // 2. Apply Availability Filter
+        if (this.state.stockFilterStatus === 'in_stock') {
+            filtered = filtered.filter(p => p.qty_available > 0);
+        } else if (this.state.stockFilterStatus === 'out_of_stock') {
+            filtered = filtered.filter(p => p.qty_available <= 0);
+        }
+
+        return filtered;
+    }
+
+    // --- Data Fetching Logic ---
     get totalStockItems() {
         return this.state.inventory.reduce((sum, p) => sum + (p.qty_available || 0), 0);
     }
@@ -48,7 +93,7 @@ export class WarehouseInventory extends Component {
             list_price: 0.0, standard_price: 0.0,
             invoice_policy: 'order', type: 'consu',
             shahtaj_sale_uom: 'piece', shahtaj_kg_per_unit: 1.0,
-            tax_id: this.state?.defaultTaxId || "", // Initialize with single string
+            tax_id: this.state?.defaultTaxId || "", 
             barcode: '', weight: 0.0, volume: 0.0,
             income_account: 'static_inc', expense_account: 'static_exp',
             image_1920: false
@@ -73,13 +118,11 @@ export class WarehouseInventory extends Component {
             label: this.formatTaxLabel(tax),
         }));
         
-        // Find the first default tax to auto-populate the dropdown
         const defaultTax = this.state.saleTaxes.find((tax) => tax.is_default);
         if (defaultTax) {
             this.state.defaultTaxId = defaultTax.id.toString();
         }
             
-        // If the form initialized before taxes loaded, inject the default now
         if (!this.state.productForm.tax_id && this.state.defaultTaxId) {
             this.state.productForm.tax_id = this.state.defaultTaxId;
         }
@@ -89,7 +132,6 @@ export class WarehouseInventory extends Component {
         if (!taxIds || !taxIds.length) {
             return 'No tax';
         }
-        // Since we allow only one tax visually, we just map the first one for the list view
         const primaryTaxId = taxIds[0];
         const tax = this.state.saleTaxes.find((t) => t.id === primaryTaxId);
         return tax ? tax.label : 'No tax';
@@ -162,7 +204,6 @@ export class WarehouseInventory extends Component {
             is_storable: this.state.productForm.track_inventory,
             shahtaj_sale_uom: this.state.productForm.shahtaj_sale_uom,
             shahtaj_kg_per_unit: parseFloat(this.state.productForm.shahtaj_kg_per_unit || 1),
-            // Link single ID if present, else clear
             taxes_id: this.state.productForm.tax_id ? [[6, 0, [parseInt(this.state.productForm.tax_id, 10)]]] : [[5, 0, 0]],
         };
 
@@ -202,7 +243,6 @@ export class WarehouseInventory extends Component {
     }
 
     viewProductDetails(product) {
-        // Extract the first tax ID as a string for the dropdown model
         let currentTaxId = "";
         if (product.taxes_id && product.taxes_id.length > 0) {
             currentTaxId = product.taxes_id[0].toString();
@@ -228,7 +268,6 @@ export class WarehouseInventory extends Component {
             type: this.state.currentProduct.type,
             shahtaj_sale_uom: this.state.currentProduct.shahtaj_sale_uom,
             shahtaj_kg_per_unit: parseFloat(this.state.currentProduct.shahtaj_kg_per_unit || 1),
-            // Link single ID if present, else clear
             taxes_id: this.state.currentProduct.tax_id ? [[6, 0, [parseInt(this.state.currentProduct.tax_id, 10)]]] : [[5, 0, 0]],
         };
 

@@ -29,19 +29,13 @@
                 </div>
             </div>
 
-            <!-- Navigation Tabs -->
             <div class="p-3 border-bottom">
                 <ul class="nav nav-pills nav-fill">
                     <li class="nav-item me-2">
                         <button t-on-click="() => this.setSubTab('inventory')" 
                                 t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeSubTab === 'inventory' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}"
                                 title="View and manage the products you sell">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package me-2">
-                                <path d="m7.5 4.27 9 5.15"/>
-                                <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-                                <path d="m3.3 7 8.7 5 8.7-5"/>
-                                <path d="M12 22V12"/>
-                            </svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package me-2"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
                        Product List
                         </button>
                     </li>
@@ -49,14 +43,7 @@
                         <button t-on-click="() => this.setSubTab('management')" 
                                 t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeSubTab === 'management' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}"
                                 title="Adjust quantities and check available stock">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-clipboard-list me-2">
-                                <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/>
-                                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-                                <path d="M12 11h4"/>
-                                <path d="M12 16h4"/>
-                                <path d="M8 11h.01"/>
-                                <path d="M8 16h.01"/>
-                            </svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-clipboard-list me-2"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>
                         Stock Overview
                         </button>
                     </li>
@@ -64,31 +51,42 @@
                         <button t-on-click="() => this.setSubTab('warehouses')" 
                                 t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeSubTab === 'warehouses' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}"
                                 title="Manage physical warehouse locations">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-factory me-2">
-                                <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/>
-                                <path d="M17 18h1"/>
-                                <path d="M12 18h1"/>
-                                <path d="M7 18h1"/>
-                            </svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-factory me-2"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg>
                         Facilities &amp; Hubs
                         </button>
                     </li>
                 </ul>
             </div>
 
-            <!-- PRODUCT LIST TAB -->
             <t t-if="this.state.activeSubTab === 'inventory'">
-                <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center">
+                
+                <div class="p-4 bg-white border-bottom d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                     <div>
                         <h6 class="fw-bold mb-0">Master Inventory Control</h6>
                         <small class="text-muted">Define the items you sell and track their basic details.</small>
                     </div>
-                    <button class="btn btn-sm btn-dark fw-bold" t-on-click="() => { this.resetForms(); this.state.showProductAddForm = true; }" title="Add a brand new product to your catalog">
-                        + New Product
-                    </button>
+                    
+                    <t t-if="!this.state.showProductAddForm and !this.state.showProductDetails">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="input-group input-group-sm shadow-sm" style="width: 250px;">
+                                <span class="input-group-text bg-white text-muted border-end-0"><i class="fa fa-search"></i></span>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search product name..." t-model="this.state.productSearchQuery" />
+                            </div>
+                            <select class="form-select form-select-sm shadow-sm" style="width: 170px;" t-model="this.state.productSortFilter" title="Reorder the list based on specific values">
+                                <option value="default">Default Sorting</option>
+                                <option value="price_asc">Price: Low to High</option>
+                                <option value="price_desc">Price: High to Low</option>
+                                <option value="qty_desc">Qty: High to Low</option>
+                                <option value="qty_asc">Qty: Low to High</option>
+                            </select>
+                            <button class="btn btn-sm btn-dark fw-bold d-flex align-items-center text-white ms-2 shadow-sm text-nowrap" t-on-click="() => { this.resetForms(); this.state.showProductAddForm = true; }" title="Add a brand new product to your catalog">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus me-1"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                                New Product
+                            </button>
+                        </div>
+                    </t>
                 </div>
 
-                <!-- Add Product Form -->
                 <t t-if="this.state.showProductAddForm">
                     <div class="p-4 bg-light border-bottom rounded-3 m-3">
                         <h6 class="fw-bold text-dark mb-0">Create New Product</h6>
@@ -117,9 +115,9 @@
                             <div class="col-md-3">
                                 <label class="small fw-bold">Selling Unit</label>
                                 <select class="form-select" t-model="this.state.productForm.shahtaj_sale_uom" t-on-change="() => this.onSaleUomChange('new')">
-                                    <option value="kg">Kilogram (kg)</option>
+                                    <!-- <option value="kg">Kilogram (kg)</option>
                                     <option value="ton">Ton</option>
-                                    <option value="litre">Litre</option>
+                                    <option value="litre">Litre</option> -->
                                     <option value="piece">Piece</option>
                                 </select>
                             </div>
@@ -151,7 +149,6 @@
                     </div>
                 </t>
 
-                <!-- Edit Product Form -->
                 <t t-if="this.state.showProductDetails">
                     <div class="p-4 m-3 border rounded-3 bg-white shadow-sm">
                         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -172,9 +169,9 @@
                             <div class="col-md-3">
                                 <label class="small fw-bold">Selling Unit</label>
                                 <select class="form-select" t-model="this.state.currentProduct.shahtaj_sale_uom" t-on-change="() => this.onSaleUomChange('edit')">
-                                    <option value="kg">Kilogram (kg)</option>
+                                    <!-- <option value="kg">Kilogram (kg)</option>
                                     <option value="ton">Ton</option>
-                                    <option value="litre">Litre</option>
+                                    <option value="litre">Litre</option> -->
                                     <option value="piece">Piece</option>
                                 </select>
                             </div>
@@ -205,8 +202,7 @@
                     </div>
                 </t>
 
-                <!-- Product Table -->
-                <t t-if="!this.state.showProductDetails">
+                <t t-if="!this.state.showProductDetails and !this.state.showProductAddForm">
                     <div class="table-responsive">
                         <table class="table table-hover mb-0 align-middle">
                             <thead class="bg-light text-uppercase small fw-bold text-muted">
@@ -222,11 +218,16 @@
                                     <tr>
                                         <td colspan="4" class="text-center py-5 text-muted fw-bold">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package-open mb-2 opacity-50"><path d="M12 22v-9"/><path d="M15.17 2.21a1.67 1.67 0 0 1 1.63 0L21 4.57a1.93 1.93 0 0 1 1 1.74v8.36a1.93 1.93 0 0 1-1 1.74l-4.2 2.36-6.52 3.66a1.73 1.73 0 0 1-1.63 0L2.9 20a1.93 1.93 0 0 1-1-1.74v-8.36a1.93 1.93 0 0 1 1-1.74l4.2-2.36"/><path d="M20 7l-8-4-8 4"/><path d="M12 22V13l8-4"/><path d="M4 7l8 4"/></svg>
-                                            <p class="mb-0">Your catalog is empty. Click '+ New Product' to begin.</p>
+                                            <p class="mb-0">Your catalog is empty. Click 'New Product' to begin.</p>
                                         </td>
                                     </tr>
                                 </t>
-                                <t t-foreach="this.state.inventory" t-as="item" t-key="item.id">
+                                <t t-elif="this.displayProducts.length === 0">
+                                    <tr>
+                                        <td colspan="4" class="text-center py-4 text-muted fw-bold">No products match your search. Try adjusting your query.</td>
+                                    </tr>
+                                </t>
+                                <t t-foreach="this.displayProducts" t-as="item" t-key="item.id">
                                     <tr>
                                         <td class="ps-4 d-flex align-items-center">
                                             <div>
@@ -237,7 +238,7 @@
                                             </div>
                                         </td>
                                         <td class="text-end">
-                                            <div class="fw-bold">Rs. <t t-esc="item.list_price"/></div>
+                                            <div class="fw-bold text-success">Rs. <t t-esc="item.list_price"/></div>
                                         </td>
                                         <td class="text-end">
                                             <span class="h6 fw-bold text-dark mb-0">
@@ -260,21 +261,38 @@
                 </t>
             </t>
 
-            <!-- STOCK OVERVIEW TAB -->
             <t t-if="this.state.activeSubTab === 'management'">
-                <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center">
+                <div class="p-4 bg-white border-bottom d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                     <div>
                         <h6 class="fw-bold mb-0 text-dark">Stock Management Overview</h6>
                         <small class="text-muted">Monitor available quantities and manually adjust stock if needed.</small>
                     </div>
-                    <button class="btn btn-sm btn-dark fw-bold shadow-sm" t-on-click="() => this.state.showAdjustmentForm = !this.state.showAdjustmentForm" title="Manually add new stock to a product">
-                        <t t-if="!this.state.showAdjustmentForm">+ Update Stock</t>
-                        <t t-else="">Close Stock Update</t>
-                    </button>
+                    
+                    <t t-if="!this.state.showAdjustmentForm">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="input-group input-group-sm shadow-sm" style="width: 250px;">
+                                <span class="input-group-text bg-white text-muted border-end-0"><i class="fa fa-search"></i></span>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search product name..." t-model="this.state.stockSearchQuery" />
+                            </div>
+                            <select class="form-select form-select-sm shadow-sm" style="width: 140px;" t-model="this.state.stockFilterStatus" title="Filter to see only available or depleted items">
+                                <option value="all">All Stock Levels</option>
+                                <option value="in_stock">In Stock (&gt; 0)</option>
+                                <option value="out_of_stock">Out of Stock (0)</option>
+                            </select>
+                            <button class="btn btn-sm btn-dark fw-bold shadow-sm ms-2 text-nowrap" t-on-click="() => this.state.showAdjustmentForm = true" title="Manually add new stock to a product">
+                                + Update Stock
+                            </button>
+                        </div>
+                    </t>
+                    <t t-else="">
+                         <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.state.showAdjustmentForm = false">
+                             Close Stock Update
+                         </button>
+                    </t>
                 </div>
 
                 <t t-if="this.state.showAdjustmentForm">
-                    <div class="p-4 bg-light border-bottom border-top">
+                    <div class="p-4 bg-light border-bottom">
                         <h6 class="fw-bold text-dark mb-3">Add Stock to Product</h6>
                         <div class="row align-items-end g-3">
                             <div class="col-md-4">
@@ -327,13 +345,23 @@
                                     </td>
                                 </tr>
                             </t>
-                            <t t-foreach="this.state.inventory" t-as="item" t-key="item.id">
+                            <t t-elif="this.displayStock.length === 0">
+                                <tr>
+                                    <td colspan="5" class="text-center py-4 text-muted fw-bold">No stock matches your search or filter criteria.</td>
+                                </tr>
+                            </t>
+                            <t t-foreach="this.displayStock" t-as="item" t-key="item.id">
                                 <tr>
                                     <td class="ps-4 fw-bold text-dark">
                                         <t t-esc="item.name"/>
+                                        <t t-if="item.qty_available &lt;= 0">
+                                            <span class="badge bg-danger ms-2" style="font-size: 0.65rem;">Out of Stock</span>
+                                        </t>
                                     </td>
                                     <td class="text-end fw-bold">
-                                        <t t-esc="item.qty_available || 0"/>
+                                        <span t-attf-class="#{item.qty_available &lt;= 0 ? 'text-danger' : 'text-dark'}">
+                                            <t t-esc="item.qty_available || 0"/>
+                                        </span>
                                         <span class="text-muted small ms-1">
                                             <t t-esc="item.uom_name"/>
                                         </span>
@@ -360,7 +388,6 @@
                 </div>
             </t>
 
-            <!-- FACILITIES AND HUBS TAB (COMING SOON) -->
             <t t-if="this.state.activeSubTab === 'warehouses'">
                 <div class="p-5 text-center bg-light rounded-bottom" style="min-height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                     <div class="d-inline-flex justify-content-center align-items-center bg-white rounded-circle shadow-sm mb-3" style="width: 80px; height: 80px;">
@@ -370,7 +397,7 @@
                             <path d="M10 14 2.3 6.3"/><path d="m14 6 7.7 7.7"/><path d="m8 6 8 8"/>
                         </svg>
                     </div>
-                    <h4 class="fw-bold text-info mb-2">Coming Soon</h4>
+                    <h4 class="fw-bold text-success mb-2">Coming Soon</h4>
                     <p class="text-muted mx-auto mb-0" style="max-width: 450px; line-height: 1.6;">
                         This module is currently under development. Soon, you will be able to manage multiple geographic sub-warehouses, track inter-hub inventory transfers, and define physical storage bins directly from this dashboard.
                     </p>

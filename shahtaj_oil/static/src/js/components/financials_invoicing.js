@@ -6,25 +6,30 @@ import { useService } from "@web/core/utils/hooks";
 export class FinancialsInvoicing extends Component {
     setup() {
         this.orm = useService("orm");
-        this.action = useService("action");
 
         this.state = useState({
             activeSubTab: 'invoices',
             invoiceSubTab: 'orders',
             
-            // Detail Views
             selectedOrder: null, 
-            selectedOrderLines: [], // NEW: Stores the fetched products for the selected order
+            selectedOrderLines: [], 
+            
             selectedInvoice: null,
+            selectedInvoiceLines: [],
+            isEditingInvoice: false,
+            isSavingInvoice: false,
+
             selectedPayment: null,
             selectedShop: null,
             
-            // Payment Modal
             showPaymentModal: false,
             paymentForm: { journal_id: '', amount: 0, date: '', invoice_id: null, invoice_name: '' },
+
+            showRefundModal: false,
+            refundForm: { journal_id: '', reason: '', date: '' },
+
             journals: [], 
             
-            // Data Arrays
             orders: [],
             invoices: [],
             payments: [],
@@ -37,11 +42,8 @@ export class FinancialsInvoicing extends Component {
         });
     }
 
-    // ==========================================
-    // DATA FETCHING
-    // ==========================================
     async fetchRealData() {
-        // 1. Orders to Invoice (UPGRADED with new fields)
+        // 1. Orders to Invoice
         try {
             const ordersData = await this.orm.searchRead(
                 "sale.order",
@@ -68,7 +70,7 @@ export class FinancialsInvoicing extends Component {
             }));
         } catch (error) { console.error("Orders Fetch Error:", error); }
 
-        // 2. Customer Invoices
+        // 2. Customer Invoices (FIXED DRAFT 'FALSE' TEXT BUG)
         try {
             const invoicesData = await this.orm.searchRead(
                 "account.move",
@@ -77,21 +79,20 @@ export class FinancialsInvoicing extends Component {
             );
             this.state.invoices = invoicesData.map(inv => ({
                 id: inv.id,
-                display_name: inv.name,
+                display_name: (inv.name && inv.name !== '/') ? inv.name : `Draft Invoice (*${inv.id})`,
                 shop: inv.partner_id ? inv.partner_id[1] : 'Unknown',
-                date: inv.invoice_date || 'Draft',
+                date: inv.invoice_date || 'Not set',
                 amount: (inv.amount_total || 0).toLocaleString(),
                 rawAmount: inv.amount_total || 0,
-                status: inv.state === 'draft' ? 'Draft' : (inv.payment_state === 'paid' || inv.payment_state === 'in_payment' ? 'Paid' : 'Posted')
+                status: inv.state === 'cancel' ? 'Cancelled' : (inv.state === 'draft' ? 'Draft' : (inv.payment_state === 'paid' || inv.payment_state === 'in_payment' ? 'Paid' : 'Posted'))
             }));
         } catch (error) { console.error("Invoices Fetch Error:", error); }
 
-        // Fetch Bank/Cash Journals for Payment Wizard
         try {
             this.state.journals = await this.orm.searchRead("account.journal", [["type", "in", ["bank", "cash"]]], ["name", "type"]);
         } catch (error) { console.error("Journals Fetch Error:", error); }
 
-        // 3. Customer Payments
+        // 3. Customer Payments (FIXED DRAFT BUG)
         try {
             const paymentsData = await this.orm.searchRead(
                 "account.payment",
@@ -100,17 +101,17 @@ export class FinancialsInvoicing extends Component {
             );
             this.state.payments = paymentsData.map(pay => ({
                 id: pay.id,
-                display_name: pay.name || 'Draft Payment',
+                display_name: pay.name ? pay.name : `Processing... (#${pay.id})`,
                 shop: pay.partner_id ? pay.partner_id[1] : 'Unknown',
                 date: pay.date || 'N/A',
                 amount: (pay.amount || 0).toLocaleString(),
                 method: pay.journal_id ? pay.journal_id[1] : 'Manual',
                 ref: pay.memo || 'N/A', 
-                status: pay.state === 'posted' ? 'Posted' : 'Draft'
+                status: pay.state ? pay.state.charAt(0).toUpperCase() + pay.state.slice(1) : 'Draft'
             }));
         } catch (error) { console.error("Payments Fetch Error:", error); }
 
-        // 4. Shop Balances & Credit Risk Monitoring
+        // 4. Shop Balances
         try {
             const shopsData = await this.orm.searchRead(
                 "res.partner",
@@ -159,29 +160,27 @@ export class FinancialsInvoicing extends Component {
         } catch (error) { console.error("Shop Balances Fetch Error:", error); }
     }
 
-    // ==========================================
-    // UI NAVIGATION
-    // ==========================================
     setSubTab(tabName) { this.state.activeSubTab = tabName; this.resetDetailViews(); }
     setInvoiceSubTab(subTabName) { this.state.invoiceSubTab = subTabName; this.resetDetailViews(); }
     
     resetDetailViews() {
         this.state.selectedInvoice = null;
+        this.state.selectedInvoiceLines = [];
+        this.state.isEditingInvoice = false;
         this.state.selectedOrder = null;
-        this.state.selectedOrderLines = []; // Clear lines on reset
+        this.state.selectedOrderLines = []; 
         this.state.selectedPayment = null;
         this.state.selectedShop = null;
         this.closePaymentModal();
+        this.closeRefundModal();
     }
 
-    // NEW: Async method to fetch order lines when clicking an order
     async viewOrder(order) { 
         this.state.selectedOrder = order; 
-        this.state.selectedOrderLines = []; // Reset lines while loading
+        this.state.selectedOrderLines = []; 
         try {
             const linesData = await this.orm.searchRead(
                 "sale.order.line",
-                // 'display_type = false' ensures we only get actual products, not section notes/headers
                 [["order_id", "=", order.id], ["display_type", "=", false]], 
                 ["product_id", "product_uom_qty", "qty_delivered", "qty_invoiced", "price_unit", "price_subtotal"]
             );
@@ -197,38 +196,38 @@ export class FinancialsInvoicing extends Component {
         } catch (error) { console.error("Lines Fetch Error:", error); }
     }
     
-    viewInvoice(invoice) { this.state.selectedInvoice = invoice; }
+    async viewInvoice(invoice) { 
+        this.state.selectedInvoice = invoice; 
+        this.state.selectedInvoiceLines = [];
+        this.state.isEditingInvoice = false;
+        try {
+            const linesData = await this.orm.searchRead(
+                "account.move.line",
+                [["move_id", "=", invoice.id], ["display_type", "in", ["product", false]]], 
+                ["product_id", "quantity", "price_unit", "price_subtotal", "name"]
+            );
+            this.state.selectedInvoiceLines = linesData.map(l => ({
+                id: l.id,
+                product: l.product_id ? l.product_id[1] : l.name,
+                qty: l.quantity,
+                price: l.price_unit,
+                subtotal: (l.price_subtotal || 0).toLocaleString()
+            }));
+        } catch (error) { console.error("Lines Fetch Error:", error); }
+    }
+
     viewPayment(payment) { this.state.selectedPayment = payment; }
     viewShop(shop) { this.state.selectedShop = { ...shop }; }
 
-    // FEATURE 1: CREATE INVOICE
-    // ==========================================
     async triggerCreateInvoice(order) {
         try {
-            const context = {
-                active_model: 'sale.order',
-                active_ids: [order.id],
-            };
-            
-            // wizardIds is returned as an array, e.g., [42]
-            const wizardIds = await this.orm.create("sale.advance.payment.inv", [{
-                advance_payment_method: 'delivered' 
-            }], { context });
-            
-            // FIXED: Pass [wizardIds] so Python receives [[42]] instead of [[[42]]]
+            const context = { active_model: 'sale.order', active_ids: [order.id] };
+            const wizardIds = await this.orm.create("sale.advance.payment.inv", [{ advance_payment_method: 'delivered' }], { context });
             await this.orm.call("sale.advance.payment.inv", "create_invoices", [wizardIds], { context });
-            
             await this.fetchRealData();
             this.setInvoiceSubTab('customer_invoices');
-            
         } catch (error) { 
-            const pythonError = error.data?.message || error.message;
-            const pythonTrace = error.data?.debug || "No traceback available";
-            
-            console.error("🔥 INVOICE CREATION CRASH EXACT REASON:", pythonError);
-            console.error("🔥 PYTHON TRACEBACK:\n", pythonTrace);
-            
-            alert(`Backend rejected the invoice creation:\n\n${pythonError}\n\nCheck the browser console for details!`);
+            alert(`Backend rejected the invoice creation:\n\n${error.data?.message || error.message}`);
         }
     }
 
@@ -236,7 +235,8 @@ export class FinancialsInvoicing extends Component {
         try {
             await this.orm.call("account.move", "action_post", [[invoice.id]]);
             await this.fetchRealData();
-            this.state.selectedInvoice.status = 'Posted'; 
+            const updatedInv = this.state.invoices.find(i => i.id === invoice.id);
+            if (updatedInv) this.state.selectedInvoice = updatedInv;
         } catch (error) { console.error("Failed to confirm", error); }
     }
 
@@ -244,18 +244,88 @@ export class FinancialsInvoicing extends Component {
         try {
             await this.orm.call("account.move", "button_draft", [[invoice.id]]);
             await this.fetchRealData();
-            this.state.selectedInvoice.status = 'Draft';
+            const updatedInv = this.state.invoices.find(i => i.id === invoice.id);
+            if (updatedInv) this.state.selectedInvoice = updatedInv;
         } catch (error) { console.error("Failed to reset", error); }
     }
 
-    async actionPrintInvoice(invoiceId) {
-        this.action.doAction({
-            type: 'ir.actions.report',
-            report_type: 'qweb-pdf',
-            report_name: 'account.report_invoice_with_payments',
-            report_file: 'account.report_invoice_with_payments',
-            context: { active_ids: [invoiceId] },
-        });
+    async actionCancelInvoice(invoice) {
+        if (!confirm("Are you sure you want to completely cancel this invoice?")) return;
+        try {
+            await this.orm.call("account.move", "button_cancel", [[invoice.id]]);
+            await this.fetchRealData();
+            const updatedInv = this.state.invoices.find(i => i.id === invoice.id);
+            if (updatedInv) this.state.selectedInvoice = updatedInv;
+        } catch (error) { 
+            alert("Failed to cancel invoice: " + (error.data?.message || error.message));
+        }
+    }
+
+    // --- CUSTOM EDIT INVOICE SPA LOGIC ---
+    toggleEditInvoice() {
+        this.state.isEditingInvoice = true;
+    }
+
+    cancelEditInvoice() {
+        this.state.isEditingInvoice = false;
+        this.viewInvoice(this.state.selectedInvoice); // Reset data
+    }
+
+    async saveInvoiceEdits() {
+        this.state.isSavingInvoice = true;
+        try {
+            for (const line of this.state.selectedInvoiceLines) {
+                await this.orm.write("account.move.line", [line.id], {
+                    quantity: parseFloat(line.qty) || 0,
+                    price_unit: parseFloat(line.price) || 0
+                });
+            }
+            this.state.isEditingInvoice = false;
+            await this.fetchRealData();
+            
+            // Refetch updated lines and totals
+            const updatedInv = this.state.invoices.find(i => i.id === this.state.selectedInvoice.id);
+            if(updatedInv) {
+                await this.viewInvoice(updatedInv);
+            }
+        } catch (error) {
+            alert("Failed to save invoice edits: " + (error.data?.message || error.message));
+        }
+        this.state.isSavingInvoice = false;
+    }
+
+    // --- CUSTOM REFUND SPA LOGIC ---
+    openRefundModal() {
+        const today = new Date().toISOString().split('T')[0];
+        this.state.refundForm = {
+            journal_id: this.state.journals.length ? this.state.journals[0].id : '',
+            date: today,
+            reason: ''
+        };
+        this.state.showRefundModal = true;
+    }
+
+    closeRefundModal() { this.state.showRefundModal = false; }
+
+    async processRefund() {
+        try {
+            const context = { active_model: 'account.move', active_ids: [this.state.selectedInvoice.id] };
+            
+            const wizardIds = await this.orm.create("account.move.reversal", [{
+                reason: this.state.refundForm.reason,
+                date: this.state.refundForm.date,
+                journal_id: parseInt(this.state.refundForm.journal_id) || false
+            }], { context });
+            
+            await this.orm.call("account.move.reversal", "reverse_moves", [wizardIds], { context });
+            
+            await this.fetchRealData(); 
+            this.closeRefundModal();
+            this.state.selectedInvoice = null; // Exit to main invoice view
+            
+        } catch (error) {
+            alert(`Refund failed:\n\n${error.data?.message || error.message}`);
+        }
     }
 
     openPaymentModal() {
@@ -272,39 +342,26 @@ export class FinancialsInvoicing extends Component {
 
     closePaymentModal() { this.state.showPaymentModal = false; }
 
-    // ==========================================
-    // FEATURE 3: PAYMENT WIZARD
-    // ==========================================
     async processPayment() {
         try {
             const form = this.state.paymentForm;
-            const context = {
-                active_model: 'account.move',
-                active_ids: [form.invoice_id],
-            };
+            const context = { active_model: 'account.move', active_ids: [form.invoice_id] };
             
-            // wizardIds is returned as an array
             const wizardIds = await this.orm.create("account.payment.register", [{
                 journal_id: parseInt(form.journal_id),
                 amount: parseFloat(form.amount),
                 payment_date: form.date,
             }], { context });
             
-            // FIXED: Pass [wizardIds] to avoid the unhashable list error
             await this.orm.call("account.payment.register", "action_create_payments", [wizardIds], { context });
             
             await this.fetchRealData(); 
             this.closePaymentModal();
-            this.state.selectedInvoice.status = 'Paid';
+            const updatedInv = this.state.invoices.find(i => i.id === this.state.selectedInvoice.id);
+            if (updatedInv) this.state.selectedInvoice = updatedInv;
             
         } catch (error) {
-            const pythonError = error.data?.message || error.message;
-            const pythonTrace = error.data?.debug || "No traceback available";
-            
-            console.error(" PAYMENT CRASH EXACT REASON:", pythonError);
-            console.error(" PYTHON TRACEBACK:\n", pythonTrace);
-            
-            alert(`Payment failed:\n\n${pythonError}\n\nCheck the browser console for details!`);
+            alert(`Payment failed:\n\n${error.data?.message || error.message}`);
         }
     }
 
@@ -317,7 +374,6 @@ export class FinancialsInvoicing extends Component {
             await this.fetchRealData();
             this.state.selectedShop = null;
         } catch (error) { 
-            console.error("Failed to update credit limit", error); 
             alert("Failed to save limit. Ensure you have distributor rights.");
         }
     }

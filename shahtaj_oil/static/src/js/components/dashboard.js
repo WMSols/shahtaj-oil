@@ -9,10 +9,10 @@ import { WarehouseInventory } from "./warehouse_inventory";
 import { FinancialsInvoicing } from "./financials_invoicing";
 import { PortalSettings } from "./settings"
 import { SchedulesTargets } from "./schedules_targets";
-
+import { BankTransactions } from "./bank_transactions";
 export class ShahtajDashboard extends Component {
     // 2. Register it
-    static components = { StaffManagement, OperationsTracking, TerritoryRoutes, WarehouseInventory, FinancialsInvoicing, PortalSettings, SchedulesTargets }; 
+    static components = { StaffManagement, OperationsTracking, TerritoryRoutes, WarehouseInventory, FinancialsInvoicing, PortalSettings, SchedulesTargets, BankTransactions }; 
 
     setup() {
         this.state = useState({

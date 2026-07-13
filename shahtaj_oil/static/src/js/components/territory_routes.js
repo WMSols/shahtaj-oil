@@ -1,6 +1,5 @@
 /** @odoo-module **/
 
-// 1. Added useEffect and useRef to the imports
 import { Component, useState, onWillStart, useEffect, useRef } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 
@@ -8,9 +7,8 @@ export class TerritoryRoutes extends Component {
     setup() {
         this.orm = useService("orm");
 
-        // 2. Setup the reference for our Map HTML element
         this.mapRef = useRef("mapContainer");
-        this.mapInstance = null; // Holds the Leaflet map instance
+        this.mapInstance = null; 
 
         this.state = useState({
             activeSubTab: 'routes', 
@@ -24,6 +22,17 @@ export class TerritoryRoutes extends Component {
             editingAreaId: null,
             editingRouteId: null,
             editingShopId: null,
+
+            // --- Search & Filter States ---
+            areaSearchQuery: '',
+            areaFilterStatus: 'all',
+
+            routeSearchQuery: '',
+            routeFilterStatus: 'all',
+
+            shopSearchQuery: '',
+            shopFilterCategory: 'all',
+            shopFilterStatus: 'all',
 
             areaForm: { name: '', is_active: true },
             routeForm: { name: '', zone_id: '', is_active: true }, 
@@ -43,9 +52,7 @@ export class TerritoryRoutes extends Component {
             shops: []
         });
 
-        // 3. The OWL Effect Hook: This watches for changes and draws the map
         useEffect(() => {
-            // Cleanup the previous map if it exists
             if (this.mapInstance) {
                 this.mapInstance.remove();
                 this.mapInstance = null;
@@ -54,20 +61,15 @@ export class TerritoryRoutes extends Component {
             const mapEl = this.mapRef.el;
             const shop = this.state.selectedShopDetails;
 
-            // Only draw if we have the HTML element, the shop data, and valid GPS coordinates
             if (mapEl && shop && shop.partner_latitude && shop.partner_longitude) {
-                // Ensure Leaflet ('L') was successfully loaded from the manifest
                 if (typeof L !== 'undefined') {
-                    // Initialize the map and set the view to the shop's coordinates
                     this.mapInstance = L.map(mapEl).setView([shop.partner_latitude, shop.partner_longitude], 16);
                     
-                    // Load the visual map tiles from OpenStreetMap
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                         maxZoom: 19,
                         attribution: '© OpenStreetMap'
                     }).addTo(this.mapInstance);
 
-                    // Drop the pin and add a popup with the shop name!
                     L.marker([shop.partner_latitude, shop.partner_longitude])
                         .addTo(this.mapInstance)
                         .bindPopup(`<b>${shop.name}</b><br/>${shop.owner_name}`)
@@ -77,7 +79,6 @@ export class TerritoryRoutes extends Component {
                 }
             }
             
-            // Cleanup function when the component unmounts
             return () => {
                 if (this.mapInstance) {
                     this.mapInstance.remove();
@@ -88,6 +89,48 @@ export class TerritoryRoutes extends Component {
 
         onWillStart(async () => {
             await this.fetchDashboardData();
+        });
+    }
+
+    // --- Dynamic Search & Filter Getters ---
+    get displayAreas() {
+        return this.state.areas.filter(area => {
+            const searchMatch = area.name.toLowerCase().includes(this.state.areaSearchQuery.toLowerCase());
+            let filterMatch = true;
+            if (this.state.areaFilterStatus === 'active') filterMatch = area.active === true;
+            if (this.state.areaFilterStatus === 'inactive') filterMatch = area.active === false;
+            return searchMatch && filterMatch;
+        });
+    }
+
+    get displayRoutes() {
+        return this.state.routes.filter(route => {
+            const searchMatch = route.name.toLowerCase().includes(this.state.routeSearchQuery.toLowerCase());
+            let filterMatch = true;
+            if (this.state.routeFilterStatus === 'active') filterMatch = route.active === true;
+            if (this.state.routeFilterStatus === 'inactive') filterMatch = route.active === false;
+            return searchMatch && filterMatch;
+        });
+    }
+
+    get displayShops() {
+        return this.state.shops.filter(shop => {
+            const query = this.state.shopSearchQuery.toLowerCase();
+            const nameMatch = shop.name.toLowerCase().includes(query);
+            const ownerMatch = (shop.owner_name || '').toLowerCase().includes(query);
+            const searchMatch = nameMatch || ownerMatch;
+
+            let categoryMatch = true;
+            if (this.state.shopFilterCategory !== 'all') {
+                categoryMatch = shop.shahtaj_shop_category === this.state.shopFilterCategory;
+            }
+
+            let statusMatch = true;
+            if (this.state.shopFilterStatus !== 'all') {
+                statusMatch = shop.shop_approval_state === this.state.shopFilterStatus;
+            }
+
+            return searchMatch && categoryMatch && statusMatch;
         });
     }
 
@@ -112,7 +155,6 @@ export class TerritoryRoutes extends Component {
         );
     }
 
-    // --- UI Toggles & Handlers ---
     setSubTab(tabName) {
         this.state.activeSubTab = tabName;
         this.cancelForms();
@@ -171,7 +213,6 @@ export class TerritoryRoutes extends Component {
         reader.readAsDataURL(file);
     }
 
-    // --- Detail Views & Approvals ---
     async viewShopDetails(shopId) {
         const details = await this.orm.read(
             "res.partner",
@@ -227,7 +268,6 @@ export class TerritoryRoutes extends Component {
         }
     }
 
-    // --- Edit Handlers ---
     editArea(area) {
         this.state.areaForm = { name: area.name, is_active: area.active };
         this.state.editingAreaId = area.id;
@@ -274,7 +314,6 @@ export class TerritoryRoutes extends Component {
         }
     }
 
-    // --- Database Write Logic ---
     async saveArea() {
         if (!this.state.areaForm.name) return;
 

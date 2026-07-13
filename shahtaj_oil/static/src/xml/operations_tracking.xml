@@ -3,11 +3,10 @@
     <t t-name="shahtaj_oil.OperationsTracking" owl="1">
         <div class="card border-0 shadow-sm bg-white rounded-3">
 
-            <!-- Header Section -->
             <div class="p-4 border-bottom bg-light d-flex justify-content-between align-items-center rounded-top">
                 <div>
                     <h2 class="h4 fw-bold text-dark mb-0">Live Operations Tracker</h2>
-                    <small class="text-muted">Monitor field personnel check-ins at shops and track incoming orders from your team in real-time.</small>
+                    <small class="text-muted">Monitor field personnel check-ins, track incoming orders, and review booker performance in real-time.</small>
                 </div>
                 <div>
                     <span class="badge bg-success text-white px-3 py-2 fs-6 shadow-sm d-flex align-items-center" title="The system is actively receiving live updates from the field apps">
@@ -19,38 +18,42 @@
                 </div>
             </div>
 
-            <!-- Navigation Tabs -->
             <div class="p-3 border-bottom">
                 <ul class="nav nav-pills nav-fill">
-                    <li class="nav-item mx-2">
+                    <li class="nav-item">
                         <button t-on-click="() => this.setSubTab('checkins')" 
                                 t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeSubTab === 'checkins' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}"
                                 title="View live GPS check-ins and visit durations from your field staff">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map-pin me-2">
-                                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
-                                <circle cx="12" cy="10" r="3"/>
+                                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
                             </svg>
                             Shop Check-ins
                         </button>
                     </li>
-                    <li class="nav-item">
+                    <li class="nav-item mx-2">
                         <button t-on-click="() => this.setSubTab('orders')" 
                                 t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeSubTab === 'orders' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}"
                                 title="Track, manage, and invoice sales orders submitted from the field">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shopping-cart me-2">
-                                <circle cx="8" cy="21" r="1"/>
-                                <circle cx="19" cy="21" r="1"/>
-                                <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>
+                                <circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>
                             </svg>
                             Live Orders
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button t-on-click="() => this.setSubTab('performance')" 
+                                t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeSubTab === 'performance' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}"
+                                title="Analyze schedule adherence and target achievement">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trending-up me-2">
+                                <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
+                            </svg>
+                            Bookers Performance
                         </button>
                     </li>
                 </ul>
             </div>
 
-            <!-- CHECK-INS TAB -->
             <t t-if="this.state.activeSubTab === 'checkins'">
-                <!-- Check-ins List View -->
                 <t t-if="!this.state.selectedCheckin">
                     <div class="p-3 bg-light border-bottom d-flex gap-2">
                         <input type="text" class="form-control form-control-sm w-50" placeholder="Search by Shop Name or Booker..." t-model="this.state.checkinFilters.search" t-on-input="() => this.state.checkinPage = 1"/>
@@ -123,7 +126,6 @@
                     </div>
                 </t>
 
-                <!-- Check-in Detail View -->
                 <t t-else="">
                     <div class="p-4" style="background-color: #f8fafc;">
                         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -204,9 +206,7 @@
                 </t>
             </t>
 
-            <!-- ORDERS TAB -->
             <t t-if="this.state.activeSubTab === 'orders'">
-                <!-- Orders List View -->
                 <t t-if="!this.state.selectedOrder">
                     <div class="p-3 bg-light border-bottom">
                         <div class="row g-2">
@@ -301,7 +301,6 @@
                     </div>
                 </t>
 
-                <!-- Order Detail View -->
                 <t t-else="">
                     <div class="p-4" style="background-color: #f8fafc;">
                         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -314,31 +313,28 @@
                                     Back to List
                                 </button>
                             </div>
-                           <div class="d-flex align-items-center">
-    <!-- Show Create Invoice button ONLY if ready to invoice -->
-    <t t-if="this.state.selectedOrder.invoice_status === 'to invoice'">
-        <button class="btn btn-sm btn-success text-white shadow-sm fw-bold px-3 d-flex align-items-center" t-on-click="createInvoice" t-att-disabled="this.state.isCreatingInvoice" title="Generate a draft invoice for this order. This step is required for accounting.">
-            <t t-if="this.state.isCreatingInvoice">
-                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                Generating...
-            </t>
-            <t t-else="">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-receipt me-1">
-                    <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/>
-                    <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/>
-                    <path d="M12 17.5v-11"/>
-                </svg>
-                Create Invoice
-            </t>
-        </button>
-    </t>
+                            <div class="d-flex align-items-center">
+                                <t t-if="this.state.selectedOrder.invoice_status === 'to invoice'">
+                                    <button class="btn btn-sm btn-success text-white shadow-sm fw-bold px-3 d-flex align-items-center" t-on-click="createInvoice" t-att-disabled="this.state.isCreatingInvoice" title="Generate a draft invoice for this order. This step is required for accounting.">
+                                        <t t-if="this.state.isCreatingInvoice">
+                                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                            Generating...
+                                        </t>
+                                        <t t-else="">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-receipt me-1">
+                                                <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/>
+                                                <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/>
+                                                <path d="M12 17.5v-11"/>
+                                            </svg>
+                                            Create Invoice
+                                        </t>
+                                    </button>
+                                </t>
 
-    <!-- Always show a single Order Status badge with dynamic colors -->
-    <span t-attf-class="badge #{this.state.selectedOrder.status === 'Confirmed' ? 'bg-primary' : this.state.selectedOrder.status === 'Delivered' ? 'bg-success' : this.state.selectedOrder.status === 'Invoiced' ? 'bg-info' : this.state.selectedOrder.status === 'To Invoice' ? 'bg-warning text-dark' : 'bg-secondary'} text-white p-2 fs-6 text-uppercase shadow-sm ms-2" style="letter-spacing: 1px;">
-        Status: <t t-esc="this.state.selectedOrder.status"/>
-    </span>
-</div>
-
+                                <span t-attf-class="badge #{this.state.selectedOrder.status === 'Confirmed' ? 'bg-primary' : this.state.selectedOrder.status === 'Delivered' ? 'bg-success' : this.state.selectedOrder.status === 'Invoiced' ? 'bg-info' : this.state.selectedOrder.status === 'To Invoice' ? 'bg-warning text-dark' : 'bg-secondary'} text-white p-2 fs-6 text-uppercase shadow-sm ms-2" style="letter-spacing: 1px;">
+                                    Status: <t t-esc="this.state.selectedOrder.status"/>
+                                </span>
+                            </div>
                         </div>
 
                         <div class="row mb-4">
@@ -463,6 +459,315 @@
 
                     </div>
                 </t>
+            </t>
+
+            <t t-if="this.state.activeSubTab === 'performance'">
+                <div class="px-4 pt-3 bg-white border-bottom shadow-sm">
+                    <ul class="nav nav-tabs border-0">
+                        <li class="nav-item me-4">
+                            <button t-on-click="() => this.setPerfSubTab('schedules')" 
+                                    t-attf-class="nav-link bg-transparent border-0 fw-bold pb-2 fs-6 #{this.state.perfSubTab === 'schedules' ? 'text-primary border-bottom border-primary border-3 rounded-0' : 'text-muted'}"
+                                    title="View weekly route assignments">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar-days me-1"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+                                Weekly Schedules
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button t-on-click="() => this.setPerfSubTab('targets')" 
+                                    t-attf-class="nav-link bg-transparent border-0 fw-bold pb-2 fs-6 #{this.state.perfSubTab === 'targets' ? 'text-primary border-bottom border-primary border-3 rounded-0' : 'text-muted'}"
+                                    title="View sales and performance targets">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-target me-1"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                                Targets
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
+                <t t-if="this.state.perfSubTab === 'schedules'">
+                    <t t-if="!this.state.selectedSchedule">
+                        <div class="p-3 bg-light border-bottom d-flex flex-wrap gap-2 align-items-center">
+                            <select class="form-select form-select-sm shadow-sm" style="max-width: 200px;" t-model="this.state.schedFilterBooker" title="Filter by specific order booker">
+                                <option value="all">All Bookers</option>
+                                <t t-foreach="this.state.bookers" t-as="b" t-key="b.id">
+                                    <option t-att-value="b.id"><t t-esc="b.name"/></option>
+                                </t>
+                            </select>
+                            
+                            <select class="form-select form-select-sm shadow-sm" style="max-width: 150px;" t-model="this.state.schedFilterDay" title="Filter by day of the week">
+                                <option value="all">All Days</option>
+                                <option value="0">Monday</option>
+                                <option value="1">Tuesday</option>
+                                <option value="2">Wednesday</option>
+                                <option value="3">Thursday</option>
+                                <option value="4">Friday</option>
+                                <option value="5">Saturday</option>
+                                <option value="6">Sunday</option>
+                            </select>
+
+                            <div class="d-flex align-items-center ms-auto gap-2">
+                                <small class="text-muted fw-bold">Date Range:</small>
+                                <input type="date" class="form-control form-control-sm shadow-sm" t-model="this.state.schedFilterDateFrom" title="Start date"/>
+                                <span class="text-muted">-</span>
+                                <input type="date" class="form-control form-control-sm shadow-sm" t-model="this.state.schedFilterDateTo" title="End date"/>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                    <tr>
+                                        <th class="ps-4">Booker</th>
+                                        <th>Day / Date</th>
+                                        <th>Route &amp; Zone</th>
+                                        <th class="text-center" style="width: 200px;">Task Progress</th>
+                                        <th class="text-center pe-4">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-if="this.filteredSchedules.length === 0">
+                                        <tr>
+                                            <td colspan="5" class="text-center py-5 text-muted">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar-x opacity-50 mb-3"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m14 14-4 4"/><path d="m10 14 4 4"/></svg>
+                                                <p class="mb-1 fw-bold fs-5 text-dark">No schedules found.</p>
+                                                <small>Adjust your filters or wait for routes to be assigned.</small>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                    <t t-foreach="this.filteredSchedules" t-as="sched" t-key="sched.id">
+                                        <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewSchedule(sched)">
+                                            <td class="ps-4">
+                                                <div class="fw-bold text-dark"><t t-esc="sched.bookerName"/></div>
+                                                <small class="text-muted">Booker ID: <t t-esc="sched.bookerId"/></small>
+                                            </td>
+                                            <td>
+                                                <div class="fw-bold text-primary"><t t-esc="sched.day"/></div>
+                                                <small class="text-muted"><t t-esc="sched.occurrenceDate || 'Recurring'"/></small>
+                                            </td>
+                                            <td>
+                                                <div class="fw-bold text-dark"><t t-esc="sched.route"/></div>
+                                                <small class="text-muted d-flex align-items-center mt-1 text-nowrap">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map-pin me-1"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                                                    <t t-esc="sched.zone"/>
+                                                </small>
+                                            </td>
+                                            <td class="text-center">
+                                                <div class="d-flex align-items-center justify-content-center w-100">
+                                                    <div class="progress flex-grow-1 me-2 shadow-sm" style="height: 8px;">
+                                                        <div class="progress-bar bg-success" role="progressbar" t-attf-style="width: #{sched.progress}%;"></div>
+                                                    </div>
+                                                    <small class="fw-bold text-success" style="min-width: 35px;"><t t-esc="sched.progress.toFixed(0)"/>%</small>
+                                                </div>
+                                            </td>
+                                            <td class="text-center pe-4">
+                                                <span t-attf-class="badge #{sched.active ? 'bg-success text-white' : 'bg-secondary text-white'} px-2 py-1 shadow-sm">
+                                                    <t t-esc="sched.active ? 'Active' : 'Inactive'"/>
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div class="p-4 bg-light">
+                            <button class="btn btn-sm btn-light border fw-bold px-3 shadow-sm mb-4" t-on-click="closeSchedule">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left me-1"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+                                Back to Schedules
+                            </button>
+                            <div class="card p-4 shadow-sm border-0 border-start border-4 border-primary">
+                                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-3">
+                                    <h4 class="text-dark fw-bold mb-0">Schedule: <t t-esc="this.state.selectedSchedule.name"/></h4>
+                                    <span t-attf-class="badge #{this.state.selectedSchedule.active ? 'bg-success' : 'bg-secondary'} text-white px-3 py-2 shadow-sm fs-6">
+                                        <t t-esc="this.state.selectedSchedule.active ? 'Active Schedule' : 'Inactive'"/>
+                                    </span>
+                                </div>
+                                <div class="row g-4">
+                                    <div class="col-md-6">
+                                        <div class="p-3 bg-light rounded-3 h-100">
+                                            <h6 class="fw-bold text-muted text-uppercase mb-3">Assignment Details</h6>
+                                            <p class="mb-2"><span class="fw-bold text-dark">Order Booker:</span> <span class="ms-2"><t t-esc="this.state.selectedSchedule.bookerName"/></span></p>
+                                            <p class="mb-2"><span class="fw-bold text-dark">Day:</span> <span class="ms-2 text-primary fw-bold"><t t-esc="this.state.selectedSchedule.day"/></span></p>
+                                            <p class="mb-2"><span class="fw-bold text-dark">Occurrence Date:</span> <span class="ms-2"><t t-esc="this.state.selectedSchedule.occurrenceDate || 'Recurring'"/></span></p>
+                                            <p class="mb-2"><span class="fw-bold text-dark">Route:</span> <span class="ms-2"><t t-esc="this.state.selectedSchedule.route"/></span></p>
+                                            <p class="mb-0"><span class="fw-bold text-dark">Zone:</span> <span class="ms-2"><t t-esc="this.state.selectedSchedule.zone"/></span></p>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="p-3 bg-light rounded-3 h-100">
+                                            <h6 class="fw-bold text-muted text-uppercase mb-3">Task Performance</h6>
+                                            <div class="d-flex justify-content-between mb-2">
+                                                <span class="text-dark fw-bold">Shops on Route:</span>
+                                                <span class="badge bg-secondary"><t t-esc="this.state.selectedSchedule.shops"/></span>
+                                            </div>
+                                            <div class="d-flex justify-content-between mb-2">
+                                                <span class="text-dark fw-bold">Tasks Planned:</span>
+                                                <span><t t-esc="this.state.selectedSchedule.planned"/></span>
+                                            </div>
+                                            <div class="d-flex justify-content-between mb-3 border-bottom pb-2">
+                                                <span class="text-dark fw-bold">Tasks Completed:</span>
+                                                <span class="text-success fw-bold"><t t-esc="this.state.selectedSchedule.done"/></span>
+                                            </div>
+                                            <label class="small fw-bold mb-1">Completion Progress</label>
+                                            <div class="d-flex align-items-center">
+                                                <div class="progress flex-grow-1 me-2 shadow-sm" style="height: 10px;">
+                                                    <div class="progress-bar bg-success" role="progressbar" t-attf-style="width: #{this.state.selectedSchedule.progress}%;"></div>
+                                                </div>
+                                                <span class="fw-bold text-success"><t t-esc="this.state.selectedSchedule.progress.toFixed(1)"/>%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </t>
+
+                <t t-if="this.state.perfSubTab === 'targets'">
+                    <t t-if="!this.state.selectedTarget">
+                        <div class="p-3 bg-light border-bottom d-flex gap-2">
+                            <select class="form-select form-select-sm shadow-sm w-25" t-model="this.state.targetFilterBooker" title="Filter by specific order booker">
+                                <option value="all">All Bookers</option>
+                                <t t-foreach="this.state.bookers" t-as="b" t-key="b.id">
+                                    <option t-att-value="b.id"><t t-esc="b.name"/></option>
+                                </t>
+                            </select>
+                            
+                            <select class="form-select form-select-sm shadow-sm w-25" t-model="this.state.targetFilterType" title="Filter by the type of performance goal">
+                                <option value="all">All Target Types</option>
+                                <t t-foreach="this.uniqueTargetTypes" t-as="type" t-key="type.value">
+                                    <option t-att-value="type.value"><t t-esc="type.label"/></option>
+                                </t>
+                            </select>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="bg-light text-uppercase small fw-bold text-muted text-nowrap">
+                                    <tr>
+                                        <th class="border-top-0 ps-4">Booker</th>
+                                        <th class="border-top-0">Target Metric</th>
+                                        <th class="border-top-0">Period</th>
+                                        <th class="border-top-0 text-center">Achieved / Goal</th>
+                                        <th class="border-top-0 text-center" style="width: 150px;">Progress</th>
+                                        <th class="border-top-0 text-end pe-4">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-if="this.filteredTargets.length === 0">
+                                        <tr>
+                                            <td colspan="6" class="text-center py-5 text-muted fw-bold">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-target opacity-50 mb-3"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                                                <p class="mb-0">No targets found matching your filters.</p>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                    <t t-foreach="this.filteredTargets" t-as="tgt" t-key="tgt.id">
+                                        <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewTarget(tgt)">
+                                            <td class="ps-4 text-nowrap">
+                                                <div class="fw-bold text-dark"><t t-esc="tgt.bookerName"/></div>
+                                            </td>
+                                            <td class="align-middle">
+                                                <div class="text-primary fw-bold"><t t-esc="tgt.displayType"/></div>
+                                            </td>
+                                            <td class="align-middle text-nowrap">
+                                                <div class="fw-bold small text-dark"><t t-esc="tgt.startDate"/></div>
+                                                <div class="text-muted small">to <t t-esc="tgt.endDate"/></div>
+                                            </td>
+                                            <td class="align-middle text-center fw-bold text-dark text-nowrap">
+                                                <span class="text-success"><t t-esc="tgt.achievedValue"/></span> 
+                                                <span class="text-muted mx-1">/</span> 
+                                                <t t-esc="tgt.targetValue"/>
+                                            </td>
+                                            <td class="align-middle text-center">
+                                                <div class="d-flex align-items-center justify-content-center w-100">
+                                                    <div class="progress flex-grow-1 me-2 shadow-sm" style="height: 6px;">
+                                                        <div class="progress-bar bg-success" role="progressbar" t-attf-style="width: #{tgt.progress}%;"></div>
+                                                    </div>
+                                                    <small class="fw-bold text-success"><t t-esc="tgt.progress.toFixed(0)"/>%</small>
+                                                </div>
+                                            </td>
+                                            <td class="align-middle text-end pe-4 text-nowrap">
+                                                <span t-attf-class="badge #{tgt.active ? 'bg-success text-white' : 'bg-secondary text-white'} px-2 py-1 shadow-sm">
+                                                    <t t-esc="tgt.active ? 'Active' : 'Inactive'"/>
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div class="p-4 bg-light">
+                            <button class="btn btn-sm btn-light border fw-bold px-3 shadow-sm mb-4" t-on-click="closeTarget">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left me-1"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+                                Back to Targets
+                            </button>
+                            <div class="card p-4 shadow-sm border-0 border-start border-4 border-success">
+                                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-3">
+                                    <h4 class="text-dark fw-bold mb-0">Target: <t t-esc="this.state.selectedTarget.name"/></h4>
+                                    <span t-attf-class="badge #{this.state.selectedTarget.active ? 'text-success' : 'text-secondary'}  px-3 py-2 shadow-sm fs-6">
+                                        <t t-esc="this.state.selectedTarget.active ? 'Active Target' : 'Inactive'"/>
+                                    </span>
+                                </div>
+                                <div class="row g-4">
+                                    <div class="col-md-6">
+                                        <div class="p-3 bg-light rounded-3 h-100">
+                                            <h6 class="fw-bold text-muted text-uppercase mb-3">Target Definition</h6>
+                                            <p class="mb-2"><span class="fw-bold text-dark">Order Booker:</span> <span class="ms-2"><t t-esc="this.state.selectedTarget.bookerName"/></span></p>
+                                            <p class="mb-2"><span class="fw-bold text-dark">Metric Type:</span> <span class="ms-2 badge bg-primary"><t t-esc="this.state.selectedTarget.displayType"/></span></p>
+                                            <p class="mb-2"><span class="fw-bold text-dark">Start Date:</span> <span class="ms-2"><t t-esc="this.state.selectedTarget.startDate"/></span></p>
+                                            <p class="mb-2"><span class="fw-bold text-dark">End Date:</span> <span class="ms-2"><t t-esc="this.state.selectedTarget.endDate"/></span></p>
+                                            
+                                            <t t-if="this.state.selectedTarget.product">
+                                                <p class="mb-2 border-top pt-2 mt-2"><span class="fw-bold text-dark">Specific Product:</span> <span class="ms-2 fw-bold text-info"><t t-esc="this.state.selectedTarget.product"/></span></p>
+                                            </t>
+                                            <t t-if="this.state.selectedTarget.currency">
+                                                <p class="mb-2"><span class="fw-bold text-dark">Currency:</span> <span class="ms-2"><t t-esc="this.state.selectedTarget.currency"/></span></p>
+                                            </t>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="p-3 bg-light rounded-3 h-100">
+                                            <h6 class="fw-bold text-muted text-uppercase mb-3">Achievement Status</h6>
+                                            <div class="d-flex justify-content-between mb-2">
+                                                <span class="text-dark fw-bold">Goal Value:</span>
+                                                <span class="fw-bold fs-5">
+                                                    <t t-esc="this.state.selectedTarget.targetValue"/>
+                                                    <small class="text-muted ms-1"><t t-esc="this.state.selectedTarget.weightUom"/></small>
+                                                </span>
+                                            </div>
+                                            <div class="d-flex justify-content-between mb-2">
+                                                <span class="text-dark fw-bold">Achieved So Far:</span>
+                                                <span class="text-success fw-bold fs-5">
+                                                    <t t-esc="this.state.selectedTarget.achievedValue"/>
+                                                    <small class="text-muted ms-1"><t t-esc="this.state.selectedTarget.weightUom"/></small>
+                                                </span>
+                                            </div>
+                                            <div class="d-flex justify-content-between mb-3 border-bottom pb-3">
+                                                <span class="text-dark fw-bold">Remaining:</span>
+                                                <span class="text-warning fw-bold fs-5">
+                                                    <t t-esc="this.state.selectedTarget.remainingValue"/>
+                                                    <small class="text-muted ms-1"><t t-esc="this.state.selectedTarget.weightUom"/></small>
+                                                </span>
+                                            </div>
+                                            
+                                            <label class="small fw-bold mb-1">Overall Progress</label>
+                                            <div class="d-flex align-items-center">
+                                                <div class="progress flex-grow-1 me-2 shadow-sm" style="height: 12px;">
+                                                    <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" role="progressbar" t-attf-style="width: #{this.state.selectedTarget.progress}%;"></div>
+                                                </div>
+                                                <span class="fw-bold text-success fs-5"><t t-esc="this.state.selectedTarget.progress.toFixed(1)"/>%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </t>
+
             </t>
         </div>
     </t>
