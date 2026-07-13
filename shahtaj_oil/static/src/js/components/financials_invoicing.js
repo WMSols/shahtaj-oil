@@ -6,7 +6,7 @@ import { useService } from "@web/core/utils/hooks";
 export class FinancialsInvoicing extends Component {
     setup() {
         this.orm = useService("orm");
-
+        this.action = useService("action");
         this.state = useState({
             activeSubTab: 'invoices',
             invoiceSubTab: 'orders',
@@ -327,7 +327,16 @@ export class FinancialsInvoicing extends Component {
             alert(`Refund failed:\n\n${error.data?.message || error.message}`);
         }
     }
-
+    async actionPrintInvoice(invoiceId) {
+        // Calls the native Odoo PDF generation engine
+        this.action.doAction({
+            type: 'ir.actions.report',
+            report_type: 'qweb-pdf',
+            report_name: 'account.report_invoice_with_payments',
+            report_file: 'account.report_invoice_with_payments',
+            context: { active_ids: [invoiceId] },
+        });
+    }
     openPaymentModal() {
         const today = new Date().toISOString().split('T')[0];
         this.state.paymentForm = {
