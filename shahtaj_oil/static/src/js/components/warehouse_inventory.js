@@ -14,6 +14,12 @@ export class WarehouseInventory extends Component {
             showAdjustmentForm: false,
             showProductAddForm: false,
             showProductDetails: false,
+            
+            // --- NEW: Tax Management States ---
+            showTaxForm: false,
+            editingTaxId: null,
+            taxForm: { name: '', amount: 0.0, active: true },
+            taxesList: [],
 
             // --- Search & Filter States ---
             productSearchQuery: '',
@@ -42,17 +48,16 @@ export class WarehouseInventory extends Component {
         onWillStart(async () => {
             await this.loadSaleTaxes();
             await this.loadInventory();
+            await this.loadTaxesList(); // Fetch the main tax configurations
         });
     }
 
     // --- Dynamic Search, Filter, and Sort Getters ---
     get displayProducts() {
-        // 1. Filter by Search Query
         let filtered = this.state.inventory.filter(product =>
             product.name.toLowerCase().includes(this.state.productSearchQuery.toLowerCase())
         );
 
-        // 2. Apply Sorting
         if (this.state.productSortFilter === 'price_asc') {
             filtered.sort((a, b) => (a.list_price || 0) - (b.list_price || 0));
         } else if (this.state.productSortFilter === 'price_desc') {
@@ -67,12 +72,10 @@ export class WarehouseInventory extends Component {
     }
 
     get displayStock() {
-        // 1. Filter by Search Query
         let filtered = this.state.inventory.filter(product =>
             product.name.toLowerCase().includes(this.state.stockSearchQuery.toLowerCase())
         );
 
-        // 2. Apply Availability Filter
         if (this.state.stockFilterStatus === 'in_stock') {
             filtered = filtered.filter(p => p.qty_available > 0);
         } else if (this.state.stockFilterStatus === 'out_of_stock') {
@@ -137,6 +140,15 @@ export class WarehouseInventory extends Component {
         return tax ? tax.label : 'No tax';
     }
 
+    async loadTaxesList() {
+        const taxes = await this.orm.searchRead(
+            "account.tax",
+            [["type_tax_use", "=", "sale"], ["active", "in", [true, false]]],
+            ["id", "name", "amount", "active"]
+        );
+        this.state.taxesList = taxes;
+    }
+
     onSaleUomChange(formTarget) {
         const defaults = { kg: 1.0, ton: 1000.0, litre: 1.0, piece: 1.0 };
         const form = formTarget === 'edit' ? this.state.currentProduct : this.state.productForm;
@@ -172,7 +184,54 @@ export class WarehouseInventory extends Component {
         this.state.showAdjustmentForm = false;
         this.state.showProductAddForm = false;
         this.state.showProductDetails = false;
+        this.state.showTaxForm = false;
         this.state.currentProduct = null;
+        this.state.editingTaxId = null;
+    }
+
+    // --- NEW: Tax Management Handlers ---
+    openTaxForm(tax = null) {
+        if (tax) {
+            this.state.taxForm = { name: tax.name, amount: tax.amount, active: tax.active };
+            this.state.editingTaxId = tax.id;
+        } else {
+            this.state.taxForm = { name: '', amount: 0.0, active: true };
+            this.state.editingTaxId = null;
+        }
+        this.state.showTaxForm = true;
+    }
+
+    cancelTaxForm() {
+        this.state.showTaxForm = false;
+        this.state.editingTaxId = null;
+    }
+
+    async saveTax() {
+        if (!this.state.taxForm.name) {
+            alert("Tax name is required.");
+            return;
+        }
+
+        const vals = {
+            name: this.state.taxForm.name,
+            amount: parseFloat(this.state.taxForm.amount || 0),
+            active: this.state.taxForm.active,
+        };
+
+        try {
+            if (this.state.editingTaxId) {
+                await this.orm.write("account.tax", [this.state.editingTaxId], vals);
+            } else {
+                vals.type_tax_use = 'sale';
+                vals.amount_type = 'percent';
+                await this.orm.create("account.tax", [vals]);
+            }
+            this.cancelTaxForm();
+            await this.loadTaxesList(); // Refresh the grid
+            await this.loadSaleTaxes(); // Refresh the product creation dropdown
+        } catch (error) {
+            alert("Failed to save tax: " + (error.data?.message || error.message));
+        }
     }
 
     onImageChange(ev, target) {
