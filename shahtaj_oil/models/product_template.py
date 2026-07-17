@@ -109,8 +109,8 @@ class ProductTemplate(models.Model):
                 ('product_id', 'in', variant_ids),
                 ('order_id.state', 'in', ('sale', 'done')),
             ],
-            fields=['qty_delivered'],  # Define fields as a list of field names to aggregate
-            groupby=['product_id'],    # Define how to group the results
+            fields=[ 'qty_delivered'],
+            groupby=['product_id'],
             lazy=False,
         )
         sold_by_variant = {
