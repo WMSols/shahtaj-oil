@@ -16,39 +16,11 @@
             </div>
         </div>
 
-        <div class="p-3 border-bottom">
-            <ul class="nav nav-pills nav-fill">
-                <li class="nav-item">
-                    <button t-on-click="() => this.setSubTab('areas')" 
-                            t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeSubTab === 'areas' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}"
-                            title="Manage primary geographical zones">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map me-2"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>
-                        Zones
-                    </button>
-                </li>
-                <li class="nav-item mx-2">
-                    <button t-on-click="() => this.setSubTab('routes')" 
-                            t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeSubTab === 'routes' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}"
-                            title="Manage daily routes inside zones">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-route me-2"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>
-                        Routes
-                    </button>
-                </li>
-                <li class="nav-item">
-                    <button t-on-click="() => this.setSubTab('shops')" 
-                            t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeSubTab === 'shops' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}"
-                            title="Manage and verify individual shops">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-store me-2"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h2V14h8v8h2a2 2 0 0 0 2-2v-8"/><path d="M2 7h20v3a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7z"/></svg>
-                        Shops
-                    </button>
-                </li>
-            </ul>
-        </div>
 
         <t t-if="this.state.activeSubTab === 'areas'">
             <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div>
-                    <h6 class="fw-bold mb-0">Geographical Zones</h6>
+                    <h2 class="fw-bold mb-0">Geographical Zones</h2>
                     <small class="text-muted">Zones represent the highest level of your territory.</small>
                 </div>
                 <div class="d-flex align-items-center gap-2">
@@ -141,7 +113,7 @@
         <t t-if="this.state.activeSubTab === 'routes'">
             <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div>
-                    <h6 class="fw-bold mb-0">Route Configurations</h6>
+                    <h2 class="fw-bold mb-0">Route Configurations</h2>
                     <small class="text-muted">Routes are specific paths within a Zone.</small>
                 </div>
                 <div class="d-flex align-items-center gap-2">
@@ -197,6 +169,7 @@
                 <table class="table table-hover mb-0">
                     <thead class="bg-light text-uppercase small fw-bold text-muted">
                         <tr>
+                            <th class="border-top-0 ps-4">Route Id</th>
                             <th class="border-top-0 ps-4">Route Info</th>
                             <th class="border-top-0 text-center" title="Total number of shops assigned to this route">Mapped Shops</th>
                             <th class="border-top-0 text-center">Status</th>
@@ -219,6 +192,9 @@
                         </t>
                         <t t-foreach="this.displayRoutes" t-as="route" t-key="route.id">
                             <tr>
+                                <td class="ps-4 align-middle">
+                                    <div class="text-dark fw-bold"><t t-esc="route.id"/></div>
+                                </td>
                                 <td class="ps-4 align-middle">
                                     <div class="text-dark fw-bold"><t t-esc="route.name"/></div>
                                     <small class="text-muted d-flex align-items-center mt-1">
@@ -243,7 +219,6 @@
         </t>
 
         <t t-if="this.state.activeSubTab === 'shops'">
-            
             <t t-if="this.state.selectedShopDetails">
                 <div class="p-4 bg-light border-bottom d-flex justify-content-between align-items-center">
                     <div>
@@ -356,8 +331,8 @@
             <t t-elif="!this.state.showShopForm">
                 <div class="p-4 bg-white border-bottom d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
                     <div>
-                        <h6 class="fw-bold mb-0">Registered Shops</h6>
-                        <small class="text-muted">Review, approve, and manage the retail shops.</small>
+                        <h2 class="fw-bold mb-0">Registered Shops</h2>
+                        <small class="text-muted">Register, Review, approve, and manage the retail shops.</small>
                     </div>
                     
                     <div class="d-flex align-items-center gap-2 flex-wrap">

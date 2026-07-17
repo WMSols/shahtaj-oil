@@ -11,7 +11,7 @@
             </div>
 
             <t t-if="this.state.viewMode === 'list'">
-                <div class="p-3 border-bottom">
+                <!-- <div class="p-3 border-bottom">
                     <ul class="nav nav-pills nav-fill">
                         <li class="nav-item">
                             <button t-on-click="() => this.switchMainTab('schedules')" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeMainTab === 'schedules' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}">
@@ -41,7 +41,7 @@
                             </button>
                         </li>
                     </ul>
-                </div>
+                </div> -->
 
                 <div class="table-responsive">
                     <table class="table table-hover mb-0">

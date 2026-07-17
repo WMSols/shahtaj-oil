@@ -18,7 +18,7 @@
                 </div>
             </div>
 
-            <div class="p-3 border-bottom">
+            <!-- <div class="p-3 border-bottom">
                 <ul class="nav nav-pills nav-fill">
                     <li class="nav-item">
                         <button t-on-click="() => this.setSubTab('checkins')" 
@@ -51,7 +51,7 @@
                         </button>
                     </li>
                 </ul>
-            </div>
+            </div> -->
 
             <t t-if="this.state.activeSubTab === 'checkins'">
                 <t t-if="!this.state.selectedCheckin">

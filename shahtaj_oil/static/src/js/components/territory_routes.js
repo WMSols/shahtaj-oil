@@ -1,9 +1,12 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, useEffect, useRef } from "@odoo/owl";
+import { Component, useState, onWillStart, useEffect, useRef,onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 
 export class TerritoryRoutes extends Component {
+    static props = {
+        requestedSubTab: { type: String, optional: true },
+    };
     setup() {
         this.orm = useService("orm");
 
@@ -11,7 +14,7 @@ export class TerritoryRoutes extends Component {
         this.mapInstance = null; 
 
         this.state = useState({
-            activeSubTab: 'routes', 
+           activeSubTab: this.props.requestedSubTab || 'areas', 
             
             showAreaForm: false,
             showRouteForm: false,
@@ -50,6 +53,12 @@ export class TerritoryRoutes extends Component {
             areas: [],
             routes: [],
             shops: []
+        });
+        // ADD THIS NEW BLOCK RIGHT AFTER THE STATE CLOSING BRACKET:
+        onWillUpdateProps((nextProps) => {
+            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.state.activeSubTab) {
+                this.setSubTab(nextProps.requestedSubTab);
+            }
         });
 
         useEffect(() => {

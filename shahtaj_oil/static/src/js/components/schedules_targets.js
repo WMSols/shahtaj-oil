@@ -1,13 +1,17 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart } from "@odoo/owl";
+import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 
 export class SchedulesTargets extends Component {
+    static props = {
+        requestedSubTab: { type: String, optional: true },
+    };
+
     setup() {
         this.orm = useService("orm");
         this.state = useState({
-            activeMainTab: 'schedules',
+            activeMainTab: this.props.requestedSubTab || 'schedules',
             viewMode: 'list',
             selectedBooker: null,
             showForm: false,
@@ -36,11 +40,28 @@ export class SchedulesTargets extends Component {
             products: [],     
             currencies: [],   
         });
+         onWillUpdateProps((nextProps) => {
+            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.state.activeSubTab) {
+                this.setSubTab(nextProps.requestedSubTab);
+            }
+        });
 
         onWillStart(async () => {
             await this._loadDropdownOptions();
             await this._loadBookers();
         });
+    }
+    // --- UI Toggles & Handlers ---
+    setSubTab(tabName) {
+        // Change the active tab
+        this.state.activeMainTab = tabName;
+        
+        // Reset the views so it goes back to the clean list
+        this.state.viewMode = 'list';
+        this.state.showForm = false;
+        this.state.errorMessage = '';
+        this.state.editingScheduleId = null;
+        this.state.editingTargetId = null;
     }
 
     // ─── Loaders ────────────────────────────────────────────────────────────────

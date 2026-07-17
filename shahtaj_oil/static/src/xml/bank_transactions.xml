@@ -6,6 +6,7 @@
             <t t-if="this.state.viewMode === 'list'">
                 <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
                     <h4 class="fw-bold">Bank Transactions</h4>
+                    <p class="text-warning fw-bold mb-0">(NOTE :This UI is based on mock data for demonstration purposes)</p>
                 </div>
 
                 <div class="row g-3 mb-4">

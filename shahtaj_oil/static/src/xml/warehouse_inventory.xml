@@ -29,50 +29,12 @@
                 </div>
             </div>
 
-            <div class="p-3 border-bottom overflow-auto">
-                <ul class="nav nav-pills nav-fill text-nowrap flex-nowrap">
-                    <li class="nav-item me-2">
-                        <button t-on-click="() => this.setSubTab('inventory')" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeSubTab === 'inventory' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}" title="View and manage the products you sell">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package me-2">
-                                <path d="m7.5 4.27 9 5.15"/>
-                                <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-                                <path d="m3.3 7 8.7 5 8.7-5"/>
-                                <path d="M12 22V12"/>
-                            </svg>
-                       Product List
-                        </button>
-                    </li>
-                    <li class="nav-item me-2">
-                        <button t-on-click="() => this.setSubTab('management')" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeSubTab === 'management' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}" title="Adjust quantities and check available stock">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-clipboard-list me-2">
-                                <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/>
-                                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-                                <path d="M12 11h4"/>
-                                <path d="M12 16h4"/>
-                                <path d="M8 11h.01"/>
-                                <path d="M8 16h.01"/>
-                            </svg>
-                        Stock Overview
-                        </button>
-                    </li>
-                    <li class="nav-item me-2">
-                        <button t-on-click="() => this.setSubTab('taxes')" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeSubTab === 'taxes' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}" title="Configure Sales Taxes">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-percent me-2">
-                                <line x1="19" x2="5" y1="5" y2="19"/>
-                                <circle cx="6.5" cy="6.5" r="2.5"/>
-                                <circle cx="17.5" cy="17.5" r="2.5"/>
-                            </svg>
-                        Sales Taxes
-                        </button>
-                    </li>
-                </ul>
-            </div>
 
             <t t-if="this.state.activeSubTab === 'inventory'">
 
                 <div class="p-4 bg-white border-bottom d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                     <div>
-                        <h6 class="fw-bold mb-0">Master Inventory Control</h6>
+                        <h2 class="fw-bold mb-0">Master Inventory Control</h2>
                         <small class="text-muted">Define the items you sell and track their basic details.</small>
                     </div>
 
@@ -104,7 +66,7 @@
 
                 <t t-if="this.state.showProductAddForm">
                     <div class="p-4 bg-light border-bottom rounded-3 m-3">
-                        <h6 class="fw-bold text-dark mb-0">Create New Product</h6>
+                        <h2 class="fw-bold text-dark mb-0">Create New Product</h2>
                         <small class="text-muted d-block mb-4">Fill in the details below. Fields marked as optional can be updated later.</small>
 
                         <div class="row g-3">
@@ -294,7 +256,7 @@
         <t t-if="this.state.activeSubTab === 'management'">
             <div class="p-4 bg-white border-bottom d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                 <div>
-                    <h6 class="fw-bold mb-0 text-dark">Stock Management Overview</h6>
+                    <h2 class="fw-bold mb-0 text-dark">Stock Management Overview</h2>
                     <small class="text-muted">Monitor available quantities and manually adjust stock if needed.</small>
                 </div>
 
@@ -325,7 +287,7 @@
 
             <t t-if="this.state.showAdjustmentForm">
                 <div class="p-4 bg-light border-bottom">
-                    <h6 class="fw-bold text-dark mb-3">Add Stock to Product</h6>
+                    <h2 class="fw-bold text-dark mb-3">Add Stock to Product</h2>
                     <div class="row align-items-end g-3">
                         <div class="col-md-4">
                             <label class="small fw-bold">Select Product</label>
@@ -423,7 +385,7 @@
         <t t-if="this.state.activeSubTab === 'taxes'">
             <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center">
                 <div>
-                    <h6 class="fw-bold mb-0">Sales Taxes Configuration</h6>
+                    <h2 class="fw-bold mb-0">Sales Taxes Configuration</h2>
                     <small class="text-muted">Define taxes to apply to your products on customer invoices.</small>
                 </div>
                 <button t-if="!this.state.showTaxForm" class="btn btn-sm btn-dark fw-bold d-flex align-items-center shadow-sm text-white" t-on-click="() => this.openTaxForm()">

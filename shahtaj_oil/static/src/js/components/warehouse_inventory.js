@@ -1,14 +1,17 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart } from "@odoo/owl";
+import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 
 export class WarehouseInventory extends Component {
+    static props = {
+        requestedSubTab: { type: String, optional: true },
+    };
     setup() {
         this.orm = useService("orm");
         
         this.state = useState({
-            activeSubTab: 'inventory',
+            activeSubTab: this.props.requestedSubTab || 'inventory',
             
             showWarehouseForm: false,
             showAdjustmentForm: false,
@@ -43,6 +46,11 @@ export class WarehouseInventory extends Component {
             ],
 
             inventory: []
+        });
+        onWillUpdateProps((nextProps) => {
+            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.state.activeSubTab) {
+                this.setSubTab(nextProps.requestedSubTab);
+            }
         });
 
         onWillStart(async () => {
@@ -94,7 +102,7 @@ export class WarehouseInventory extends Component {
         return {
             name: '', track_inventory: true, on_hand: 0,
             list_price: 0.0, standard_price: 0.0,
-            invoice_policy: 'order', type: 'consu',
+            invoice_policy: 'delivery', type: 'consu',
             shahtaj_sale_uom: 'piece', shahtaj_kg_per_unit: 1.0,
             tax_id: this.state?.defaultTaxId || "", 
             barcode: '', weight: 0.0, volume: 0.0,

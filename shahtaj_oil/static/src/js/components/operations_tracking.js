@@ -1,15 +1,18 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart } from "@odoo/owl";
+import { Component, useState, onWillStart,onWillUpdateProps  } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 
 export class OperationsTracking extends Component {
+     static props = {
+        requestedSubTab: { type: String, optional: true },
+    };
     setup() {
         this.orm = useService("orm");
         this.notification = useService("notification");
         this.state = useState({
             // Main Tab Navigation
-            activeSubTab: 'orders', // 'checkins', 'orders', 'performance'
+            activeSubTab: this.props.requestedSubTab || 'orders', // 'checkins', 'orders', 'performance'
             
             selectedOrder: null,    
             selectedCheckin: null,  
@@ -59,6 +62,12 @@ export class OperationsTracking extends Component {
             schedules: [],
             targets: []
         });
+         // ADD THIS NEW BLOCK RIGHT AFTER THE STATE CLOSING BRACKET:
+        onWillUpdateProps((nextProps) => {
+            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.state.activeSubTab) {
+                this.setSubTab(nextProps.requestedSubTab);
+            }
+        })
 
         onWillStart(async () => {
             await Promise.all([
