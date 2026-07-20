@@ -189,7 +189,7 @@ export class FinancialsInvoicing extends Component {
             const invoicesData = await this.orm.searchRead(
                 "account.move",
                 [["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true]],
-                ["name", "partner_id", "invoice_date", "amount_total", "amount_residual", "payment_state", "state"]
+                ["name", "partner_id", "invoice_date","amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state","journal_id"]
             );
             this.state.invoices = invoicesData.map(inv => {
                 let status = 'Draft';
@@ -201,8 +201,12 @@ export class FinancialsInvoicing extends Component {
                 }
                 return {
                     id: inv.id, display_name: (inv.name && inv.name !== '/') ? inv.name : `Draft Invoice (*${inv.id})`, shop: inv.partner_id ? inv.partner_id[1] : 'Unknown',
+                    // NEW TAX FIELDS
+                    untaxedAmount: (inv.amount_untaxed || 0).toLocaleString(),
+                    taxAmount: (inv.amount_tax || 0).toLocaleString(),
                     date: inv.invoice_date || 'Not set', amount: (inv.amount_total || 0).toLocaleString(), rawAmount: inv.amount_total || 0,
-                    residual: (inv.amount_residual || 0).toLocaleString(), rawResidual: inv.amount_residual !== undefined ? inv.amount_residual : inv.amount_total, status: status
+                    residual: (inv.amount_residual || 0).toLocaleString(), rawResidual: inv.amount_residual !== undefined ? inv.amount_residual : inv.amount_total, status: status,
+                    journal_id: inv.journal_id ? inv.journal_id[0] : false
                 };
             });
         } catch (error) { console.error("Invoices Fetch Error:", error); }
@@ -211,7 +215,7 @@ export class FinancialsInvoicing extends Component {
             const creditNotesData = await this.orm.searchRead(
                 "account.move",
                 [["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]],
-                ["name", "partner_id", "invoice_date", "amount_total", "amount_residual", "payment_state", "state", "journal_id"]
+                ["name", "partner_id", "invoice_date","invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"]
             );
             this.state.creditNotes = creditNotesData.map(cn => {
                 let status = 'Draft';
@@ -223,6 +227,9 @@ export class FinancialsInvoicing extends Component {
                 }
                 return {
                     id: cn.id, display_name: (cn.name && cn.name !== '/') ? cn.name : `Draft Refund (*${cn.id})`, shop: cn.partner_id ? cn.partner_id[1] : 'Unknown',
+                    // NEW TAX FIELDS
+                    untaxedAmount: (cn.amount_untaxed || 0).toLocaleString(),
+                    taxAmount: (cn.amount_tax || 0).toLocaleString(),
                     date: cn.invoice_date || 'Not set', amount: (cn.amount_total || 0).toLocaleString(), rawAmount: cn.amount_total || 0,
                     residual: (cn.amount_residual || 0).toLocaleString(), rawResidual: cn.amount_residual !== undefined ? cn.amount_residual : cn.amount_total,
                     status: status, journal_id: cn.journal_id ? cn.journal_id[0] : false 
@@ -247,7 +254,8 @@ export class FinancialsInvoicing extends Component {
             this.state.payments = paymentsData.map(pay => ({
                 id: pay.id, display_name: pay.name ? pay.name : `Processing... (#${pay.id})`, shop: pay.partner_id ? pay.partner_id[1] : 'Unknown',
                 date: pay.date || 'N/A', amount: (pay.amount || 0).toLocaleString(), method: pay.journal_id ? pay.journal_id[1] : 'Manual',
-                ref: pay.memo || 'N/A', status: (pay.state === 'posted' || pay.state === 'reconciled') ? 'Posted' : (pay.state === 'cancel' ? 'Cancelled' : 'Draft')
+                ref: pay.memo || 'N/A', status: (pay.state === 'posted' || pay.state === 'reconciled') ? 'Posted' : (pay.state === 'cancel' ? 'Cancelled' : 'Draft'),
+                status: ['paid', 'in_process', 'posted', 'reconciled'].includes(pay.state) ? 'Paid' : (pay.state === 'cancel' ? 'Cancelled' : 'Draft')
             }));
         } catch (error) { console.error("Payments Fetch Error:", error); }
 
@@ -418,7 +426,7 @@ export class FinancialsInvoicing extends Component {
         try {
             const linesData = await this.orm.searchRead(
                 "account.move.line", [["move_id", "=", invoice.id], ["display_type", "in", ["product", false]]], 
-                ["product_id", "quantity", "price_unit", "price_subtotal", "name"]
+                ["product_id", "quantity","tax_ids", "price_unit", "price_subtotal", "name"]
             );
             this.state.selectedInvoiceLines = linesData.map(l => ({
                 id: l.id,
@@ -426,6 +434,7 @@ export class FinancialsInvoicing extends Component {
                 product: l.product_id ? l.product_id[1] : l.name,
                 qty: l.quantity,
                 price: l.price_unit,
+                taxes: l.tax_ids && l.tax_ids.length > 0 ? `${l.tax_ids.length} Taxes` : 'None',
                 subtotal: (l.price_subtotal || 0).toLocaleString()
             }));
         } catch (error) {}
@@ -568,7 +577,8 @@ export class FinancialsInvoicing extends Component {
         try {
             const context = { active_model: 'account.move', active_ids: [this.state.selectedInvoice.id] };
             const wizardIds = await this.orm.create("account.move.reversal", [{
-                reason: this.state.refundForm.reason, date: this.state.refundForm.date
+                reason: this.state.refundForm.reason, date: this.state.refundForm.date,
+                journal_id: this.state.selectedInvoice.journal_id
             }], { context });
             
             await this.orm.call("account.move.reversal", "reverse_moves", [wizardIds], { context });

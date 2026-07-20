@@ -10,6 +10,7 @@ export class OperationsTracking extends Component {
     setup() {
         this.orm = useService("orm");
         this.notification = useService("notification");
+        this.action = useService("action");
         this.state = useState({
             // Main Tab Navigation
             activeSubTab: this.props.requestedSubTab || 'orders', // 'checkins', 'orders', 'performance'
@@ -28,21 +29,19 @@ export class OperationsTracking extends Component {
             orderFilters: { search: '', status: '' },
             orderPage: 1,
 
-            deliveries: [
-                { id: "DLV-0091", driver: "Zain Ahmed", route: "Route A - Central", status: "In-Transit", progress: "65%", last_update: "10 mins ago" },
-                { id: "DLV-0092", driver: "Fahad Mustafa", route: "Route C - Industrial", status: "Pending", progress: "0%", last_update: "Loading at Hub" },
-                { id: "DLV-0093", driver: "Kamran Ali", route: "Route B - North", status: "Delivered", progress: "100%", last_update: "1 hour ago" },
-                { id: "DLV-0094", driver: "Bilal Tariq", route: "Route D - South", status: "Returned", progress: "80%", last_update: "Gate Check-in" },
-                { id: "DLV-0095", driver: "Adeel Hassan", route: "Route A - Central", status: "In-Transit", progress: "45%", last_update: "2 mins ago" },
-                { id: "DLV-0096", driver: "Tariq Mahmood", route: "Route E - Outer", status: "Delivered", progress: "100%", last_update: "30 mins ago" },
-                { id: "DLV-0097", driver: "Usman Ali", route: "Route C - Industrial", status: "Pending", progress: "0%", last_update: "Queued" },
-                { id: "DLV-0098", driver: "Hamza Farooq", route: "Route B - North", status: "In-Transit", progress: "85%", last_update: "5 mins ago" }
-            ],
+            deliveries: [],
+            selectedDelivery: null,
 
             checkins: [],
             orders: [],
             isCreatingInvoice: false,
-
+            isEditingDelivery: false,
+            allProducts: [], // To list all products in a dropdown
+            saleTaxes: [],   // To list all taxes in a dropdown
+            // --- NEW: Custom Delivery Modal States ---
+            showDeliveryModal: false,
+            deliveryWizardId: null,
+            deliveryLines: [],
             // --- NEW: PERFORMANCE TRACKING STATES ---
             perfSubTab: 'schedules', // 'schedules', 'targets'
             selectedSchedule: null,
@@ -73,7 +72,8 @@ export class OperationsTracking extends Component {
             await Promise.all([
                 this.fetchLiveVisits(),
                 this.fetchLiveOrders(),
-                this.fetchPerformanceData()
+                this.fetchPerformanceData(),
+                this.loadTaxAndProductData()
             ]);
         });
     }
@@ -84,7 +84,7 @@ export class OperationsTracking extends Component {
         const visits = await this.orm.searchRead(
             "shahtaj.visit",
             [],
-            ["id", "shop_id", "order_booker_id", "started_at", "ended_at", "state", "outcome", "visit_task_id", "sale_order_id"]
+            ["id", "shop_id", "order_booker_id", "started_at", "ended_at", "state", "outcome", "visit_task_id", "sale_order_id", "notes"]
         );
 
         this.state.checkins = visits.map(v => {
@@ -119,7 +119,8 @@ export class OperationsTracking extends Component {
                 duration: durationStr,
                 outcome: displayOutcome,
                 taskRef: v.visit_task_id ? v.visit_task_id[1] : 'Direct Visit',
-                sale_order_id: v.sale_order_id 
+                sale_order_id: v.sale_order_id ,
+                notes: v.notes || ''
             };
         });
     }
@@ -161,6 +162,7 @@ export class OperationsTracking extends Component {
                 lines: [] 
             };
         });
+        this.state.deliveries = this.state.orders.filter(o => o.status === 'Confirmed' || o.status === 'To Invoice');
     }
 
     // --- NEW: PERFORMANCE DATA FETCHING ---
@@ -218,7 +220,248 @@ export class OperationsTracking extends Component {
             active: r.active
         }));
     }
+    async viewDelivery(dlv) {
+        this.state.selectedDelivery = dlv;
+        this.state.isEditingDelivery = false; // Always open in read-only mode first
+        
+        const lines = await this.orm.searchRead(
+            "sale.order.line",
+            [["order_id", "=", dlv.odoo_id]],
+            ["id", "name", "product_uom_qty", "qty_delivered", "qty_invoiced", "price_unit", "tax_ids", "price_subtotal"]
+        );
 
+        dlv.full_lines = lines.map(l => ({
+            id: l.id,
+            product: l.name,
+            qty: l.product_uom_qty,
+            delivered: l.qty_delivered,
+            invoiced: l.qty_invoiced,
+            price: l.price_unit,
+            taxes: l.tax_ids.length > 0 ? `${l.tax_ids.length} Taxes` : 'None',
+            subtotal: l.price_subtotal
+        }));
+
+        const orderData = await this.orm.read("sale.order", [dlv.odoo_id], ["amount_untaxed", "amount_tax", "amount_total", "invoice_status"]);
+        if (orderData.length > 0) {
+            // Keep raw numbers for local JS math
+            dlv.amount_untaxed = orderData[0].amount_untaxed;
+            dlv.amount_tax = orderData[0].amount_tax;
+            dlv.amount_total = orderData[0].amount_total;
+            dlv.invoice_status = orderData[0].invoice_status;
+        }
+    }
+
+    closeDelivery() { 
+        this.state.selectedDelivery = null; 
+    }
+
+    toggleEditDelivery() {
+        if (this.state.isEditingDelivery) {
+            // If discarding changes, re-fetch to restore original data
+            this.viewDelivery(this.state.selectedDelivery);
+        } else {
+            this.state.isEditingDelivery = true;
+        }
+    }
+
+    recalcDeliveryLine(line) {
+        // Auto-update the line subtotal locally
+        line.subtotal = (parseFloat(line.qty) || 0) * (parseFloat(line.price) || 0);
+        
+        // Auto-update the order untaxed total locally
+        let untaxed = 0;
+        this.state.selectedDelivery.full_lines.forEach(l => {
+            untaxed += l.subtotal;
+        });
+        
+        this.state.selectedDelivery.amount_untaxed = untaxed;
+        this.state.selectedDelivery.amount_total = untaxed + this.state.selectedDelivery.amount_tax;
+    }
+
+    async saveDeliveryChanges() {
+        try {
+            // Create an array of update promises for all lines
+            const updatePromises = this.state.selectedDelivery.full_lines.map(line => {
+                return this.orm.write("sale.order.line", [line.id], {
+                    product_uom_qty: parseFloat(line.qty) || 0,
+                    price_unit: parseFloat(line.price) || 0
+                });
+            });
+
+            // Dispatch all updates to Odoo simultaneously
+            await Promise.all(updatePromises);
+            
+            // Re-fetch to get Odoo's exact recalculations (including taxes & rounding)
+            await this.viewDelivery(this.state.selectedDelivery);
+            await this.fetchLiveOrders(); // Update the main table list
+            
+            
+            await this.orm.write("sale.order.line", [line.id], {
+                product_id: parseInt(line.productId),
+                product_uom_qty: parseFloat(line.qty),
+                price_unit: parseFloat(line.price),
+                tax_id: line.tax_id ? [[6, 0, [parseInt(line.tax_id)]]] : [[5, 0, 0]]
+            });
+            this.notification.add("Order updated successfully.", { type: "success" });
+        } catch (error) {
+            console.error("Save Error:", error);
+            this.notification.add(error.data?.message || "Failed to save order changes.", { type: "danger" });
+        }
+    }
+
+    async createInvoiceFromDelivery() {
+        if (!this.state.selectedDelivery || this.state.isCreatingInvoice) return;
+        
+        // Temporarily hijack the selectedOrder state so we can reuse your existing createInvoice function
+        this.state.selectedOrder = this.state.selectedDelivery;
+        await this.createInvoice();
+        
+        // Refresh the delivery view to hide the invoice button
+        await this.viewDelivery(this.state.selectedDelivery);
+        this.state.selectedOrder = null; // Clean up
+    }
+    async loadTaxAndProductData() {
+        // Fetch Taxes
+        const taxes = await this.orm.call('product.template', 'get_shahtaj_sale_tax_options', []);
+        this.state.saleTaxes = (taxes || []).map(t => ({ id: t.id, label: t.name }));
+
+        // Fetch Products (for the dropdown)
+        const prods = await this.orm.searchRead("product.template", [["sale_ok", "=", true]], ["id", "name"]);
+        this.state.allProducts = prods;
+    }
+    // --- New: Row Management ---
+    addDeliveryLine() {
+        // Adds a blank line to the local state so the user can select a product
+        this.state.selectedDelivery.full_lines.push({
+            id: null, // New lines don't have an ID yet
+            productId: null,
+            product: '',
+            qty: 0,
+            price: 0,
+            taxes: 'None',
+            subtotal: 0
+        });
+    }
+
+    removeDeliveryLine(index, line) {
+        // If it has an ID, we need to delete it from Odoo; if not, just remove from state
+        if (line.id) {
+            this.state.linesToDelete = this.state.linesToDelete || [];
+            this.state.linesToDelete.push(line.id);
+        }
+        this.state.selectedDelivery.full_lines.splice(index, 1);
+    }
+
+    async saveDeliveryChanges() {
+        try {
+            // 1. Delete lines marked for removal
+            if (this.state.linesToDelete) {
+                await this.orm.unlink("sale.order.line", this.state.linesToDelete);
+                this.state.linesToDelete = [];
+            }
+
+            // 2. Process all lines (Update existing or Create new)
+            for (const line of this.state.selectedDelivery.full_lines) {
+                const vals = {
+                    order_id: this.state.selectedDelivery.odoo_id,
+                    product_id: parseInt(line.productId),
+                    product_uom_qty: parseFloat(line.qty),
+                    price_unit: parseFloat(line.price),
+                };
+
+                if (line.id) {
+                    await this.orm.write("sale.order.line", [line.id], vals);
+                } else {
+                    await this.orm.create("sale.order.line", [vals]);
+                }
+            }
+            
+            await this.viewDelivery(this.state.selectedDelivery);
+            this.state.isEditingDelivery = false;
+            this.notification.add("Order saved successfully.", { type: "success" });
+        } catch (error) {
+            console.error("Save Error:", error);
+            // This alert shows the exact Odoo failure reason
+            alert("Failed to save: " + (error.data?.message || error.message));
+        }
+    }
+    // --- CUSTOM DELIVERY MODAL LOGIC ---
+    async openDeliveryCustom(orderId) {
+        try {
+            const wizardIds = await this.orm.create("shahtaj.mark.delivery.wizard", [{}], {
+                context: { active_id: orderId }
+            });
+            this.state.deliveryWizardId = wizardIds[0];
+            
+            const wizard = await this.orm.read("shahtaj.mark.delivery.wizard", [this.state.deliveryWizardId], ["line_ids"]);
+            
+            if (wizard[0].line_ids && wizard[0].line_ids.length > 0) {
+                const linesData = await this.orm.read("shahtaj.mark.delivery.wizard.line", wizard[0].line_ids, [
+                    "product_id", "qty_ordered", "qty_already_delivered", "qty_to_deliver"
+                ]);
+                
+                this.state.deliveryLines = linesData.map(l => ({
+                    id: l.id,
+                    product: l.product_id ? l.product_id[1] : 'Unknown',
+                    ordered: l.qty_ordered,
+                    delivered: l.qty_already_delivered,
+                    toDeliver: l.qty_to_deliver 
+                }));
+                this.state.showDeliveryModal = true;
+            } else {
+                alert("No pending deliveries found. The order may be fully delivered or lacks storable products.");
+            }
+        } catch(error) {
+            const msg = error.data?.message || error.message;
+            // Catch Odoo's cryptic empty stock error
+            if (msg.includes("Nothing to check") || msg.includes("empty")) {
+                alert("This order is already 100% delivered! There is no pending stock left to process.");
+            } else {
+                alert("Failed to initialize delivery: " + msg);
+            }
+        }
+    }
+
+    closeDeliveryModal() {
+        this.state.showDeliveryModal = false;
+        this.state.deliveryWizardId = null;
+        this.state.deliveryLines = [];
+    }
+
+    deliverAllRemaining() {
+        // Helper button: Auto-fills the inputs to deliver 100% of remaining stock
+        this.state.deliveryLines.forEach(line => {
+            line.toDeliver = Math.max(0, line.ordered - line.delivered);
+        });
+    }
+    // Custom delivery confirmation logic that writes back to Odoo and triggers the native validation
+    async confirmDeliveryCustom() {
+        try {
+            // 1. Write the user's updated quantities back to the hidden Odoo wizard
+            const lineUpdates = this.state.deliveryLines.map(line => {
+                return this.orm.write("shahtaj.mark.delivery.wizard.line", [line.id], {
+                    qty_to_deliver: parseFloat(line.toDeliver) || 0
+                });
+            });
+            await Promise.all(lineUpdates);
+            
+            // 2. Trigger Odoo's native validation & backorder creation
+            await this.orm.call("shahtaj.mark.delivery.wizard", "action_confirm_delivery", [this.state.deliveryWizardId]);
+            
+            this.notification.add("Delivery logged successfully.", { type: "success" });
+            this.closeDeliveryModal();
+            
+            // 3. Refresh the UI
+            await this.fetchLiveOrders();
+            if (this.state.selectedDelivery) {
+                const updatedOrder = this.state.orders.find(o => o.odoo_id === this.state.selectedDelivery.odoo_id);
+                if (updatedOrder) await this.viewDelivery(updatedOrder);
+            }
+            
+        } catch(error) {
+            alert("Failed to confirm delivery: " + (error.data?.message || error.message));
+        }
+    }
     // --- NAVIGATION & FILTERS ---
 
     setSubTab(tabName) {
@@ -274,9 +517,10 @@ export class OperationsTracking extends Component {
     // --- ORDERS & CHECK-INS PAGINATION GETTERS (EXISTING) ---
     get filteredDeliveries() {
         return this.state.deliveries.filter(d => {
-            const matchSearch = d.driver.toLowerCase().includes(this.state.deliveryFilters.search.toLowerCase()) || 
-                                d.id.toLowerCase().includes(this.state.deliveryFilters.search.toLowerCase()) ||
-                                d.route.toLowerCase().includes(this.state.deliveryFilters.search.toLowerCase());
+            const searchStr = this.state.deliveryFilters.search.toLowerCase();
+            const matchSearch = d.shop.toLowerCase().includes(searchStr) || 
+                                d.id.toLowerCase().includes(searchStr) ||
+                                d.booker.toLowerCase().includes(searchStr);
             const matchStatus = this.state.deliveryFilters.status ? d.status === this.state.deliveryFilters.status : true;
             return matchSearch && matchStatus;
         });
@@ -389,23 +633,27 @@ export class OperationsTracking extends Component {
         }
     }
 
-    async createInvoice() {
+   async createInvoice() {
         if (!this.state.selectedOrder || this.state.isCreatingInvoice) return;
-
         this.state.isCreatingInvoice = true;
         
         try {
-            await this.orm.call("sale.order", "action_create_invoice_portal", [[this.state.selectedOrder.odoo_id]]);
+            // Use Odoo's native invoice generation wizard
+            const context = { active_model: 'sale.order', active_ids: [this.state.selectedOrder.odoo_id] };
+            const wizardIds = await this.orm.create("sale.advance.payment.inv", [{ advance_payment_method: 'delivered' }], { context });
+            await this.orm.call("sale.advance.payment.inv", "create_invoices", [wizardIds], { context });
             
-            this.notification.add(`Draft invoice generated for ${this.state.selectedOrder.id}.`, {
+            this.notification.add(`Draft invoice generated successfully.`, {
                 title: "Success",
                 type: "success",
             });
 
+            // Update local state to reflect the new status
             this.state.selectedOrder.invoice_status = 'invoiced';
             this.state.selectedOrder.status = 'Invoiced'; 
             
-            this.fetchLiveOrders();
+            // Refresh the background data
+            await this.fetchLiveOrders();
 
         } catch (error) {
             this.notification.add(error.data?.message || "Failed to create invoice.", {
@@ -415,6 +663,15 @@ export class OperationsTracking extends Component {
         } finally {
             this.state.isCreatingInvoice = false;
         }
+    }
+    openDeliveryWizard(orderId) {
+        this.action.doAction("shahtaj_oil.action_shahtaj_mark_delivery_wizard", {
+            additionalContext: { active_id: orderId },
+            onClose: async () => {
+                // Refresh the lists when the wizard closes
+                await this.fetchLiveOrders();
+            }
+        });
     }
 }
 
