@@ -59,7 +59,8 @@ export class OperationsTracking extends Component {
             
             bookers: [],
             schedules: [],
-            targets: []
+            targets: [],
+            isRefreshing: false,
         });
          // ADD THIS NEW BLOCK RIGHT AFTER THE STATE CLOSING BRACKET:
         onWillUpdateProps((nextProps) => {
@@ -77,10 +78,23 @@ export class OperationsTracking extends Component {
             ]);
         });
     }
-
+    // --- NEW: Global Refresh Method ---
+    async refreshData() {
+        this.state.isRefreshing = true;
+        try {
+            await Promise.all([
+                this.fetchLiveVisits(),
+                this.fetchLiveOrders(),
+                this.fetchPerformanceData(),
+                this.loadTaxAndProductData()
+            ]);
+        } finally {
+            this.state.isRefreshing = false;
+        }
+    }
     // --- DATA FETCHING (EXISTING) ---
 
-    async fetchLiveVisits() {
+   async fetchLiveVisits() {
         const visits = await this.orm.searchRead(
             "shahtaj.visit",
             [],
@@ -139,7 +153,7 @@ export class OperationsTracking extends Component {
             } else if (o.state === 'sale') {
                 if (o.invoice_status === 'to invoice') status = 'To Invoice';
                 else if (o.invoice_status === 'invoiced') status = 'Invoiced';
-                else status = 'Confirmed'; 
+                else status = 'To Invoice'; 
             } else if (o.state === 'done') {
                 status = 'Delivered'; 
             }
@@ -162,16 +176,14 @@ export class OperationsTracking extends Component {
                 lines: [] 
             };
         });
-        this.state.deliveries = this.state.orders.filter(o => o.status === 'Confirmed' || o.status === 'To Invoice');
+        this.state.deliveries = this.state.orders.filter(o => o.status === 'To Invoice' || o.status === 'Delivered');
     }
 
     // --- NEW: PERFORMANCE DATA FETCHING ---
     async fetchPerformanceData() {
-        // Load Order Bookers
         const bookers = await this.orm.searchRead('res.users', [['shahtaj_is_order_booker', '=', true]], ['id', 'name']);
         this.state.bookers = bookers;
 
-        // Load All Weekly Schedules
         const scheds = await this.orm.searchRead('shahtaj.weekly.schedule', [], [
             'id', 'name', 'day_of_week', 'route_id', 'zone_id', 'active', 'shop_count',
             'week_tasks_planned', 'week_tasks_completed', 'week_tasks_progress',
@@ -195,7 +207,6 @@ export class OperationsTracking extends Component {
             occurrenceDate: r.week_occurrence_date || ''
         }));
 
-        // Load All Targets
         const tgts = await this.orm.searchRead('shahtaj.visit.target', [], [
             'id', 'name', 'date_start', 'date_end', 'target_type', 'target_value',
             'achieved_value', 'remaining_value', 'progress_percent', 'product_id',
@@ -435,7 +446,7 @@ export class OperationsTracking extends Component {
         });
     }
     // Custom delivery confirmation logic that writes back to Odoo and triggers the native validation
-    async confirmDeliveryCustom() {
+   async confirmDeliveryCustom() {
         try {
             // 1. Write the user's updated quantities back to the hidden Odoo wizard
             const lineUpdates = this.state.deliveryLines.map(line => {
@@ -455,7 +466,11 @@ export class OperationsTracking extends Component {
             await this.fetchLiveOrders();
             if (this.state.selectedDelivery) {
                 const updatedOrder = this.state.orders.find(o => o.odoo_id === this.state.selectedDelivery.odoo_id);
-                if (updatedOrder) await this.viewDelivery(updatedOrder);
+                if (updatedOrder) {
+                    // --- CHANGED: Forcefully update the status so the UI immediately reflects the delivery ---
+                    updatedOrder.status = 'Delivered';
+                    await this.viewDelivery(updatedOrder);
+                }
             }
             
         } catch(error) {

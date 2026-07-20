@@ -8,8 +8,12 @@
                     <h2 class="h4 fw-bold text-dark mb-0">Warehouse &amp; Inventory</h2>
                     <small class="text-muted">Manage your product catalog, update stock levels, and monitor warehouse operations.</small>
                 </div>
-                <div>
-                    <span class="badge bg-dark px-3 py-2 text-white d-flex align-items-center shadow-sm" title="Real-time stock calculations are currently active">
+                               <div>
+                <!-- NEW REFRESH BUTTON -->
+                    <button class="btn btn-outline-secondary fw-bold shadow-sm d-inline-flex align-items-center me-3" t-on-click="refreshData" t-att-disabled="this.state.isLoading" title="Refresh Inventory Data">
+                        <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.isLoading}"></i> Refresh
+                    </button>
+                    <span class="badge bg-dark px-3 py-2 text-white d-inline-flex align-items-center shadow-sm" title="Real-time stock calculations are currently active">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-boxes me-2">
                             <path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"/>
                             <path d="m7 16.5-4.74-2.85"/>
@@ -26,7 +30,11 @@
                         </svg>
                     Inventory Engine Active
                     </span>
+                    <button class="btn btn-outline-danger ms-3 fw-bold shadow-sm d-inline-flex align-items-center" t-on-click="() => this.setSubTab('archive')" title="View Archived Items">
+                        <i class="fa fa-archive me-2"></i> View Archive
+                    </button>
                 </div>
+
             </div>
 
 
@@ -244,6 +252,9 @@
                                         <button class="btn btn-sm btn-light border fw-bold text-primary" t-on-click="() => this.viewProductDetails(item)" title="Edit pricing, taxes, and basic info">
                                                 Edit Details
                                         </button>
+                                        <button class="btn btn-sm btn-outline-danger ms-2 fw-bold" t-on-click="() => this.toggleArchive('product.template', item.id, false)">
+                                            Archive
+                                        </button>
                                     </td>
                                 </tr>
                             </t>
@@ -450,21 +461,20 @@
                                     </td>
                                 </tr>
                             </t>
-                            <t t-foreach="this.state.taxesList" t-as="tax" t-key="tax.id">
+                           <t t-foreach="this.activeTaxes" t-as="tax" t-key="tax.id">
                                 <tr>
                                     <td class="ps-4 fw-bold text-dark">
                                         <t t-esc="tax.name"/>
                                     </td>
                                     <td class="text-center fw-bold text-primary">
-                                        <t t-esc="tax.amount"/>
-%</td>
+                                        <t t-esc="tax.amount"/>%
+                                    </td>
                                     <td class="text-center">
-                                        <span t-attf-class="badge #{tax.active ? 'bg-success' : 'bg-secondary'} text-white px-2 py-1 shadow-sm">
-                                            <t t-esc="tax.active ? 'Active' : 'Archived'"/>
-                                        </span>
+                                        <span class="badge bg-success text-white px-2 py-1 shadow-sm">Active</span>
                                     </td>
                                     <td class="text-end pe-4">
-                                        <button class="btn btn-sm btn-outline-primary fw-bold" t-on-click="() => this.openTaxForm(tax)" title="Edit this tax">Edit</button>
+                                        <button class="btn btn-sm btn-outline-primary fw-bold me-2" t-on-click="() => this.openTaxForm(tax)" title="Edit this tax">Edit</button>
+                                        <button class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.toggleArchive('account.tax', tax.id, false)">Archive</button>
                                     </td>
                                 </tr>
                             </t>
@@ -473,6 +483,61 @@
                 </div>
             </t>
         </t>
+                <t t-if="this.state.activeSubTab === 'archive'">
+            <div class="p-4 bg-white border-bottom">
+                               <button class="btn btn-sm btn-light border shadow-sm fw-bold text-dark px-3 mb-4 d-flex align-items-center" t-on-click="() => this.setSubTab(this.state.previousSubTab || 'inventory')" title="Return to Previous Tab">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left me-2">
+                        <path d="m12 19-7-7 7-7"/>
+                        <path d="M19 12H5"/>
+                    </svg>
+                    Back
+                </button>
+
+                <div>
+                    <h2 class="fw-bold text-danger mb-0">Archived Records</h2>
+                    <small class="text-muted">Restore soft-deleted products and tax configurations.</small>
+                </div>
+            </div>
+
+            <div class="p-4 bg-light">
+                <h5 class="fw-bold mb-3">Archived Products</h5>
+                <ul class="list-group mb-4 shadow-sm">
+                    <t t-if="this.archivedProducts.length === 0">
+                        <li class="list-group-item text-muted">No archived products.</li>
+                    </t>
+                    <t t-foreach="this.archivedProducts" t-as="product" t-key="product.id">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span><strong><t t-esc="product.name"/></strong> (Unit: <t t-esc="product.shahtaj_sale_uom || product.uom_name"/>)</span>
+                            <button class="btn btn-sm btn-success fw-bold shadow-sm" t-on-click="() => this.toggleArchive('product.template', product.id, true)">Restore</button>
+                        </li>
+                    </t>
+                </ul>
+
+                <h5 class="fw-bold mb-3">Archived Taxes</h5>
+                <ul class="list-group shadow-sm">
+                    <t t-if="this.archivedTaxes.length === 0">
+                        <li class="list-group-item text-muted">No archived taxes.</li>
+                    </t>
+                    <t t-foreach="this.archivedTaxes" t-as="tax" t-key="tax.id">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span><strong><t t-esc="tax.name"/></strong> (<t t-esc="tax.amount"/>%)</span>
+                            <button class="btn btn-sm btn-success fw-bold shadow-sm" t-on-click="() => this.toggleArchive('account.tax', tax.id, true)">Restore</button>
+                        </li>
+                    </t>
+                </ul>
+            </div>
+        </t>
+
+        <!-- Mount the Custom Confirm Modal -->
+        <t t-if="this.state.confirmModal.isOpen">
+            <ConfirmModal 
+                title="this.state.confirmModal.title" 
+                message="this.state.confirmModal.message" 
+                onConfirm="this.state.confirmModal.onConfirm" 
+                onCancel="() => this.closeConfirm()" 
+            />
+        </t>
+
 
     </div>
 </t>

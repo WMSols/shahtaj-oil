@@ -2,16 +2,19 @@
 
 import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
+import { ConfirmModal } from "./confirm_modal";
 
 export class WarehouseInventory extends Component {
     static props = {
         requestedSubTab: { type: String, optional: true },
     };
+    static components = { ConfirmModal };
     setup() {
         this.orm = useService("orm");
         
         this.state = useState({
             activeSubTab: this.props.requestedSubTab || 'inventory',
+            previousSubTab: 'inventory',
             
             showWarehouseForm: false,
             showAdjustmentForm: false,
@@ -38,6 +41,8 @@ export class WarehouseInventory extends Component {
             currentProduct: null,
             saleTaxes: [],
             defaultTaxId: "", 
+            confirmModal: { isOpen: false, title: '', message: '', onConfirm: null },
+            isLoading: false,
 
             warehouses: [
                 { id: "WH-MAIN", name: "Central Hub - Lahore", type: "Main Warehouse", location: "Sundar Industrial Estate", manager: "Zafar Iqbal", status: "Active" },
@@ -59,11 +64,22 @@ export class WarehouseInventory extends Component {
             await this.loadTaxesList(); // Fetch the main tax configurations
         });
     }
-
-    // --- Dynamic Search, Filter, and Sort Getters ---
+    // NEW Refresh Method
+    async refreshData() {
+        this.state.isLoading = true;
+        try {
+            await Promise.all([
+                this.loadInventory(),
+                this.loadTaxesList()
+            ]);
+        } finally {
+            this.state.isLoading = false;
+        }
+    }
+   // --- Dynamic Search, Filter, and Sort Getters ---
     get displayProducts() {
         let filtered = this.state.inventory.filter(product =>
-            product.name.toLowerCase().includes(this.state.productSearchQuery.toLowerCase())
+            product.active && product.name.toLowerCase().includes(this.state.productSearchQuery.toLowerCase())
         );
 
         if (this.state.productSortFilter === 'price_asc') {
@@ -81,7 +97,7 @@ export class WarehouseInventory extends Component {
 
     get displayStock() {
         let filtered = this.state.inventory.filter(product =>
-            product.name.toLowerCase().includes(this.state.stockSearchQuery.toLowerCase())
+            product.active && product.name.toLowerCase().includes(this.state.stockSearchQuery.toLowerCase())
         );
 
         if (this.state.stockFilterStatus === 'in_stock') {
@@ -93,6 +109,53 @@ export class WarehouseInventory extends Component {
         return filtered;
     }
 
+    get activeTaxes() { return this.state.taxesList.filter(t => t.active); }
+    get archivedTaxes() { return this.state.taxesList.filter(t => !t.active); }
+    get archivedProducts() { return this.state.inventory.filter(p => !p.active); }
+
+    // --- Modal & Archive Handlers ---
+    showConfirm(title, message, onConfirmCallback) {
+        this.state.confirmModal = {
+            isOpen: true,
+            title: title,
+            message: message,
+            onConfirm: async () => {
+                this.state.confirmModal.isOpen = false;
+                await onConfirmCallback();
+            }
+        };
+    }
+
+    closeConfirm() {
+        this.state.confirmModal.isOpen = false;
+    }
+
+    toggleArchive(model, id, makeActive) {
+        if (makeActive) {
+            this.executeToggleArchive(model, id, makeActive);
+        } else {
+            const itemType = model === 'product.template' ? 'product' : 'tax configuration';
+            this.showConfirm(
+                `Archive ${itemType}`,
+                `Are you sure you want to move this ${itemType} to the archive?`,
+                () => this.executeToggleArchive(model, id, makeActive)
+            );
+        }
+    }
+
+    async executeToggleArchive(model, id, makeActive) {
+        try {
+            await this.orm.write(model, [id], { active: makeActive });
+            if (model === 'product.template') {
+                await this.loadInventory();
+            } else if (model === 'account.tax') {
+                await this.loadTaxesList();
+                await this.loadSaleTaxes();
+            }
+        } catch (error) {
+            alert("Failed to update archive status: " + (error.data?.message || error.message));
+        }
+    }
     // --- Data Fetching Logic ---
     get totalStockItems() {
         return this.state.inventory.reduce((sum, p) => sum + (p.qty_available || 0), 0);
@@ -168,12 +231,16 @@ export class WarehouseInventory extends Component {
     async loadInventory() {
         const products = await this.orm.searchRead(
             "product.template",
-            [['sale_ok', '=', true], ['default_code', '!=', 'SHAHTAJ-LEGACY']], 
+            [
+                ['sale_ok', '=', true], 
+                ['default_code', '!=', 'SHAHTAJ-LEGACY'],
+                ['active', 'in', [true, false]] // Fetch both active and archived
+            ], 
             [
                 "id", "name", "categ_id", "qty_available", "uom_name", "type",
                 "list_price", "standard_price", "barcode", "weight", "volume",
                 "invoice_policy", "image_1920", "shahtaj_qty_bookable", "virtual_available",
-                "shahtaj_sale_uom", "shahtaj_kg_per_unit", "taxes_id",
+                "shahtaj_sale_uom", "shahtaj_kg_per_unit", "taxes_id", "active" // Add 'active'
             ]
         );
         this.state.inventory = products.map((product) => ({
@@ -182,7 +249,12 @@ export class WarehouseInventory extends Component {
         }));
     }
 
-    setSubTab(tabName) {
+   setSubTab(tabName) {
+        // Save the current tab if we are navigating to the archive
+        if (tabName === 'archive' && this.state.activeSubTab !== 'archive') {
+            this.state.previousSubTab = this.state.activeSubTab;
+        }
+        
         this.state.activeSubTab = tabName;
         this.resetForms();
     }

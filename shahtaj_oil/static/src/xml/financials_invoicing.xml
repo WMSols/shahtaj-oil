@@ -8,6 +8,10 @@
                     <h2 class="h4 fw-bold text-dark mb-0">Financials &amp; Invoicing</h2>
                     <p class="text-muted">Process field orders into invoices, register received payments, and manage shop credit limits.</p>
                 </div>
+                <!-- NEW REFRESH BUTTON -->
+                <button class="btn btn-outline-secondary fw-bold shadow-sm d-inline-flex align-items-center bg-white" t-on-click="refreshData" t-att-disabled="this.state.isRefreshing" title="Refresh Live Data">
+                    <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.isRefreshing}"></i> Refresh
+                </button>
             </div>
             <t t-if="this.state.activeSubTab !== 'pnl'">
                 <div class="row g-3 px-4 pb-4 bg-light border-bottom">
@@ -648,94 +652,62 @@
 
                                 <div class="table-responsive bg-white">
                                     <table class="table table-borderless table-striped align-middle mb-0">
-                                        <thead class="bg-light text-muted small text-uppercase fw-bold border-bottom">
+                                        <thead class="bg-light text-muted small fw-bold text-uppercase">
                                             <tr>
-                                                <th class="ps-4">Product Description</th>
-                                                <th class="text-center" style="width: 120px;">Quantity</th>
-                                                <th class="text-end" style="width: 150px;">Unit Price (Rs)</th>
+                                                <th class="ps-4 py-3">Product Description</th>
+                                                <th class="text-center">Quantity</th>
+                                                <th class="text-end">Unit Price</th>
+                                                <!-- ADD THIS TAX HEADER -->
                                                 <th class="text-center">Taxes</th>
-                                                <th class="text-end pe-4" style="width: 150px;">
-                                                    <t t-if="this.state.isEditingInvoice">Action</t>
-                                                    <t t-else="">Subtotal (Rs)</t>
-                                                </th>
+                                                <th class="text-end pe-4">Amount</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <t t-if="this.state.selectedInvoiceLines.length === 0">
-                                                <tr>
-                                                    <td colspan="4" class="text-center text-muted py-4">
-                                                        <i class="fa fa-circle-o-notch fa-spin me-2"></i> Loading lines...</td>
-                                                </tr>
-                                            </t>
-                                            <t t-foreach="this.state.selectedInvoiceLines" t-as="line" t-key="line.id">
-                                                <tr>
-                                                    <td class="ps-4 fw-bold text-dark">
-                                                        <t t-if="this.state.isEditingInvoice">
-                                                            <select class="form-select form-select-sm shadow-sm" t-model="line.product_id">
-                                                                <option value="">Select Product...</option>
-                                                                <t t-foreach="this.state.products" t-as="p" t-key="p.id">
-                                                                    <option t-att-value="p.id">
-                                                                        <t t-esc="p.name"/>
-                                                                    </option>
-                                                                </t>
-                                                            </select>
-                                                        </t>
-                                                        <t t-else="">
-                                                            <t t-esc="line.product"/>
-                                                        </t>
-                                                    </td>
-                                                    <td class="text-center">
-                                                        <t t-if="this.state.isEditingInvoice">
-                                                            <input type="number" class="form-control form-control-sm text-center mx-auto shadow-sm" style="width: 100px;" t-model="line.qty"/>
-                                                        </t>
-                                                        <t t-else="">
-                                                            <t t-esc="line.qty"/>
-                                                        </t>
-                                                    </td>
-                                                    <td class="text-end">
-                                                        <t t-if="this.state.isEditingInvoice">
-                                                            <input type="number" step="any" class="form-control form-control-sm text-end ms-auto shadow-sm" style="width: 120px;" t-model="line.price"/>
-                                                        </t>
-                                                        <t t-else="">
-                                                            <t t-esc="line.price"/>
-                                                        </t>
-                                                    </td>
-                                                    <td class="text-center">
-                                                        <span class="badge bg-light border text-dark">
-                                                            <t t-esc="line.taxes"/>
-                                                        </span>
-                                                    </td>
-                                                    <td class="text-end pe-4 fw-bold text-dark">
-                                                        <t t-if="this.state.isEditingInvoice">
-                                                            <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.removeLine(line.id)" title="Remove Product">
-                                                                <i class="fa fa-trash"></i>
-                                                            </button>
-                                                        </t>
-                                                        <t t-else="">
-                                                            <t t-esc="line.subtotal"/>
-                                                        </t>
-                                                    </td>
-                                                </tr>
-                                            </t>
-                                            <tr t-if="this.state.isEditingInvoice">
-                                                <td colspan="4" class="ps-4 py-3">
-                                                    <button class="btn btn-sm btn-outline-primary fw-bold" t-on-click="addLine">
-                                                        <i class="fa fa-plus me-1"></i> Add Product
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        </tbody>
+    <t t-foreach="this.state.selectedInvoice.full_lines || []" t-as="line" t-key="line.id">
+        <tr>
+            <td class="ps-4 fw-bold text-dark"><t t-esc="line.product"/></td>
+            <td class="text-center"><t t-esc="line.qty"/></td>
+            <td class="text-end">Rs. <t t-esc="line.price"/></td>
+            
+            <!-- ADD THIS TAX DATA CELL -->
+            <td class="text-center">
+                <span class="badge bg-light border text-dark">
+                    <t t-esc="line.taxes"/>
+                </span>
+            </td>
+            
+            <td class="text-end pe-4 fw-bold">Rs. <t t-esc="line.subtotal"/></td>
+        </tr>
+    </t>
+</tbody>
                                     </table>
                                 </div>
 
-                                <div class="p-4 bg-light text-end border-top">
+                               <div class="p-4 bg-light text-end border-top">
                                     <div class="d-flex flex-column align-items-end justify-content-end">
+                                        
+                                        <!-- NEW: Tax Breakdown Container -->
+                                        <div style="min-width: 350px;">
+                                            <div class="d-flex justify-content-between mb-2">
+                                                <span class="text-muted fw-bold fs-6">Untaxed Amount:</span>
+                                                <span class="fw-bold text-dark fs-6">Rs. <t t-esc="this.state.selectedInvoice.amount_untaxed ? this.state.selectedInvoice.amount_untaxed.toLocaleString(undefined, {minimumFractionDigits: 2}) : '0.00'"/></span>
+                                            </div>
+                                            <div class="d-flex justify-content-between mb-3 border-bottom pb-3">
+                                                <span class="text-muted fw-bold fs-6">Taxes:</span>
+                                                <span class="fw-bold text-dark fs-6">Rs. <t t-esc="this.state.selectedInvoice.amount_tax ? this.state.selectedInvoice.amount_tax.toLocaleString(undefined, {minimumFractionDigits: 2}) : '0.00'"/></span>
+                                            </div>
+                                        </div>
+
+                                        <!-- EXISTING: Total Amount -->
                                         <h4 class="text-dark fw-bold mb-1">Total Amount: Rs. <t t-esc="this.state.selectedInvoice.amount"/>
                                         </h4>
+                                        
+                                        <!-- EXISTING: Amount Due -->
                                         <t t-if="this.state.selectedInvoice.status === 'Partial' or this.state.selectedInvoice.status === 'Posted'">
                                             <h4 class="text-danger fw-bold mt-2">Amount Due: Rs. <t t-esc="this.state.selectedInvoice.residual"/>
                                             </h4>
                                         </t>
+                                        
                                         <small class="text-muted mt-2" t-if="this.state.isEditingInvoice">Totals will update automatically after you Save Changes.</small>
                                     </div>
                                 </div>
@@ -783,7 +755,7 @@
 
                         <t t-if="this.state.showPaymentModal">
                             <div class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background-color: rgba(0, 0, 0, 0.6); z-index: 1050;">
-                                <div class="bg-white p-4 rounded-3 shadow-lg" style="width: 500px;">
+                                <div class="bg-white p-4 rounded-3 shadow-lg" style="width: 550px;">
                                     <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
                                         <div>
                                             <h5 class="fw-bold text-dark mb-0">
@@ -792,16 +764,10 @@
                                         </div>
                                     </div>
 
-                                    <div class="mb-3">
-                                        <label class="small fw-bold text-muted">Linking to Invoice</label>
-                                        <input type="text" class="form-control bg-light fw-bold text-primary" t-att-value="this.state.paymentForm.invoice_name" disabled="1"/>
-                                    </div>
-
                                     <div class="row">
                                         <div class="col-6 mb-3">
                                             <label class="small fw-bold">Payment Amount (Rs.)</label>
                                             <input type="number" class="form-control fw-bold text-success" t-model="this.state.paymentForm.amount"/>
-                                            <small class="text-muted">Enter a lesser amount for a partial payment.</small>
                                         </div>
                                         <div class="col-6 mb-3">
                                             <label class="small fw-bold">Payment Date</label>
@@ -809,15 +775,53 @@
                                         </div>
                                     </div>
 
-                                    <div class="mb-4 mt-2">
-                                        <label class="small fw-bold">Deposit Journal (Bank/Cash)</label>
-                                        <select class="form-select form-control" t-model="this.state.paymentForm.journal_id" title="Select where the money is being deposited">
-                                            <t t-foreach="this.state.journals" t-as="j" t-key="j.id">
-                                                <option t-att-value="j.id">
-                                                    <t t-esc="j.name"/>
-                                                </option>
-                                            </t>
-                                        </select>
+                                    <div class="row">
+                                        <div class="col-6 mb-3">
+                                            <label class="small fw-bold">Payment Channel</label>
+                                            <select class="form-select form-control" t-model="this.state.paymentForm.method">
+                                                <option value="cash">Cash</option>
+                                                <option value="cheque">Cheque</option>
+                                                <option value="online_transfer">Online Transfer</option>
+                                                <option value="miscellaneous">Miscellaneous</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 mb-4">
+                                            <label class="small fw-bold">Deposit Journal (Bank/Cash)</label>
+                                            <select class="form-select form-control" t-model="this.state.paymentForm.journal_id">
+                                                <t t-foreach="this.state.journals" t-as="j" t-key="j.id">
+                                                    <option t-att-value="j.id">
+                                                        <t t-esc="j.name"/>
+                                                    </option>
+                                                </t>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- Cheque Fields -->
+                                    <t t-if="this.state.paymentForm.method === 'cheque'">
+                                        <div class="row bg-light p-3 rounded-3 border mb-3 mx-0">
+                                            <div class="col-12 mb-2">
+                                                <h6 class="fw-bold text-dark mb-0">Cheque Details</h6>
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label class="small fw-bold">Customer Bank</label>
+                                                <input type="text" class="form-control" t-model="this.state.paymentForm.bank_name" placeholder="e.g. HBL"/>
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label class="small fw-bold">Account Number</label>
+                                                <input type="text" class="form-control" t-model="this.state.paymentForm.account_number"/>
+                                            </div>
+                                            <div class="col-md-12 mb-2">
+                                                <label class="small fw-bold">Cheque / Transaction Ref</label>
+                                                <input type="text" class="form-control" t-model="this.state.paymentForm.reference"/>
+                                            </div>
+                                        </div>
+                                    </t>
+
+                                    <div class="mb-4">
+                                        <label class="small fw-bold">Payment Notes <span class="text-muted fw-normal">(Optional)</span>
+                                        </label>
+                                        <textarea class="form-control" t-model="this.state.paymentForm.notes" rows="2" placeholder="Any additional information..."></textarea>
                                     </div>
 
                                     <div class="d-flex justify-content-end gap-2 border-top pt-3">
@@ -1210,11 +1214,50 @@
                                         </span>
                                     </div>
                                     <div class="col-md-6 mb-3">
-                                        <span class="text-muted fw-bold">Invoice Ref:</span>
-                                        <span class="fw-bold ms-2">
-                                            <t t-esc="this.state.selectedPayment.ref"/>
+                                        <span class="text-muted fw-bold">Payment Channel:</span>
+                                        <span class="fw-bold ms-2 text-capitalize">
+                                            <t t-esc="this.state.selectedPayment.channel"/>
                                         </span>
                                     </div>
+
+                                    <!-- Cheque Detailed Data -->
+                                    <t t-if="this.state.selectedPayment.channel === 'cheque'">
+                                        <div class="col-md-6 mb-3">
+                                            <span class="text-muted fw-bold">Bank Name:</span>
+                                            <span class="fw-bold ms-2">
+                                                <t t-esc="this.state.selectedPayment.bank"/>
+                                            </span>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <span class="text-muted fw-bold">Account Number:</span>
+                                            <span class="fw-bold ms-2">
+                                                <t t-esc="this.state.selectedPayment.account"/>
+                                            </span>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <span class="text-muted fw-bold">Cheque Ref:</span>
+                                            <span class="fw-bold ms-2">
+                                                <t t-esc="this.state.selectedPayment.reference"/>
+                                            </span>
+                                        </div>
+                                    </t>
+                                    <t t-else="">
+                                        <div class="col-md-6 mb-3">
+                                            <span class="text-muted fw-bold">Invoice Ref:</span>
+                                            <span class="fw-bold ms-2">
+                                                <t t-esc="this.state.selectedPayment.ref"/>
+                                            </span>
+                                        </div>
+                                    </t>
+
+                                    <!-- Payment Notes -->
+                                    <div class="col-md-12 mb-3" t-if="this.state.selectedPayment.notes and this.state.selectedPayment.notes !== 'N/A' and this.state.selectedPayment.notes !== 'false'">
+                                        <span class="text-muted fw-bold">Payment Notes:</span>
+                                        <p class="mb-0 bg-light p-3 border rounded-3 mt-2 text-dark">
+                                            <t t-esc="this.state.selectedPayment.notes"/>
+                                        </p>
+                                    </div>
+
                                     <div class="col-md-12 mt-4 pt-3 border-top">
                                         <h2 class="text-success fw-bold mb-0">Total Received: Rs. <t t-esc="this.state.selectedPayment.amount"/>
                                         </h2>
@@ -1665,6 +1708,10 @@
                         </tbody>
                     </table>
                 </div>
+            </t>
+            <!-- Global Confirm Modal -->
+            <t t-if="this.state.confirmModal.isOpen">
+                <ConfirmModal title="this.state.confirmModal.title" message="this.state.confirmModal.message" onConfirm="this.state.confirmModal.onConfirm" onCancel="() => this.closeConfirm()" />
             </t>
         </div>
     </t>

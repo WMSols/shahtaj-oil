@@ -50,6 +50,7 @@ export class FinancialsInvoicing extends Component {
             products: [], // Loaded for the edit dropdown
             removedLineIds: [], // Tracks deleted invoice lines during edit
             
+            
             allOrders: [],
             orders: [],
             invoices: [],
@@ -77,7 +78,22 @@ export class FinancialsInvoicing extends Component {
                 payments: { search: '' },
                 balances: { search: '' },
                 credits: { search: '', status: 'all' }
-            }
+            },
+            // --- NEW: Payment Form Fields ---
+            paymentForm: { 
+                journal_id: '', 
+                amount: 0, 
+                date: '', 
+                invoice_id: null, 
+                invoice_name: '',
+                method: 'cash',
+                bank_name: '',
+                account_number: '',
+                reference: '',
+                notes: '' 
+            },
+            isRefreshing: false,
+            confirmModal: { isOpen: false, title: '', message: '', onConfirm: null },
         });
      // 3. SMART PROP LISTENER FOR 2-LEVEL TABS
         onWillUpdateProps((nextProps) => {
@@ -100,6 +116,31 @@ export class FinancialsInvoicing extends Component {
         onWillStart(async () => {
             await this.fetchRealData();
         });
+    }
+    // --- NEW: Core Methods ---
+    async refreshData() {
+        this.state.isRefreshing = true;
+        try {
+            await this.fetchRealData();
+        } finally {
+            this.state.isRefreshing = false;
+        }
+    }
+
+    showConfirm(title, message, onConfirmCallback) {
+        this.state.confirmModal = {
+            isOpen: true,
+            title: title,
+            message: message,
+            onConfirm: async () => {
+                this.state.confirmModal.isOpen = false;
+                if (onConfirmCallback) await onConfirmCallback();
+            }
+        };
+    }
+
+    closeConfirm() {
+        this.state.confirmModal.isOpen = false;
     }
 
     // --- DYNAMIC FILTER GETTERS ---
@@ -246,16 +287,25 @@ export class FinancialsInvoicing extends Component {
         } catch (error) {}
 
         try {
-            const paymentsData = await this.orm.searchRead(
+           const paymentsData = await this.orm.searchRead(
                 "account.payment",
                 [["partner_id.is_shahtaj_shop", "=", true]], 
-                ["name", "partner_id", "date", "amount", "journal_id", "memo", "state"]
-            );
+                [
+                    "name", "partner_id", "date", "amount", "journal_id", "memo", "state", 
+                    "shahtaj_payment_channel", "shahtaj_payer_bank_name", "shahtaj_payer_account_number", 
+                    "shahtaj_instrument_reference", "shahtaj_payment_notes"
+                ]
+            ); 
             this.state.payments = paymentsData.map(pay => ({
                 id: pay.id, display_name: pay.name ? pay.name : `Processing... (#${pay.id})`, shop: pay.partner_id ? pay.partner_id[1] : 'Unknown',
                 date: pay.date || 'N/A', amount: (pay.amount || 0).toLocaleString(), method: pay.journal_id ? pay.journal_id[1] : 'Manual',
                 ref: pay.memo || 'N/A', status: (pay.state === 'posted' || pay.state === 'reconciled') ? 'Posted' : (pay.state === 'cancel' ? 'Cancelled' : 'Draft'),
-                status: ['paid', 'in_process', 'posted', 'reconciled'].includes(pay.state) ? 'Paid' : (pay.state === 'cancel' ? 'Cancelled' : 'Draft')
+                status: ['paid', 'in_process', 'posted', 'reconciled'].includes(pay.state) ? 'Paid' : (pay.state === 'cancel' ? 'Cancelled' : 'Draft'),
+                channel: pay.shahtaj_payment_channel || 'cash',
+                bank: pay.shahtaj_payer_bank_name || 'N/A',
+                account: pay.shahtaj_payer_account_number || 'N/A',
+                reference: pay.shahtaj_instrument_reference || 'N/A',
+                notes: pay.shahtaj_payment_notes || 'N/A'
             }));
         } catch (error) { console.error("Payments Fetch Error:", error); }
 
@@ -419,27 +469,46 @@ export class FinancialsInvoicing extends Component {
         } catch (error) {}
     }
     
-    async viewInvoice(invoice) { 
-        this.state.selectedInvoice = invoice; 
-        this.state.selectedInvoiceLines = [];
+   async viewInvoice(invoice) {
+        this.state.selectedInvoice = invoice;
         this.state.isEditingInvoice = false;
-        try {
-            const linesData = await this.orm.searchRead(
-                "account.move.line", [["move_id", "=", invoice.id], ["display_type", "in", ["product", false]]], 
-                ["product_id", "quantity","tax_ids", "price_unit", "price_subtotal", "name"]
-            );
-            this.state.selectedInvoiceLines = linesData.map(l => ({
-                id: l.id,
-                product_id: l.product_id ? l.product_id[0] : '', // Store ID for the dropdown
-                product: l.product_id ? l.product_id[1] : l.name,
-                qty: l.quantity,
-                price: l.price_unit,
-                taxes: l.tax_ids && l.tax_ids.length > 0 ? `${l.tax_ids.length} Taxes` : 'None',
-                subtotal: (l.price_subtotal || 0).toLocaleString()
-            }));
-        } catch (error) {}
-    }
 
+        // Grab the correct integer database ID
+        const invoiceDbId = invoice.odoo_id || invoice.id;
+
+        // 1. Fetch the invoice lines
+        const lines = await this.orm.searchRead(
+            "account.move.line",
+            [
+                ["move_id", "=", invoiceDbId],
+                ["display_type", "=", "product"] // Only get actual product lines
+            ],
+            ["id", "name", "quantity", "price_unit", "tax_ids", "price_subtotal"]
+        );
+
+        // 2. Map the lines to include the taxes text
+        this.state.selectedInvoice.full_lines = lines.map(l => ({
+            id: l.id,
+            product: l.name,
+            qty: l.quantity,
+            price: l.price_unit,
+            taxes: l.tax_ids && l.tax_ids.length > 0 ? `${l.tax_ids.length} Taxes` : 'None',
+            subtotal: l.price_subtotal
+        }));
+
+        // 3. Fetch the invoice totals (Untaxed, Tax, Total)
+        const moveData = await this.orm.read(
+            "account.move", 
+            [invoiceDbId], 
+            ["amount_untaxed", "amount_tax", "amount_total"]
+        );
+        
+        if (moveData.length > 0) {
+            this.state.selectedInvoice.amount_untaxed = moveData[0].amount_untaxed;
+            this.state.selectedInvoice.amount_tax = moveData[0].amount_tax;
+            this.state.selectedInvoice.amount_total = moveData[0].amount_total;
+        }
+    }
     viewPayment(payment) { this.state.selectedPayment = payment; }
     viewShop(shop) { this.state.selectedShop = { ...shop }; }
 
@@ -477,17 +546,18 @@ export class FinancialsInvoicing extends Component {
         this.state.isResetting = false;
     }
 
-    async actionCancelInvoice(invoice) {
-        if (!confirm("Are you sure you want to completely cancel this invoice?")) return;
-        this.state.isCancelling = true;
-        try {
-            await this.orm.call("account.move", "button_cancel", [[invoice.id]]);
-            await this.fetchRealData();
-            this._refreshSelectedInvoiceState(invoice.id);
-        } catch (error) { 
-            alert("Failed to cancel invoice: " + (error.data?.message || error.message));
-        }
-        this.state.isCancelling = false;
+    actionCancelInvoice(invoice) {
+        this.showConfirm("Cancel Document", "Are you sure you want to completely cancel this document? This action cannot be undone.", async () => {
+            this.state.isCancelling = true;
+            try {
+                await this.orm.call("account.move", "button_cancel", [[invoice.id]]);
+                await this.refreshData();
+                this._refreshSelectedInvoiceState(invoice.id);
+            } catch (error) { 
+                alert("Failed to cancel invoice: " + (error.data?.message || error.message));
+            }
+            this.state.isCancelling = false;
+        });
     }
 
     // --- FULL INVOICE LINE EDITING ---
@@ -606,7 +676,12 @@ export class FinancialsInvoicing extends Component {
             amount: this.state.selectedInvoice.rawResidual,
             date: today,
             invoice_id: this.state.selectedInvoice.id,
-            invoice_name: this.state.selectedInvoice.display_name
+            invoice_name: this.state.selectedInvoice.display_name,
+            method: 'cash',
+            bank_name: '',
+            account_number: '',
+            reference: '',
+            notes: ''
         };
         this.state.showPaymentModal = true;
     }
@@ -623,6 +698,12 @@ export class FinancialsInvoicing extends Component {
                 journal_id: parseInt(form.journal_id),
                 amount: parseFloat(form.amount),
                 payment_date: form.date,
+                // --- NEW PAYLOAD DATA ---
+                shahtaj_payment_channel: form.method,
+                shahtaj_payer_bank_name: form.method === 'cheque' ? form.bank_name : false,
+                shahtaj_payer_account_number: form.method === 'cheque' ? form.account_number : false,
+                shahtaj_instrument_reference: form.method === 'cheque' ? form.reference : false,
+                shahtaj_payment_notes: form.notes
             }], { context });
             
             await this.orm.call("account.payment.register", "action_create_payments", [wizardIds], { context });

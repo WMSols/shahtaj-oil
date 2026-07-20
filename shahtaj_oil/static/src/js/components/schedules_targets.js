@@ -17,7 +17,8 @@ export class SchedulesTargets extends Component {
             showForm: false,
             errorMessage: '',
             isLoading: false,
-
+            // --- NEW: Global Refresh Loading State ---
+            isRefreshing: false,
             // Edit Tracking
             editingScheduleId: null,
             editingTargetId: null,
@@ -50,6 +51,25 @@ export class SchedulesTargets extends Component {
             await this._loadDropdownOptions();
             await this._loadBookers();
         });
+    }
+    // --- NEW: Global Refresh Method ---
+    async refreshData() {
+        this.state.isRefreshing = true;
+        try {
+            // 1. Always refresh the base master data
+            await this._loadDropdownOptions();
+            await this._loadBookers();
+            
+            // 2. If viewing a specific booker's details, refresh their inner records too
+            if (this.state.viewMode === 'detail' && this.state.selectedBooker) {
+                await Promise.all([
+                    this._loadBookerSchedules(this.state.selectedBooker.id),
+                    this._loadBookerTargets(this.state.selectedBooker.id)
+                ]);
+            }
+        } finally {
+            this.state.isRefreshing = false;
+        }
     }
     // --- UI Toggles & Handlers ---
     setSubTab(tabName) {

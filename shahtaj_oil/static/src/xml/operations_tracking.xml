@@ -3,12 +3,17 @@
     <t t-name="shahtaj_oil.OperationsTracking" owl="1">
         <div class="card border-0 shadow-sm bg-white rounded-3">
 
-            <div class="p-4 border-bottom bg-light d-flex justify-content-between align-items-center rounded-top">
+                        <div class="p-4 border-bottom bg-light d-flex justify-content-between align-items-center rounded-top">
                 <div>
                     <h2 class="h4 fw-bold text-dark mb-0">Live Operations Tracker</h2>
                     <small class="text-muted">Monitor field personnel check-ins, track incoming orders, and review booker performance in real-time.</small>
                 </div>
-                <div>
+                <div class="d-flex align-items-center gap-3">
+                    <!-- NEW REFRESH BUTTON -->
+                    <button class="btn btn-outline-secondary fw-bold shadow-sm d-inline-flex align-items-center bg-white" t-on-click="refreshData" t-att-disabled="this.state.isRefreshing" title="Refresh Live Data">
+                        <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.isRefreshing}"></i> Refresh
+                    </button>
+                    
                     <span class="badge bg-success text-white px-3 py-2 fs-6 shadow-sm d-flex align-items-center" title="The system is actively receiving live updates from the field apps">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-activity text-white me-2">
                             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
@@ -17,6 +22,7 @@
                     </span>
                 </div>
             </div>
+
 
             <!-- ========================================== -->
             <!-- PENDING DELIVERIES SUBTAB                  -->
@@ -78,7 +84,10 @@
                                             <t t-esc="dlv.total"/>
                                         </td>
                                         <td class="text-center">
-                                            <span class="badge bg-warning text-dark px-2 py-1 shadow-sm">Pending Delivery</span>
+                                            <!-- CHANGED: Replaced hardcoded "Pending Delivery" with dynamic status -->
+                                            <span t-attf-class="badge #{dlv.status === 'Delivered' ? 'bg-success text-white' : 'bg-warning text-dark'} px-2 py-1 shadow-sm">
+                                                <t t-esc="dlv.status === 'Delivered' ? 'Delivered' : 'Pending Delivery'"/>
+                                            </span>
                                         </td>
                                         <td class="text-end pe-4">
                                             <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewDelivery(dlv)">
@@ -185,7 +194,10 @@
                                     </div>
                                     <div class="d-flex mb-3 align-items-center">
                                         <span class="text-muted small fw-bold text-uppercase w-25">Delivery Status</span>
-                                        <span class="badge bg-warning text-dark px-2 py-1">To Deliver</span>
+                                        <!-- CHANGED: Replaced hardcoded "To Deliver" with dynamic status -->
+                                        <span t-attf-class="badge #{this.state.selectedDelivery.status === 'Delivered' ? 'bg-success text-white' : 'bg-warning text-dark'} px-2 py-1">
+                                            <t t-esc="this.state.selectedDelivery.status === 'Delivered' ? 'Delivered' : 'To Deliver'"/>
+                                        </span>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -497,7 +509,7 @@
                 <select class="form-select form-select-sm" t-model="this.state.orderFilters.status" t-on-change="() => this.state.orderPage = 1" title="Filter orders by their current processing stage">
                     <option value="">All Order Statuses</option>
                     <option value="Draft">Draft</option>
-                    <option value="Confirmed">Confirmed</option>
+                    <option value="To Invoice">To Invoice</option>
                     <option value="Delivered">Delivered</option>
                 </select>
             </div>
@@ -686,7 +698,7 @@
 
 <div class="card border-0 shadow-sm overflow-hidden rounded-3">
 <div class="bg-dark text-white p-3">
-    <h6 class="mb-0 fw-bold">Order Line Items</h6>
+    <h6 class="mb-0 fw-bold text-white">Order Line Items</h6>
 </div>
 <div class="table-responsive">
     <table class="table table-borderless table-striped mb-0">

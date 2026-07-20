@@ -2,11 +2,13 @@
 
 import { Component, useState, onWillStart, useEffect, useRef,onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
+import { ConfirmModal } from "./confirm_modal"; 
 
 export class TerritoryRoutes extends Component {
     static props = {
         requestedSubTab: { type: String, optional: true },
     };
+    static components = { ConfirmModal };
     setup() {
         this.orm = useService("orm");
 
@@ -15,6 +17,7 @@ export class TerritoryRoutes extends Component {
 
         this.state = useState({
            activeSubTab: this.props.requestedSubTab || 'areas', 
+           previousSubTab: 'areas',
             
             showAreaForm: false,
             showRouteForm: false,
@@ -36,6 +39,10 @@ export class TerritoryRoutes extends Component {
             shopSearchQuery: '',
             shopFilterCategory: 'all',
             shopFilterStatus: 'all',
+
+            // Custom Modal State
+            confirmModal: { isOpen: false, title: '', message: '', onConfirm: null },
+            isLoading: false,
 
             areaForm: { name: '', is_active: true },
             routeForm: { name: '', zone_id: '', is_active: true }, 
@@ -100,44 +107,49 @@ export class TerritoryRoutes extends Component {
             await this.fetchDashboardData();
         });
     }
+    // NEW Refresh Method
+    async refreshData() {
+        this.state.isLoading = true;
+        try {
+            await this.fetchDashboardData();
+        } finally {
+            this.state.isLoading = false;
+        }
+    }
+    // Custom Modal Controller
+    showConfirm(title, message, onConfirmCallback) {
+     this.state.confirmModal = {
+         isOpen: true,
+         title: title,
+         message: message,
+         onConfirm: async () => {
+             this.state.confirmModal.isOpen = false;
+             await onConfirmCallback();
+         }
+     };
+ }
+
+ closeConfirm() {
+     this.state.confirmModal.isOpen = false;
+ }
 
     // --- Dynamic Search & Filter Getters ---
-    get displayAreas() {
-        return this.state.areas.filter(area => {
-            const searchMatch = area.name.toLowerCase().includes(this.state.areaSearchQuery.toLowerCase());
-            let filterMatch = true;
-            if (this.state.areaFilterStatus === 'active') filterMatch = area.active === true;
-            if (this.state.areaFilterStatus === 'inactive') filterMatch = area.active === false;
-            return searchMatch && filterMatch;
-        });
+  get displayAreas() {
+        return this.state.areas.filter(area => area.active && area.name.toLowerCase().includes(this.state.areaSearchQuery.toLowerCase()));
     }
 
     get displayRoutes() {
-        return this.state.routes.filter(route => {
-            const searchMatch = route.name.toLowerCase().includes(this.state.routeSearchQuery.toLowerCase());
-            let filterMatch = true;
-            if (this.state.routeFilterStatus === 'active') filterMatch = route.active === true;
-            if (this.state.routeFilterStatus === 'inactive') filterMatch = route.active === false;
-            return searchMatch && filterMatch;
-        });
+        return this.state.routes.filter(route => route.active && route.name.toLowerCase().includes(this.state.routeSearchQuery.toLowerCase()));
     }
 
     get displayShops() {
         return this.state.shops.filter(shop => {
+            if (!shop.active) return false;
+            
             const query = this.state.shopSearchQuery.toLowerCase();
-            const nameMatch = shop.name.toLowerCase().includes(query);
-            const ownerMatch = (shop.owner_name || '').toLowerCase().includes(query);
-            const searchMatch = nameMatch || ownerMatch;
-
-            let categoryMatch = true;
-            if (this.state.shopFilterCategory !== 'all') {
-                categoryMatch = shop.shahtaj_shop_category === this.state.shopFilterCategory;
-            }
-
-            let statusMatch = true;
-            if (this.state.shopFilterStatus !== 'all') {
-                statusMatch = shop.shop_approval_state === this.state.shopFilterStatus;
-            }
+            const searchMatch = shop.name.toLowerCase().includes(query) || (shop.owner_name || '').toLowerCase().includes(query);
+            const categoryMatch = this.state.shopFilterCategory !== 'all' ? shop.shahtaj_shop_category === this.state.shopFilterCategory : true;
+            const statusMatch = this.state.shopFilterStatus !== 'all' ? shop.shop_approval_state === this.state.shopFilterStatus : true;
 
             return searchMatch && categoryMatch && statusMatch;
         });
@@ -145,31 +157,37 @@ export class TerritoryRoutes extends Component {
 
     // --- Data Fetching Logic ---
     async fetchDashboardData() {
+        const includeArchivedDomain = ['|', ['active', '=', true], ['active', '=', false]];
+
         this.state.areas = await this.orm.searchRead(
             "shahtaj.zone",
-            [], 
+            includeArchivedDomain, 
             ["id", "name", "active", "route_count"]
         );
 
         this.state.routes = await this.orm.searchRead(
             "shahtaj.route",
-            [],
+            includeArchivedDomain,
             ["id", "name", "zone_id", "shop_count", "active"]
         );
 
         this.state.shops = await this.orm.searchRead(
             "res.partner",
-            [["is_shahtaj_shop", "=", true]], 
-            ["id", "name", "owner_name", "phone", "route_id", "shop_approval_state", "shahtaj_shop_category", "registered_by_id"]
+            [["is_shahtaj_shop", "=", true], ...includeArchivedDomain], 
+            ["id", "name", "owner_name", "phone", "route_id", "shop_approval_state", "shahtaj_shop_category", "registered_by_id", "active"]
         );
     }
 
     setSubTab(tabName) {
+        // Save the current tab if we are navigating to the archive
+        if (tabName === 'archive' && this.state.activeSubTab !== 'archive') {
+            this.state.previousSubTab = this.state.activeSubTab;
+        }
+        
         this.state.activeSubTab = tabName;
         this.cancelForms();
         this.state.selectedShopDetails = null;
     }
-
     cancelForms() {
         this.state.showAreaForm = false;
         this.state.showRouteForm = false;
@@ -196,6 +214,33 @@ export class TerritoryRoutes extends Component {
             preview_owner_photo: null, preview_shop_exterior_photo: null
         };
     }
+    // --- Archive Logic & Getters ---
+    toggleArchive(model, id, makeActive) {
+     if (makeActive) {
+         // Restoring typically doesn't need a heavy confirmation prompt
+         this.executeToggleArchive(model, id, makeActive);
+     } else {
+         // Archiving gets the new custom modal
+         this.showConfirm(
+             "Archive Item",
+             "Are you sure you want to move this item to the archive?",
+             () => this.executeToggleArchive(model, id, makeActive)
+         );
+     }
+ }
+
+ async executeToggleArchive(model, id, makeActive) {
+     try {
+         await this.orm.write(model, [id], { active: makeActive });
+         await this.fetchDashboardData();
+     } catch (error) {
+         alert("Failed to update archive status: " + (error.data?.message || error.message));
+     }
+ }
+
+    get archivedZones() { return this.state.areas.filter(a => !a.active); }
+    get archivedRoutes() { return this.state.routes.filter(r => !r.active); }
+    get archivedShops() { return this.state.shops.filter(s => !s.active); }
 
     onZoneChange() {
         this.state.shopForm.route_id = '';

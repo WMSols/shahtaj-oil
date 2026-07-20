@@ -1,50 +1,164 @@
 /** @odoo-module **/
 
-import { Component, useState } from "@odoo/owl";
+import { Component, useState, onWillStart } from "@odoo/owl";
+import { useService } from "@web/core/utils/hooks";
 
 export class BankTransactions extends Component {
     setup() {
+        this.orm = useService("orm");
+        
         this.state = useState({
             // View Control
+            activeTab: 'transactions', // 'transactions' or 'journals'
             viewMode: 'list', // 'list' or 'detail'
             selectedTransaction: null,
+            
+            // Loading States
+            isLoading: {
+                data: true,
+                saveJournal: false
+            },
+
+            // Modal State
+            showJournalModal: false,
+            journalForm: {
+                name: '',
+                type: 'bank',
+                code: '' // Odoo requires a short code for journals
+            },
+
+            // Data
+            transactions: [],
+            journals: [],
 
             // Filters
             searchQuery: '',
-            filterBank: 'all', // 'all', 'HBL', 'Meezan', 'Alfalah'
-            sortBy: 'date_desc', // 'date_desc', 'amount_asc', 'amount_desc'
+            filterJournal: 'all', 
+            sortBy: 'date_desc', 
             dateFrom: '',
-            dateTo: '',
+            dateTo: ''
+        });
 
-            // Static Mock Data
-            transactions: [
-                { id: 1, date: '2026-07-01', bank: 'HBL', payee: 'Shahtaj Oil Supply', amount: 50000, status: 'Completed', details: 'Bulk fuel supply payment' },
-                { id: 2, date: '2026-07-05', bank: 'Meezan', payee: 'Ali Traders', amount: 12500, status: 'Pending', details: 'Office maintenance items' },
-                { id: 3, date: '2026-07-08', bank: 'Alfalah', payee: 'Rentals PK', amount: 75000, status: 'Completed', details: 'Warehouse rent July' },
-                { id: 4, date: '2026-07-09', bank: 'HBL', payee: 'Fuel Station 09', amount: 3200, status: 'Completed', details: 'Daily fuel top-up' },
-            ]
+        onWillStart(async () => {
+            await this.fetchAllData();
         });
     }
 
+    async fetchAllData() {
+        this.state.isLoading.data = true;
+        try {
+            await Promise.all([
+                this.loadJournals(),
+                this.loadTransactions()
+            ]);
+        } catch (error) {
+            console.error("Failed to load data:", error);
+        } finally {
+            this.state.isLoading.data = false;
+        }
+    }
+    async refreshData() {
+        // fetchAllData already handles the this.state.isLoading.data toggles
+        await this.fetchAllData();
+    }
+
+    async loadJournals() {
+        // Fetch only bank and cash journals per the python domain[cite: 16]
+        const journals = await this.orm.searchRead(
+            "account.journal",
+            [["type", "in", ["bank", "cash"]]],
+            ["id", "name", "type", "code", "currency_id"]
+        );
+        this.state.journals = journals;
+    }
+
+    async loadTransactions() {
+        // Fetch transactions linked to bank/cash journals[cite: 16]
+        const payments = await this.orm.searchRead(
+            "account.payment",
+            [["journal_id.type", "in", ["bank", "cash"]]],
+            [
+                "id", "name", "date", "journal_id", "partner_id", "amount_signed", 
+                "state", "payment_type", "shahtaj_payment_channel", 
+                "shahtaj_payer_bank_name", "shahtaj_payer_account_number", 
+                "shahtaj_instrument_reference", "shahtaj_payment_notes"
+            ]
+        );
+        this.state.transactions = payments.map(p => ({
+            ...p,
+            partner_name: p.partner_id ? p.partner_id[1] : 'Unknown',
+            journal_name: p.journal_id ? p.journal_id[1] : 'Unknown',
+            display_amount: Math.abs(p.amount_signed)
+        }));
+    }
+
+    // --- Computed Properties for Filters ---
     get filteredTransactions() {
         let list = this.state.transactions.filter(t => {
-            // Search
-            const matchesSearch = t.payee.toLowerCase().includes(this.state.searchQuery.toLowerCase());
-            // Bank Filter
-            const matchesBank = this.state.filterBank === 'all' || t.bank === this.state.filterBank;
+            // Search by Name/Receipt or Partner
+            const query = this.state.searchQuery.toLowerCase();
+            const matchesSearch = t.partner_name.toLowerCase().includes(query) || 
+                                  t.name.toLowerCase().includes(query) ||
+                                  (t.shahtaj_instrument_reference || '').toLowerCase().includes(query);
+            
+            // Journal Filter (Dynamic)
+            const matchesJournal = this.state.filterJournal === 'all' || 
+                                   (t.journal_id && t.journal_id[0] === parseInt(this.state.filterJournal));
+            
             // Date Filter
             const matchesDateFrom = !this.state.dateFrom || t.date >= this.state.dateFrom;
             const matchesDateTo = !this.state.dateTo || t.date <= this.state.dateTo;
 
-            return matchesSearch && matchesBank && matchesDateFrom && matchesDateTo;
+            return matchesSearch && matchesJournal && matchesDateFrom && matchesDateTo;
         });
 
         // Sorting
-        if (this.state.sortBy === 'amount_asc') list.sort((a, b) => a.amount - b.amount);
-        if (this.state.sortBy === 'amount_desc') list.sort((a, b) => b.amount - a.amount);
+        if (this.state.sortBy === 'amount_asc') list.sort((a, b) => a.display_amount - b.display_amount);
+        if (this.state.sortBy === 'amount_desc') list.sort((a, b) => b.display_amount - a.display_amount);
         if (this.state.sortBy === 'date_desc') list.sort((a, b) => new Date(b.date) - new Date(a.date));
 
         return list;
+    }
+
+    // --- Journal Management Actions ---
+    openJournalModal() {
+        this.state.journalForm = { name: '', type: 'bank', code: '' };
+        this.state.showJournalModal = true;
+    }
+
+    closeJournalModal() {
+        this.state.showJournalModal = false;
+    }
+
+    async saveJournal() {
+        if (!this.state.journalForm.name || !this.state.journalForm.code) {
+            alert("Please provide both a Name and a Short Code for the journal.");
+            return;
+        }
+
+        this.state.isLoading.saveJournal = true;
+        try {
+            // Distributors create bank/cash journals safely[cite: 14]
+            await this.orm.create("account.journal", [{
+                name: this.state.journalForm.name,
+                type: this.state.journalForm.type,
+                code: this.state.journalForm.code
+            }]);
+            
+            await this.loadJournals();
+            this.closeJournalModal();
+        } catch (error) {
+            alert("Failed to create journal: " + (error.data?.message || error.message));
+        } finally {
+            this.state.isLoading.saveJournal = false;
+        }
+    }
+
+    // --- Navigation Actions ---
+    switchTab(tabName) {
+        this.state.activeTab = tabName;
+        this.state.viewMode = 'list';
+        this.state.selectedTransaction = null;
     }
 
     viewDetails(transaction) {
@@ -55,6 +169,46 @@ export class BankTransactions extends Component {
     goBack() {
         this.state.viewMode = 'list';
         this.state.selectedTransaction = null;
+    }
+    editJournal(journal) {
+        this.state.journalForm = { 
+            id: journal.id, // Track the ID to know we are editing
+            name: journal.name, 
+            type: journal.type, 
+            code: journal.code || '' 
+        };
+        this.state.showJournalModal = true;
+    }
+
+    async saveJournal() {
+        if (!this.state.journalForm.name || !this.state.journalForm.code) {
+            alert("Name and Short Code are required."); return;
+        }
+
+        this.state.isLoading.saveJournal = true;
+        try {
+            if (this.state.journalForm.id) {
+                // Update existing
+                await this.orm.write("account.journal", [this.state.journalForm.id], {
+                    name: this.state.journalForm.name,
+                    type: this.state.journalForm.type,
+                    code: this.state.journalForm.code
+                });
+            } else {
+                // Create new
+                await this.orm.create("account.journal", [{
+                    name: this.state.journalForm.name,
+                    type: this.state.journalForm.type,
+                    code: this.state.journalForm.code
+                }]);
+            }
+            await this.loadJournals();
+            this.closeJournalModal();
+        } catch (error) {
+            alert("Failed to save journal: " + (error.data?.message || error.message));
+        } finally {
+            this.state.isLoading.saveJournal = false;
+        }
     }
 }
 

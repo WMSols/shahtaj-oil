@@ -10,9 +10,10 @@ import { FinancialsInvoicing } from "./financials_invoicing";
 import { PortalSettings } from "./settings"
 import { SchedulesTargets } from "./schedules_targets";
 import { BankTransactions } from "./bank_transactions";
+import { ConfirmModal } from "./confirm_modal";
 
 export class ShahtajDashboard extends Component {
-    static components = { StaffManagement, OperationsTracking, TerritoryRoutes, WarehouseInventory, FinancialsInvoicing, PortalSettings, SchedulesTargets, BankTransactions }; 
+    static components = { StaffManagement, OperationsTracking, TerritoryRoutes, WarehouseInventory, FinancialsInvoicing, PortalSettings, SchedulesTargets, BankTransactions, ConfirmModal }; 
 
     setup() {
         this.state = useState({

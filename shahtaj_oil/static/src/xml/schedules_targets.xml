@@ -8,41 +8,15 @@
                     <h2 class="h4 fw-bold text-dark mb-0">Schedules &amp; Targets Hub</h2>
                     <small class="text-muted">Manage weekly routes and performance KPIs for field staff.</small>
                 </div>
+                <div>
+                    <!-- NEW REFRESH BUTTON -->
+                    <button class="btn btn-outline-secondary fw-bold shadow-sm d-inline-flex align-items-center bg-white" t-on-click="refreshData" t-att-disabled="this.state.isRefreshing" title="Refresh Live Data">
+                        <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.isRefreshing}"></i> Refresh
+                    </button>
+                </div>
             </div>
 
             <t t-if="this.state.viewMode === 'list'">
-                <!-- <div class="p-3 border-bottom">
-                    <ul class="nav nav-pills nav-fill">
-                        <li class="nav-item">
-                            <button t-on-click="() => this.switchMainTab('schedules')" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeMainTab === 'schedules' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar-days me-2">
-                                    <path d="M8 2v4"/>
-                                    <path d="M16 2v4"/>
-                                    <rect width="18" height="18" x="3" y="4" rx="2"/>
-                                    <path d="M3 10h18"/>
-                                    <path d="M8 14h.01"/>
-                                    <path d="M12 14h.01"/>
-                                    <path d="M16 14h.01"/>
-                                    <path d="M8 18h.01"/>
-                                    <path d="M12 18h.01"/>
-                                    <path d="M16 18h.01"/>
-                                </svg>
-                                Weekly Schedules
-                            </button>
-                        </li>
-                        <li class="nav-item mx-2">
-                            <button t-on-click="() => this.switchMainTab('targets')" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 transition-all d-flex justify-content-center align-items-center #{this.state.activeMainTab === 'targets' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-white'}">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-target me-2">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <circle cx="12" cy="12" r="6"/>
-                                    <circle cx="12" cy="12" r="2"/>
-                                </svg>
-                                Performance Targets
-                            </button>
-                        </li>
-                    </ul>
-                </div> -->
-
                 <div class="table-responsive">
                     <table class="table table-hover mb-0">
                         <thead class="bg-light text-uppercase small fw-bold text-muted">
