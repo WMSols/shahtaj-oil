@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <templates xml:space="preserve">
     <t t-name="shahtaj_oil.SchedulesTargets" owl="1">
-        <div class="card border-0 shadow-sm bg-white rounded-3">
+        <div class="card border-0 shadow-sm bg-white rounded-3 position-relative">
 
             <div class="p-4 border-bottom bg-light d-flex justify-content-between align-items-center rounded-top">
                 <div>
@@ -9,7 +9,6 @@
                     <small class="text-muted">Manage weekly routes and performance KPIs for field staff.</small>
                 </div>
                 <div>
-                    <!-- NEW REFRESH BUTTON -->
                     <button class="btn btn-outline-secondary fw-bold shadow-sm d-inline-flex align-items-center bg-white" t-on-click="refreshData" t-att-disabled="this.state.isRefreshing" title="Refresh Live Data">
                         <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.isRefreshing}"></i> Refresh
                     </button>
@@ -144,22 +143,16 @@
                                 </div>
                             </div>
                         </div>
-<!-- 
-                        <div class="p-3 bg-light rounded-3 border mb-4">
-                            <h6 class="fw-bold text-muted mb-3 small text-uppercase">Tracking Parameters (Auto-Calculated)</h6>
-                            <div class="row">
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted">Shops on Route</label>
-                                    <t t-esc="sched.shops"/>
-                                </div>
-                               
-                            </div>
-                        </div> -->
 
                         <div class="d-flex justify-content-end mt-3">
                             <button class="btn btn-outline-secondary me-2 fw-bold" t-on-click="() => this.state.showForm = false">Cancel</button>
-                            <button class="btn btn-dark px-4 fw-bold text-white" t-on-click="saveSchedule">
-                                <t t-esc="this.state.editingScheduleId ? 'Update Schedule' : 'Save Schedule'"/>
+                            <button class="btn btn-dark px-4 fw-bold text-white" t-on-click="saveSchedule" t-att-disabled="this.state.isLoading">
+                                <t t-if="this.state.isLoading">
+                                    <i class="fa fa-spinner fa-spin me-1"></i> Saving...
+                                </t>
+                                <t t-else="">
+                                    <t t-esc="this.state.editingScheduleId ? 'Update Schedule' : 'Save Schedule'"/>
+                                </t>
                             </button>
                         </div>
                     </div>
@@ -244,28 +237,15 @@
                             </t>
                         </div>
 
-                        <hr class="mb-4"/>
-
-                        <!-- <div class="p-3 bg-light rounded-3 border mb-4">
-                            <h6 class="fw-bold text-muted mb-3 small text-uppercase">Live Progress Details (Auto-Calculated)</h6>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <label class="small fw-bold text-muted">Achieved So Far</label>
-                                    <input type="text" class="form-control bg-white fw-bold" value="0 / Pending" disabled="1"/>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="small fw-bold text-muted">Overall Progress</label>
-                                    <div class="progress mt-2" style="height: 25px;">
-                                        <div class="progress-bar bg-success" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div> -->
-
                         <div class="d-flex justify-content-end mt-3">
                             <button class="btn btn-outline-secondary me-2 fw-bold" t-on-click="() => this.state.showForm = false">Cancel</button>
-                            <button class="btn btn-dark px-4 fw-bold text-white" t-on-click="saveTarget">
-                                <t t-esc="this.state.editingTargetId ? 'Update Target' : 'Save Target'"/>
+                            <button class="btn btn-dark px-4 fw-bold text-white" t-on-click="saveTarget" t-att-disabled="this.state.isLoading">
+                                <t t-if="this.state.isLoading">
+                                    <i class="fa fa-spinner fa-spin me-1"></i> Saving...
+                                </t>
+                                <t t-else="">
+                                    <t t-esc="this.state.editingTargetId ? 'Update Target' : 'Save Target'"/>
+                                </t>
                             </button>
                         </div>
                     </div>
@@ -279,7 +259,6 @@
                                     <th class="ps-4 border-top-0">Day</th>
                                     <th class="border-top-0">Route Info</th>
                                     <th class="text-center border-top-0">Shops</th>
-                                    <!-- <th class="text-center border-top-0">Progress</th> -->
                                     <th class="border-top-0">Status</th>
                                     <th class="text-end pe-4 border-top-0">Actions</th>
                                 </tr>
@@ -287,7 +266,7 @@
                             <tbody>
                                 <t t-if="currentBookerSchedules.length === 0">
                                     <tr>
-                                        <td colspan="6" class="text-center py-4 text-muted">No schedules configured for this booker.</td>
+                                        <td colspan="5" class="text-center py-4 text-muted">No schedules configured for this booker.</td>
                                     </tr>
                                 </t>
                                 <t t-foreach="currentBookerSchedules" t-as="sched" t-key="sched.id">
@@ -306,9 +285,6 @@
                                         <td class="align-middle text-center">
                                             <t t-esc="sched.shops"/>
                                         </td>
-                                        <!-- <td class="align-middle text-center fw-bold text-success">
-                                            <t t-esc="sched.progress"/>
-                                        </td> -->
                                         <td class="align-middle">
                                             <span t-attf-class="badge #{sched.status === 'Active' ? 'bg-success text-white' : 'bg-secondary text-white'} px-2 py-1 shadow-sm">
                                                 <t t-esc="sched.status"/>
@@ -316,7 +292,7 @@
                                         </td>
                                         <td class="align-middle text-end pe-4">
                                             <button class="btn btn-sm btn-outline-primary me-2" t-on-click="() => this.editSchedule(sched)">Edit</button>
-                                            <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.deleteSchedule(sched.id)">Delete</button>
+                                            <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.promptDeleteSchedule(sched)">Delete</button>
                                         </td>
                                     </tr>
                                 </t>
@@ -340,7 +316,7 @@
                             <tbody>
                                 <t t-if="currentBookerTargets.length === 0">
                                     <tr>
-                                        <td colspan="6" class="text-center py-4 text-muted">No targets configured for this booker.</td>
+                                        <td colspan="5" class="text-center py-4 text-muted">No targets configured for this booker.</td>
                                     </tr>
                                 </t>
                                 <t t-foreach="currentBookerTargets" t-as="tgt" t-key="tgt.id">
@@ -359,9 +335,7 @@
                                             <small class="text-muted">
                                                 <t t-esc="tgt.amount"/>
                                                 <t t-if="tgt.weightUom"> <t t-esc="tgt.weightUom"/></t>
-                                                <t t-if="tgt.currency">
-                                                    <t t-esc="tgt.currency"/>
-                                                </t>
+                                                <t t-if="tgt.currency"> <t t-esc="tgt.currency"/></t>
                                                 <t t-if="tgt.product"> (<t t-esc="tgt.product"/>) </t>
                                             </small>
                                         </td>
@@ -373,14 +347,6 @@
                                                 </small>
                                             </t>
                                         </td>
-                                        <!-- <td class="align-middle">
-                                            <div class="progress" style="height: 6px; width: 100px;">
-                                                <div class="progress-bar bg-success" role="progressbar" t-attf-style="width: #{tgt.progressPercentage};"></div>
-                                            </div>
-                                            <small class="fw-bold text-success mt-1 d-block">
-                                                <t t-esc="tgt.progressPercentage"/>
-                                            </small>
-                                        </td> -->
                                         <td class="align-middle">
                                             <span t-attf-class="badge #{tgt.status === 'Active' ? 'bg-success text-white' : 'bg-secondary text-white'} px-2 py-1 shadow-sm">
                                                 <t t-esc="tgt.status"/>
@@ -388,7 +354,7 @@
                                         </td>
                                         <td class="align-middle text-end pe-4">
                                             <button class="btn btn-sm btn-outline-primary me-2" t-on-click="() => this.editTarget(tgt)">Edit</button>
-                                            <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.deleteTarget(tgt.id)">Delete</button>
+                                            <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.promptDeleteTarget(tgt)">Delete</button>
                                         </td>
                                     </tr>
                                 </t>
@@ -397,6 +363,45 @@
                     </div>
                 </t>
             </t>
+
+            <!-- ========================================== -->
+            <!-- CUSTOM DELETE CONFIRMATION MODAL           -->
+            <!-- ========================================== -->
+            <t t-if="this.state.showDeleteModal">
+                <div class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background: rgba(15, 23, 42, 0.6); z-index: 1055; backdrop-filter: blur(4px);">
+                    <div class="card border-0 shadow-lg rounded-4 overflow-hidden" style="width: 100%; max-width: 480px; animation: fadeIn 0.2s ease-out;">
+                        <div class="bg-danger text-white p-3 d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 fw-bold text-white d-flex align-items-center">
+                                <i class="fa fa-exclamation-triangle me-2"></i> Confirm Deletion
+                            </h5>
+                            <button class="btn btn-sm text-black btn-light bg-opacity-25 border-0 text-white rounded-circle d-flex align-items-center justify-content-center p-1" style="width: 28px; height: 28px;" t-on-click="closeDeleteModal">
+                                <i class="fa fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="p-4 bg-light">
+                            <p class="text-dark mb-2 fs-6">
+                                Are you sure you want to delete <strong class="text-danger"><t t-esc="this.state.deleteTitle"/></strong>?
+                            </p>
+                            <p class="text-muted small mb-4">This action cannot be undone and will permanently remove this record from Odoo.</p>
+                            
+                            <div class="d-flex justify-content-end gap-2">
+                                <button class="btn btn-light border fw-bold px-4" t-on-click="closeDeleteModal" t-att-disabled="this.state.isLoading">
+                                    Cancel
+                                </button>
+                                <button class="btn btn-danger fw-bold px-4 text-white d-flex align-items-center" t-on-click="confirmDelete" t-att-disabled="this.state.isLoading">
+                                    <t t-if="this.state.isLoading">
+                                        <i class="fa fa-spinner fa-spin me-2"></i> Deleting...
+                                    </t>
+                                    <t t-else="">
+                                        <i class="fa fa-trash me-2"></i> Confirm Delete
+                                    </t>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
+
         </div>
     </t>
 </templates>

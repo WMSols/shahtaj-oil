@@ -10,6 +10,8 @@ export class SchedulesTargets extends Component {
 
     setup() {
         this.orm = useService("orm");
+        this.notification = useService("notification");
+
         this.state = useState({
             activeMainTab: this.props.requestedSubTab || 'schedules',
             viewMode: 'list',
@@ -17,11 +19,17 @@ export class SchedulesTargets extends Component {
             showForm: false,
             errorMessage: '',
             isLoading: false,
-            // --- NEW: Global Refresh Loading State ---
             isRefreshing: false,
+
             // Edit Tracking
             editingScheduleId: null,
             editingTargetId: null,
+
+            // --- Custom Delete Modal States ---
+            showDeleteModal: false,
+            deleteType: null, // 'schedule' or 'target'
+            deleteId: null,
+            deleteTitle: '',
 
             // Form Data
             scheduleForm: { day: '', route_id: '', zone_name: '', is_active: true },
@@ -41,8 +49,9 @@ export class SchedulesTargets extends Component {
             products: [],     
             currencies: [],   
         });
-         onWillUpdateProps((nextProps) => {
-            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.state.activeSubTab) {
+
+        onWillUpdateProps((nextProps) => {
+            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.state.activeMainTab) {
                 this.setSubTab(nextProps.requestedSubTab);
             }
         });
@@ -52,31 +61,29 @@ export class SchedulesTargets extends Component {
             await this._loadBookers();
         });
     }
-    // --- NEW: Global Refresh Method ---
+
     async refreshData() {
         this.state.isRefreshing = true;
         try {
-            // 1. Always refresh the base master data
             await this._loadDropdownOptions();
             await this._loadBookers();
             
-            // 2. If viewing a specific booker's details, refresh their inner records too
             if (this.state.viewMode === 'detail' && this.state.selectedBooker) {
                 await Promise.all([
                     this._loadBookerSchedules(this.state.selectedBooker.id),
                     this._loadBookerTargets(this.state.selectedBooker.id)
                 ]);
             }
+            this.notification.add("Data refreshed successfully.", { type: "info" });
+        } catch (error) {
+            this.notification.add("Failed to refresh data: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isRefreshing = false;
         }
     }
-    // --- UI Toggles & Handlers ---
+
     setSubTab(tabName) {
-        // Change the active tab
         this.state.activeMainTab = tabName;
-        
-        // Reset the views so it goes back to the clean list
         this.state.viewMode = 'list';
         this.state.showForm = false;
         this.state.errorMessage = '';
@@ -103,21 +110,9 @@ export class SchedulesTargets extends Component {
 
     async _loadDropdownOptions() {
         const [routes, products, currencies] = await Promise.all([
-            this.orm.searchRead(
-                'shahtaj.route',
-                [['active', '=', true]],
-                ['id', 'name', 'zone_id']
-            ),
-            this.orm.searchRead(
-                'product.product',
-                [],
-                ['id', 'name']
-            ),
-            this.orm.searchRead(
-                'res.currency',
-                [['active', '=', true]],
-                ['id', 'name']
-            ),
+            this.orm.searchRead('shahtaj.route', [['active', '=', true]], ['id', 'name', 'zone_id']),
+            this.orm.searchRead('product.product', [], ['id', 'name']),
+            this.orm.searchRead('res.currency', [['active', '=', true]], ['id', 'name']),
         ]);
 
         this.state.routes = routes.map(r => ({
@@ -303,20 +298,23 @@ export class SchedulesTargets extends Component {
         return this.state.routes.filter(r => r.zone_name === zone);
     }
 
-    // ─── Save: Schedule ──────────────────────────────────────────────────────────
+    // ─── Save Handlers ──────────────────────────────────────────────────────────
 
     async saveSchedule() {
         const form = this.state.scheduleForm;
 
         if (!form.day || !form.route_id) {
-            this.state.errorMessage = 'Day and Route are required.';
+            const msg = 'Day and Route are required.';
+            this.state.errorMessage = msg;
+            this.notification.add(msg, { type: "warning" });
             return;
         }
 
-        // Only check for duplicate days if creating new, OR if updating and day changed
         const dayExists = this.currentBookerSchedules.some(s => s.day_raw.toString() === form.day && s.id !== this.state.editingScheduleId);
         if (dayExists) {
-            this.state.errorMessage = `A schedule for this day already exists for this Order Booker.`;
+            const msg = `A schedule for this day already exists for this Order Booker.`;
+            this.state.errorMessage = msg;
+            this.notification.add(msg, { type: "warning" });
             return;
         }
 
@@ -333,46 +331,58 @@ export class SchedulesTargets extends Component {
 
             if (this.state.editingScheduleId) {
                 await this.orm.write('shahtaj.weekly.schedule', [this.state.editingScheduleId], payload);
+                this.notification.add("Schedule updated successfully.", { type: "success" });
             } else {
                 await this.orm.create('shahtaj.weekly.schedule', [payload]);
+                this.notification.add("Schedule created successfully.", { type: "success" });
             }
 
             this.state.showForm = false;
             await this._loadBookerSchedules(this.state.selectedBooker.id);
         } catch (error) {
-            this.state.errorMessage = error.data?.message || error.message || 'Failed to save schedule.';
+            const msg = error.data?.message || error.message || 'Failed to save schedule.';
+            this.state.errorMessage = msg;
+            this.notification.add(msg, { type: "danger" });
         } finally {
             this.state.isLoading = false;
         }
     }
 
-    // ─── Save: Target ────────────────────────────────────────────────────────────
-
     async saveTarget() {
         const form = this.state.targetForm;
 
         if (!form.startDate || !form.endDate || !form.type || !form.target_value) {
-            this.state.errorMessage = 'Start Date, End Date, Target Type, and Target Value are required.';
+            const msg = 'Start Date, End Date, Target Type, and Target Value are required.';
+            this.state.errorMessage = msg;
+            this.notification.add(msg, { type: "warning" });
             return;
         }
 
         if (new Date(form.endDate) < new Date(form.startDate)) {
-            this.state.errorMessage = 'End Date cannot be earlier than Start Date.';
+            const msg = 'End Date cannot be earlier than Start Date.';
+            this.state.errorMessage = msg;
+            this.notification.add(msg, { type: "warning" });
             return;
         }
 
         if (form.type === 'product_qty' && !form.product_id) {
-            this.state.errorMessage = 'A product is required for Product Quantity targets.';
+            const msg = 'A product is required for Product Quantity targets.';
+            this.state.errorMessage = msg;
+            this.notification.add(msg, { type: "warning" });
             return;
         }
 
         if (form.type === 'product_weight' && !form.product_id) {
-            this.state.errorMessage = 'A product is required for Product Weight targets.';
+            const msg = 'A product is required for Product Weight targets.';
+            this.state.errorMessage = msg;
+            this.notification.add(msg, { type: "warning" });
             return;
         }
 
         if (form.type === 'product_weight' && !form.target_weight_uom) {
-            this.state.errorMessage = 'Select kg or ton for the weight target.';
+            const msg = 'Select kg or ton for the weight target.';
+            this.state.errorMessage = msg;
+            this.notification.add(msg, { type: "warning" });
             return;
         }
 
@@ -389,7 +399,6 @@ export class SchedulesTargets extends Component {
                 active: form.is_active,
             };
 
-            // Fix: Parse Int for IDs to prevent Odoo validation crashes
             if (['product_qty', 'product_weight'].includes(form.type) && form.product_id) {
                 payload.product_id = parseInt(form.product_id);
             }
@@ -402,43 +411,74 @@ export class SchedulesTargets extends Component {
 
             if (this.state.editingTargetId) {
                 await this.orm.write('shahtaj.visit.target', [this.state.editingTargetId], payload);
+                this.notification.add("Target updated successfully.", { type: "success" });
             } else {
                 await this.orm.create('shahtaj.visit.target', [payload]);
+                this.notification.add("Target created successfully.", { type: "success" });
             }
 
             this.state.showForm = false;
             await this._loadBookerTargets(this.state.selectedBooker.id);
         } catch (error) {
-            this.state.errorMessage = error.data?.message || error.message || 'Failed to save target.';
+            const msg = error.data?.message || error.message || 'Failed to save target.';
+            this.state.errorMessage = msg;
+            this.notification.add(msg, { type: "danger" });
         } finally {
             this.state.isLoading = false;
         }
     }
 
-    // ─── Delete ──────────────────────────────────────────────────────────────────
+    // ─── Custom Delete Modal Handlers ───────────────────────────────────────────
 
-    async deleteSchedule(scheduleId) {
-        if (!confirm("Are you sure you want to delete this schedule?")) return;
-        const schedule = this.state.schedules.find(s => s.id === scheduleId);
-        if (schedule?.isLocked) {
-            this.state.errorMessage = "Cannot delete today's schedule — visits are already in progress.";
+    promptDeleteSchedule(sched) {
+        if (sched.isLocked) {
+            const msg = "Cannot delete today's schedule — visits are already in progress.";
+            this.state.errorMessage = msg;
+            this.notification.add(msg, { type: "warning" });
             return;
         }
-        try {
-            await this.orm.unlink('shahtaj.weekly.schedule', [scheduleId]);
-            await this._loadBookerSchedules(this.state.selectedBooker.id);
-        } catch (error) {
-            this.state.errorMessage = error.data?.message || error.message;
-        }
+        this.state.deleteType = 'schedule';
+        this.state.deleteId = sched.id;
+        this.state.deleteTitle = `${sched.day} schedule (${sched.route})`;
+        this.state.showDeleteModal = true;
     }
 
-    async deleteTarget(targetId) {
-        if (!confirm("Are you sure you want to delete this target?")) return;
+    promptDeleteTarget(tgt) {
+        const typeDisplay = tgt.type ? tgt.type.replace('_', ' ') : 'Target';
+        this.state.deleteType = 'target';
+        this.state.deleteId = tgt.id;
+        this.state.deleteTitle = `${typeDisplay} (${tgt.amount} ${tgt.weightUom || ''})`;
+        this.state.showDeleteModal = true;
+    }
+
+    closeDeleteModal() {
+        this.state.showDeleteModal = false;
+        this.state.deleteType = null;
+        this.state.deleteId = null;
+        this.state.deleteTitle = '';
+    }
+
+    async confirmDelete() {
+        if (!this.state.deleteId || !this.state.deleteType) return;
+        this.state.isLoading = true;
+
         try {
-            await this.orm.unlink('shahtaj.visit.target', [targetId]);
-            await this._loadBookerTargets(this.state.selectedBooker.id);
+            if (this.state.deleteType === 'schedule') {
+                await this.orm.unlink('shahtaj.weekly.schedule', [this.state.deleteId]);
+                this.notification.add("Schedule deleted successfully.", { type: "success" });
+                await this._loadBookerSchedules(this.state.selectedBooker.id);
+            } else if (this.state.deleteType === 'target') {
+                await this.orm.unlink('shahtaj.visit.target', [this.state.deleteId]);
+                this.notification.add("Target deleted successfully.", { type: "success" });
+                await this._loadBookerTargets(this.state.selectedBooker.id);
+            }
         } catch (error) {
-            this.state.errorMessage = error.data?.message || error.message;
+            const msg = error.data?.message || error.message || "Deletion failed.";
+            this.state.errorMessage = msg;
+            this.notification.add(msg, { type: "danger" });
+        } finally {
+            this.state.isLoading = false;
+            this.closeDeleteModal();
         }
     }
 }

@@ -169,7 +169,7 @@
                             <h4 class="fw-bold mb-0">Configured Journals</h4>
                             <small class="text-muted">Manage your physical cash registers and bank accounts.</small>
                         </div>
-                        <button class="btn btn-dark fw-bold  me-2 shadow-sm d-flex align-items-center" t-on-click="openJournalModal">
+                        <button class="btn btn-dark fw-bold  ms-2 shadow-sm d-flex align-items-center" t-on-click="openJournalModal">
                             <i class="fa fa-plus me-2"></i> Create Journal
                         </button>
                     </div>

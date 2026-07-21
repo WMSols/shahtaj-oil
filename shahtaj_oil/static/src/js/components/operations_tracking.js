@@ -146,14 +146,30 @@ export class OperationsTracking extends Component {
             ["name", "partner_id", "user_id", "date_order", "amount_total", "state", "order_line", "invoice_status"] 
         );
 
+        // Fetch exact line quantities to accurately determine Delivery Status
+        const orderIds = orders.map(o => o.id);
+        let lines = [];
+        if (orderIds.length > 0) {
+            lines = await this.orm.searchRead(
+                "sale.order.line", 
+                [["order_id", "in", orderIds]], 
+                ["order_id", "product_uom_qty", "qty_delivered"]
+            );
+        }
+
         this.state.orders = orders.map(o => {
+            // Calculate delivery math for this specific order
+            const myLines = lines.filter(l => l.order_id[0] === o.id);
+            const totalOrdered = myLines.reduce((sum, l) => sum + l.product_uom_qty, 0);
+            const totalDelivered = myLines.reduce((sum, l) => sum + l.qty_delivered, 0);
+            const is_fully_delivered = totalOrdered > 0 && totalDelivered >= totalOrdered;
+
             let status = 'Unknown';
             if (o.state === 'draft') {
                 status = 'Draft';
             } else if (o.state === 'sale') {
-                if (o.invoice_status === 'to invoice') status = 'To Invoice';
-                else if (o.invoice_status === 'invoiced') status = 'Invoiced';
-                else status = 'To Invoice'; 
+                if (o.invoice_status === 'invoiced') status = 'Invoiced';
+                else status = 'To Invoice'; // Default for live orders
             } else if (o.state === 'done') {
                 status = 'Delivered'; 
             }
@@ -171,11 +187,14 @@ export class OperationsTracking extends Component {
                 items: o.order_line.length,
                 total: `Rs. ${o.amount_total.toLocaleString(undefined, {minimumFractionDigits: 2})}`,
                 status: status, 
-                invoice_status: o.invoice_status, 
+                invoice_status: o.invoice_status,
+                is_fully_delivered: is_fully_delivered, // New property!
                 line_ids: o.order_line,
                 lines: [] 
             };
         });
+        
+        // Only show orders that are confirmed/to-invoice in the deliveries tab
         this.state.deliveries = this.state.orders.filter(o => o.status === 'To Invoice' || o.status === 'Delivered');
     }
 
@@ -231,37 +250,7 @@ export class OperationsTracking extends Component {
             active: r.active
         }));
     }
-    async viewDelivery(dlv) {
-        this.state.selectedDelivery = dlv;
-        this.state.isEditingDelivery = false; // Always open in read-only mode first
-        
-        const lines = await this.orm.searchRead(
-            "sale.order.line",
-            [["order_id", "=", dlv.odoo_id]],
-            ["id", "name", "product_uom_qty", "qty_delivered", "qty_invoiced", "price_unit", "tax_ids", "price_subtotal"]
-        );
-
-        dlv.full_lines = lines.map(l => ({
-            id: l.id,
-            product: l.name,
-            qty: l.product_uom_qty,
-            delivered: l.qty_delivered,
-            invoiced: l.qty_invoiced,
-            price: l.price_unit,
-            taxes: l.tax_ids.length > 0 ? `${l.tax_ids.length} Taxes` : 'None',
-            subtotal: l.price_subtotal
-        }));
-
-        const orderData = await this.orm.read("sale.order", [dlv.odoo_id], ["amount_untaxed", "amount_tax", "amount_total", "invoice_status"]);
-        if (orderData.length > 0) {
-            // Keep raw numbers for local JS math
-            dlv.amount_untaxed = orderData[0].amount_untaxed;
-            dlv.amount_tax = orderData[0].amount_tax;
-            dlv.amount_total = orderData[0].amount_total;
-            dlv.invoice_status = orderData[0].invoice_status;
-        }
-    }
-
+  
     closeDelivery() { 
         this.state.selectedDelivery = null; 
     }
@@ -289,34 +278,35 @@ export class OperationsTracking extends Component {
         this.state.selectedDelivery.amount_total = untaxed + this.state.selectedDelivery.amount_tax;
     }
 
-    async saveDeliveryChanges() {
+   async saveDeliveryChanges() {
         try {
-            // Create an array of update promises for all lines
-            const updatePromises = this.state.selectedDelivery.full_lines.map(line => {
-                return this.orm.write("sale.order.line", [line.id], {
-                    product_uom_qty: parseFloat(line.qty) || 0,
-                    price_unit: parseFloat(line.price) || 0
-                });
-            });
+            if (this.state.linesToDelete) {
+                await this.orm.unlink("sale.order.line", this.state.linesToDelete);
+                this.state.linesToDelete = [];
+            }
 
-            // Dispatch all updates to Odoo simultaneously
-            await Promise.all(updatePromises);
+            for (const line of this.state.selectedDelivery.full_lines) {
+                const vals = {
+                    order_id: this.state.selectedDelivery.odoo_id,
+                    product_id: parseInt(line.productId),
+                    product_uom_qty: parseFloat(line.qty),
+                    price_unit: parseFloat(line.price),
+                    // Write back the Many2many relation using the (6, 0, [ids]) tuple
+                    tax_id: line.tax_id ? [[6, 0, [parseInt(line.tax_id)]]] : [[5, 0, 0]]
+                };
+
+                if (line.id) {
+                    await this.orm.write("sale.order.line", [line.id], vals);
+                } else {
+                    await this.orm.create("sale.order.line", [vals]);
+                }
+            }
             
-            // Re-fetch to get Odoo's exact recalculations (including taxes & rounding)
             await this.viewDelivery(this.state.selectedDelivery);
-            await this.fetchLiveOrders(); // Update the main table list
-            
-            
-            await this.orm.write("sale.order.line", [line.id], {
-                product_id: parseInt(line.productId),
-                product_uom_qty: parseFloat(line.qty),
-                price_unit: parseFloat(line.price),
-                tax_id: line.tax_id ? [[6, 0, [parseInt(line.tax_id)]]] : [[5, 0, 0]]
-            });
-            this.notification.add("Order updated successfully.", { type: "success" });
+            this.state.isEditingDelivery = false;
+            this.notification.add("Order saved successfully.", { type: "success" });
         } catch (error) {
-            console.error("Save Error:", error);
-            this.notification.add(error.data?.message || "Failed to save order changes.", { type: "danger" });
+            alert("Failed to save: " + (error.data?.message || error.message));
         }
     }
 
@@ -331,59 +321,122 @@ export class OperationsTracking extends Component {
         await this.viewDelivery(this.state.selectedDelivery);
         this.state.selectedOrder = null; // Clean up
     }
-    async loadTaxAndProductData() {
-        // Fetch Taxes
-        const taxes = await this.orm.call('product.template', 'get_shahtaj_sale_tax_options', []);
-        this.state.saleTaxes = (taxes || []).map(t => ({ id: t.id, label: t.name }));
+
+   async loadTaxAndProductData() {
+        // Fetch standard Odoo Sales Taxes
+        const taxes = await this.orm.searchRead(
+            "account.tax",
+            [["type_tax_use", "=", "sale"], ["active", "=", true]],
+            ["id", "name", "amount"]
+        );
+        this.state.saleTaxes = taxes;
 
         // Fetch Products (for the dropdown)
         const prods = await this.orm.searchRead("product.template", [["sale_ok", "=", true]], ["id", "name"]);
         this.state.allProducts = prods;
     }
+
+    // 2. UPDATE THIS METHOD TO MAP TAX NAMES IN DELIVERIES
+    async viewDelivery(dlv) {
+        this.state.selectedDelivery = dlv;
+        this.state.isEditingDelivery = false; 
+        
+        try {
+            // Reverted back to plural 'tax_ids'
+            const lines = await this.orm.searchRead(
+                "sale.order.line",
+                [["order_id", "=", dlv.odoo_id]],
+                ["id", "name", "product_id", "product_uom_qty", "qty_delivered", "qty_invoiced", "price_unit", "tax_ids", "price_subtotal"]
+            );
+
+            dlv.full_lines = lines.map(l => {
+                // Must read from l.tax_ids here as well
+                const taxIds = l.tax_ids || [];
+                const taxNames = taxIds.map(id => {
+                    const tax = this.state.saleTaxes.find(t => t.id === id);
+                    return tax ? tax.name : `Tax`;
+                }).join(', ');
+
+                return {
+                    id: l.id,
+                    // Maps the product ID so the dropdown auto-selects the existing product
+                    productId: l.product_id ? l.product_id[0] : "", 
+                    product: l.name,
+                    qty: l.product_uom_qty,
+                    delivered: l.qty_delivered,
+                    invoiced: l.qty_invoiced,
+                    price: l.price_unit,
+                    tax_id: taxIds.length > 0 ? taxIds[0] : "", // Internal state reference
+                    taxes: taxNames || 'None',
+                    subtotal: l.price_subtotal
+                };
+            });
+
+            const orderData = await this.orm.read("sale.order", [dlv.odoo_id], ["amount_untaxed", "amount_tax", "amount_total", "invoice_status"]);
+            if (orderData.length > 0) {
+                dlv.amount_untaxed = orderData[0].amount_untaxed;
+                dlv.amount_tax = orderData[0].amount_tax;
+                dlv.amount_total = orderData[0].amount_total;
+                dlv.invoice_status = orderData[0].invoice_status;
+            }
+        } catch (error) {
+             this.notification.add(error.data?.message || error.message, { type: "danger" });
+        }
+    }
     // --- New: Row Management ---
-    addDeliveryLine() {
-        // Adds a blank line to the local state so the user can select a product
+   addDeliveryLine() {
         this.state.selectedDelivery.full_lines.push({
-            id: null, // New lines don't have an ID yet
-            productId: null,
+            id: 'new_' + Date.now(), // Generate temporary ID
+            productId: '',
             product: '',
-            qty: 0,
+            qty: 1,
+            delivered: 0,
+            invoiced: 0,
             price: 0,
+            tax_ids: "",
             taxes: 'None',
             subtotal: 0
         });
     }
 
-    removeDeliveryLine(index, line) {
-        // If it has an ID, we need to delete it from Odoo; if not, just remove from state
-        if (line.id) {
-            this.state.linesToDelete = this.state.linesToDelete || [];
-            this.state.linesToDelete.push(line.id);
+    removeDeliveryLine(lineId) {
+        if (this.state.selectedDelivery.full_lines.length <= 1) {
+            this.notification.add("An order must have at least one product line.", { type: "warning" });
+            return;
         }
-        this.state.selectedDelivery.full_lines.splice(index, 1);
+        if (!String(lineId).startsWith('new_')) {
+            this.state.linesToDelete = this.state.linesToDelete || [];
+            this.state.linesToDelete.push(lineId);
+        }
+        this.state.selectedDelivery.full_lines = this.state.selectedDelivery.full_lines.filter(l => l.id !== lineId);
     }
 
-    async saveDeliveryChanges() {
+   async saveDeliveryChanges() {
         try {
-            // 1. Delete lines marked for removal
-            if (this.state.linesToDelete) {
+            if (this.state.linesToDelete && this.state.linesToDelete.length > 0) {
                 await this.orm.unlink("sale.order.line", this.state.linesToDelete);
                 this.state.linesToDelete = [];
             }
 
-            // 2. Process all lines (Update existing or Create new)
             for (const line of this.state.selectedDelivery.full_lines) {
+                if (!line.productId) {
+                    this.notification.add("Please select a product for all lines.", { type: "warning" });
+                    return;
+                }
+                
                 const vals = {
                     order_id: this.state.selectedDelivery.odoo_id,
                     product_id: parseInt(line.productId),
-                    product_uom_qty: parseFloat(line.qty),
-                    price_unit: parseFloat(line.price),
+                    product_uom_qty: parseFloat(line.qty) || 0,
+                    price_unit: parseFloat(line.price) || 0,
+                    // FIXED: Reverted payload key to plural 'tax_ids'
+                    tax_ids: line.tax_id ? [[6, 0, [parseInt(line.tax_id)]]] : [[5, 0, 0]]
                 };
 
-                if (line.id) {
-                    await this.orm.write("sale.order.line", [line.id], vals);
-                } else {
+                if (String(line.id).startsWith('new_')) {
                     await this.orm.create("sale.order.line", [vals]);
+                } else {
+                    await this.orm.write("sale.order.line", [line.id], vals);
                 }
             }
             
@@ -391,9 +444,7 @@ export class OperationsTracking extends Component {
             this.state.isEditingDelivery = false;
             this.notification.add("Order saved successfully.", { type: "success" });
         } catch (error) {
-            console.error("Save Error:", error);
-            // This alert shows the exact Odoo failure reason
-            alert("Failed to save: " + (error.data?.message || error.message));
+            this.notification.add("Failed to save: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
     // --- CUSTOM DELIVERY MODAL LOGIC ---
@@ -420,15 +471,15 @@ export class OperationsTracking extends Component {
                 }));
                 this.state.showDeliveryModal = true;
             } else {
-                alert("No pending deliveries found. The order may be fully delivered or lacks storable products.");
+                this.notification.add("No pending deliveries found. The order may be fully delivered or lacks storable products.", { type: "info" });
             }
         } catch(error) {
             const msg = error.data?.message || error.message;
             // Catch Odoo's cryptic empty stock error
             if (msg.includes("Nothing to check") || msg.includes("empty")) {
-                alert("This order is already 100% delivered! There is no pending stock left to process.");
+                this.notification.add("This order is already 100% delivered! There is no pending stock left to process.", { type: "warning" });
             } else {
-                alert("Failed to initialize delivery: " + msg);
+                this.notification.add("Failed to initialize delivery: " + msg, { type: "danger" });
             }
         }
     }
@@ -474,7 +525,7 @@ export class OperationsTracking extends Component {
             }
             
         } catch(error) {
-            alert("Failed to confirm delivery: " + (error.data?.message || error.message));
+            this.notification.add("Failed to confirm delivery: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
     // --- NAVIGATION & FILTERS ---
@@ -600,16 +651,25 @@ export class OperationsTracking extends Component {
             const lines = await this.orm.searchRead(
                 "sale.order.line",
                 [["id", "in", order.line_ids]],
-                ["name", "product_uom_qty", "product_uom_id", "price_unit", "price_subtotal"] 
+                // Added "tax_ids" to the requested fields
+                ["name", "product_uom_qty", "product_uom_id", "price_unit", "price_subtotal", "tax_ids"] 
             );
             
-            order.lines = lines.map(l => ({
-                product: l.name,
-                qty: l.product_uom_qty,
-                unit: l.product_uom_id ? l.product_uom_id[1] : 'Units',
-                price: l.price_unit.toLocaleString(undefined, {minimumFractionDigits: 2}),
-                subtotal: l.price_subtotal.toLocaleString(undefined, {minimumFractionDigits: 2})
-            }));
+            order.lines = lines.map(l => {
+                const taxIds = l.tax_ids || [];
+                const taxNames = taxIds.map(id => {
+                    const tax = this.state.saleTaxes.find(t => t.id === id);
+                    return tax ? tax.name : `Tax`;
+                }).join(', ');
+                return {
+                    product: l.name,
+                    qty: l.product_uom_qty,
+                    unit: l.product_uom_id ? l.product_uom_id[1] : 'Units',
+                    price: l.price_unit.toLocaleString(undefined, {minimumFractionDigits: 2}),
+                    taxes: taxNames || 'None',
+                    subtotal: l.price_subtotal.toLocaleString(undefined, {minimumFractionDigits: 2})
+                };
+            });
         }
 
         if (order.partner_id && order.phone === "Loading...") {

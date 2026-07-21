@@ -83,12 +83,11 @@
                                         <td class="fw-bold text-dark">
                                             <t t-esc="dlv.total"/>
                                         </td>
-                                        <td class="text-center">
-                                            <!-- CHANGED: Replaced hardcoded "Pending Delivery" with dynamic status -->
-                                            <span t-attf-class="badge #{dlv.status === 'Delivered' ? 'bg-success text-white' : 'bg-warning text-dark'} px-2 py-1 shadow-sm">
-                                                <t t-esc="dlv.status === 'Delivered' ? 'Delivered' : 'Pending Delivery'"/>
-                                            </span>
-                                        </td>
+                                       <td class="text-center">
+    <span t-attf-class="badge #{dlv.is_fully_delivered ? 'bg-success text-white' : 'bg-warning text-dark'} px-2 py-1 shadow-sm">
+        <t t-esc="dlv.is_fully_delivered ? 'Delivered' : 'Pending Delivery'"/>
+    </span>
+</td>
                                         <td class="text-end pe-4">
                                             <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewDelivery(dlv)">
                                                 View Order Details ➔
@@ -193,12 +192,11 @@
                                         </span>
                                     </div>
                                     <div class="d-flex mb-3 align-items-center">
-                                        <span class="text-muted small fw-bold text-uppercase w-25">Delivery Status</span>
-                                        <!-- CHANGED: Replaced hardcoded "To Deliver" with dynamic status -->
-                                        <span t-attf-class="badge #{this.state.selectedDelivery.status === 'Delivered' ? 'bg-success text-white' : 'bg-warning text-dark'} px-2 py-1">
-                                            <t t-esc="this.state.selectedDelivery.status === 'Delivered' ? 'Delivered' : 'To Deliver'"/>
-                                        </span>
-                                    </div>
+    <span class="text-muted small fw-bold text-uppercase w-25">Delivery Status</span>
+    <span t-attf-class="badge #{this.state.selectedDelivery.is_fully_delivered ? 'bg-success text-white' : 'bg-warning text-dark'} px-2 py-1">
+        <t t-esc="this.state.selectedDelivery.is_fully_delivered ? 'Delivered' : 'To Deliver'"/>
+    </span>
+</div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="d-flex mb-3 align-items-center">
@@ -217,9 +215,9 @@
                                 <thead class="bg-light text-muted small fw-bold text-uppercase">
                                     <tr>
                                         <th class="ps-4 py-3">Product</th>
-                                        <th class="text-end" style="width: 140px;">Quantity</th>
-                                        <th class="text-end" style="width: 100px;">Delivered</th>
-                                        <th class="text-end" style="width: 100px;">Invoiced</th>
+                                        <th class="text-center" style="width: 120px;">Quantity</th>
+                                        <th class="text-center" style="width: 100px;">Delivered</th>
+                                        <th class="text-center" style="width: 100px;">Invoiced</th>
                                         <th class="text-end" style="width: 140px;">Unit Price</th>
                                         <th class="text-center">Taxes</th>
                                         <th class="text-end pe-4" style="width: 150px;">Amount</th>
@@ -229,9 +227,10 @@
                                     <t t-foreach="this.state.selectedDelivery.full_lines || []" t-as="line" t-key="line.id">
                                         <tr t-attf-class="#{this.state.isEditingDelivery ? 'bg-light' : ''}">
                                             <!-- Product Dropdown -->
-                                            <td class="ps-4 fw-bold text-dark">
+                                            <td class="ps-4 fw-bold text-dark align-middle">
                                                 <t t-if="this.state.isEditingDelivery">
                                                     <select class="form-select form-select-sm shadow-sm" t-model="line.productId">
+                                                        <option value="">Select Product...</option>
                                                         <t t-foreach="this.state.allProducts" t-as="p" t-key="p.id">
                                                             <option t-att-value="p.id">
                                                                 <t t-esc="p.name"/>
@@ -244,31 +243,38 @@
                                                 </t>
                                             </td>
 
-                                            <!-- Qty / Unit Price / Taxes Inputs -->
-                                            <td class="text-end">
+                                            <td class="text-center align-middle">
                                                 <t t-if="this.state.isEditingDelivery">
-                                                    <input type="number" class="form-control form-control-sm text-end" t-model="line.qty"/>
+                                                    <input type="number" class="form-control form-control-sm text-center shadow-sm" t-model="line.qty"/>
                                                 </t>
                                                 <t t-else="">
                                                     <t t-esc="line.qty"/>
                                                 </t>
                                             </td>
 
-                                            <td class="text-end">
+                                            <td class="text-center align-middle text-primary fw-bold">
+                                                <t t-esc="line.delivered"/>
+                                            </td>
+
+                                            <td class="text-center align-middle text-success fw-bold">
+                                                <t t-esc="line.invoiced"/>
+                                            </td>
+
+                                            <td class="text-end align-middle">
                                                 <t t-if="this.state.isEditingDelivery">
-                                                    <input type="number" class="form-control form-control-sm text-end" t-model="line.price"/>
+                                                    <input type="number" step="any" class="form-control form-control-sm text-end shadow-sm" t-model="line.price"/>
                                                 </t>
                                                 <t t-else="">Rs. <t t-esc="line.price"/>
                                                 </t>
                                             </td>
 
-                                            <td class="text-center">
+                                            <td class="text-center align-middle">
                                                 <t t-if="this.state.isEditingDelivery">
-                                                    <select class="form-select form-select-sm" t-model="line.tax_id">
+                                                    <select class="form-select form-select-sm shadow-sm" t-model="line.tax_id">
                                                         <option value="">None</option>
                                                         <t t-foreach="this.state.saleTaxes" t-as="tax" t-key="tax.id">
                                                             <option t-att-value="tax.id">
-                                                                <t t-esc="tax.label"/>
+                                                                <t t-esc="tax.name"/>
                                                             </option>
                                                         </t>
                                                     </select>
@@ -279,12 +285,27 @@
                                                     </span>
                                                 </t>
                                             </td>
-                                            <td class="text-end pe-4">
+                                            
+                                            <td class="text-end pe-4 align-middle fw-bold text-dark">
                                                 <t t-if="this.state.isEditingDelivery">
-                                                    <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.removeDeliveryLine(line_index, line)">
+                                                    <button class="btn btn-sm btn-outline-danger shadow-sm" t-on-click="() => this.removeDeliveryLine(line.id)" title="Remove Product">
                                                         <i class="fa fa-trash"></i>
                                                     </button>
                                                 </t>
+                                                <t t-else="">
+                                                    Rs. <t t-esc="line.subtotal"/>
+                                                </t>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                    
+                                    <!-- ADD PRODUCT ROW -->
+                                    <t t-if="this.state.isEditingDelivery">
+                                        <tr>
+                                            <td colspan="7" class="ps-4 py-3 border-bottom-0">
+                                                <button class="btn btn-sm btn-outline-primary fw-bold shadow-sm" t-on-click="addDeliveryLine">
+                                                    <i class="fa fa-plus me-1"></i> Add Product
+                                                </button>
                                             </td>
                                         </tr>
                                     </t>
@@ -707,6 +728,7 @@
                 <th class="ps-4">Product Description</th>
                 <th class="text-center">Quantity</th>
                 <th class="text-end">Unit Price</th>
+                <th class="text-center">Taxes</th>
                 <th class="text-end pe-4">Subtotal</th>
             </tr>
         </thead>
@@ -729,6 +751,7 @@
                     </td>
                     <td class="text-end">Rs. <t t-esc="line.price"/>
                     </td>
+                    <td class="text-center"><span class="badge bg-light border text-dark"><t t-esc="line.taxes"/></span></td>
                     <td class="text-end pe-4 fw-bold">Rs. <t t-esc="line.subtotal"/>
                     </td>
                 </tr>
@@ -1210,7 +1233,7 @@
 <div class="card border-0 shadow-lg rounded-4 overflow-hidden" style="width: 100%; max-width: 750px; animation: fadeIn 0.2s ease-out;">
 
 <div class="bg-primary text-white p-4 d-flex justify-content-between align-items-center">
-<h5 class="mb-0 fw-bold d-flex align-items-center">
+<h5 class="mb-0 fw-bold text-white d-flex align-items-center">
 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-truck me-2">
     <path d="M10 17h4V5H2v12h3"/>
     <path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5"/>
@@ -1264,9 +1287,6 @@
 </div>
 
 <div class="d-flex justify-content-between align-items-center">
-<button class="btn btn-outline-secondary fw-bold px-4 shadow-sm d-flex align-items-center" t-on-click="deliverAllRemaining">
-    <i class="fa fa-check-square-o me-2"></i> Deliver All Remaining
-</button>
 <div class="d-flex gap-2">
     <button class="btn btn-light fw-bold px-4 border shadow-sm" t-on-click="closeDeliveryModal">Cancel</button>
     <button class="btn btn-success fw-bold px-4 shadow-sm text-white d-flex align-items-center" t-on-click="confirmDeliveryCustom">

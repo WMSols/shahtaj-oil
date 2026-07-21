@@ -1,13 +1,16 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart,onWillUpdateProps } from "@odoo/owl";
+import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
+import { ConfirmModal } from "./confirm_modal"; // FIXED: Missing import
 
 export class FinancialsInvoicing extends Component {
+    static components = { ConfirmModal }; // FIXED: Component registration
     static props = {
         requestedSubTab: { type: String, optional: true },
     };
     setup() {
+        this.notification = useService("notification");
         this.orm = useService("orm");
         this.action = useService("action");
         const today = new Date();
@@ -23,7 +26,6 @@ export class FinancialsInvoicing extends Component {
             
             selectedOrder: null, 
             selectedOrderLines: [], 
-            
             selectedInvoice: null,
             selectedInvoiceLines: [],
             isEditingInvoice: false,
@@ -36,12 +38,12 @@ export class FinancialsInvoicing extends Component {
             isCancelling: false,
             isPaying: false,
             isRefunding: false,
+            isLoadingLines: false,
 
             selectedPayment: null,
             selectedShop: null,
             
             showPaymentModal: false,
-            paymentForm: { journal_id: '', amount: 0, date: '', invoice_id: null, invoice_name: '' },
 
             showRefundModal: false,
             refundForm: { date: '', reason: '' },
@@ -49,7 +51,7 @@ export class FinancialsInvoicing extends Component {
             journals: [], 
             products: [], // Loaded for the edit dropdown
             removedLineIds: [], // Tracks deleted invoice lines during edit
-            
+            availableTaxes: [],
             
             allOrders: [],
             orders: [],
@@ -79,7 +81,7 @@ export class FinancialsInvoicing extends Component {
                 balances: { search: '' },
                 credits: { search: '', status: 'all' }
             },
-            // --- NEW: Payment Form Fields ---
+            // --- Payment Form Fields ---
             paymentForm: { 
                 journal_id: '', 
                 amount: 0, 
@@ -207,7 +209,6 @@ export class FinancialsInvoicing extends Component {
 
     // --- GLOBAL DATA FETCHER ---
     async fetchRealData() {
-        // Fetch standard data...
         try {
             const allOrdersData = await this.orm.searchRead(
                 "sale.order",
@@ -242,7 +243,6 @@ export class FinancialsInvoicing extends Component {
                 }
                 return {
                     id: inv.id, display_name: (inv.name && inv.name !== '/') ? inv.name : `Draft Invoice (*${inv.id})`, shop: inv.partner_id ? inv.partner_id[1] : 'Unknown',
-                    // NEW TAX FIELDS
                     untaxedAmount: (inv.amount_untaxed || 0).toLocaleString(),
                     taxAmount: (inv.amount_tax || 0).toLocaleString(),
                     date: inv.invoice_date || 'Not set', amount: (inv.amount_total || 0).toLocaleString(), rawAmount: inv.amount_total || 0,
@@ -251,12 +251,21 @@ export class FinancialsInvoicing extends Component {
                 };
             });
         } catch (error) { console.error("Invoices Fetch Error:", error); }
-
+        
+        const taxes = await this.orm.searchRead(
+            "account.tax",
+            [["type_tax_use", "=", "sale"], ["active", "=", true]],
+            ["id", "name", "amount"]
+        );
+        this.state.availableTaxes = taxes;
+        const prods = await this.orm.searchRead("product.product", [["sale_ok", "=", true]], ["id", "name"]);
+        this.state.allProducts = prods;
+        
         try {
             const creditNotesData = await this.orm.searchRead(
                 "account.move",
                 [["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]],
-                ["name", "partner_id", "invoice_date","invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"]
+                ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"]
             );
             this.state.creditNotes = creditNotesData.map(cn => {
                 let status = 'Draft';
@@ -268,7 +277,6 @@ export class FinancialsInvoicing extends Component {
                 }
                 return {
                     id: cn.id, display_name: (cn.name && cn.name !== '/') ? cn.name : `Draft Refund (*${cn.id})`, shop: cn.partner_id ? cn.partner_id[1] : 'Unknown',
-                    // NEW TAX FIELDS
                     untaxedAmount: (cn.amount_untaxed || 0).toLocaleString(),
                     taxAmount: (cn.amount_tax || 0).toLocaleString(),
                     date: cn.invoice_date || 'Not set', amount: (cn.amount_total || 0).toLocaleString(), rawAmount: cn.amount_total || 0,
@@ -280,7 +288,6 @@ export class FinancialsInvoicing extends Component {
 
         try { this.state.journals = await this.orm.searchRead("account.journal", [["type", "in", ["bank", "cash"]]], ["name", "type"]); } catch (error) {}
 
-        // Pre-fetch saleable products for the edit dropdown
         try {
             const prodData = await this.orm.searchRead("product.product", [["sale_ok", "=", true]], ["id", "display_name"]);
             this.state.products = prodData.map(p => ({ id: p.id, name: p.display_name }));
@@ -343,6 +350,13 @@ export class FinancialsInvoicing extends Component {
         };
         // NEW: Load initial P&L data
         await this.fetchPnlData();
+    }
+  
+
+    // Add this too if you don't already have a way to close the detailed view
+    closeCreditNote() {
+        this.state.selectedCreditNote = null;
+        this.state.selectedCreditNoteLines = [];
     }
     // --- PROFIT & LOSS DASHBOARD FETCHER ---
     async fetchPnlData() {
@@ -448,7 +462,6 @@ export class FinancialsInvoicing extends Component {
     }
 
     _refreshSelectedInvoiceState(invoiceId) {
-        // Ensures the UI updates seamlessly without going back to the list
         let updatedInv = this.state.invoices.find(i => i.id === invoiceId);
         if (!updatedInv) updatedInv = this.state.creditNotes.find(i => i.id === invoiceId);
         if (updatedInv) this.state.selectedInvoice = updatedInv;
@@ -457,56 +470,96 @@ export class FinancialsInvoicing extends Component {
     async viewOrder(order) { 
         this.state.selectedOrder = order; 
         this.state.selectedOrderLines = []; 
+        this.state.isLoadingLines = true; // Block UI while fetching
+
         try {
-            const linesData = await this.orm.searchRead(
-                "sale.order.line", [["order_id", "=", order.id], ["display_type", "=", false]], 
-                ["product_id", "product_uom_qty", "qty_delivered", "qty_invoiced", "price_unit", "price_subtotal"]
+            const lines = await this.orm.searchRead(
+                "sale.order.line",
+                [["order_id", "=", order.odoo_id || order.id]],
+                ["name", "product_uom_qty", "qty_delivered", "qty_invoiced", "price_unit", "price_subtotal", "tax_ids"]
             );
-            this.state.selectedOrderLines = linesData.map(l => ({
-                id: l.id, product: l.product_id ? l.product_id[1] : 'Unknown Product', qty: l.product_uom_qty,
-                delivered: l.qty_delivered, invoiced: l.qty_invoiced, price: (l.price_unit || 0).toLocaleString(), subtotal: (l.price_subtotal || 0).toLocaleString()
-            }));
-        } catch (error) {}
+            
+            this.state.selectedOrderLines = lines.map(l => {
+                const taxIds = l.tax_ids || [];
+                const taxNames = taxIds.map(id => {
+                    const tax = this.state.availableTaxes.find(t => t.id === id);
+                    return tax ? tax.name : `Tax`;
+                }).join(', ');
+
+                return {
+                    id: l.id,
+                    product: l.name,
+                    qty: l.product_uom_qty,
+                    delivered: l.qty_delivered,
+                    invoiced: l.qty_invoiced,
+                    price: l.price_unit,
+                    taxes: taxNames || 'None', 
+                    subtotal: l.price_subtotal
+                };
+            });
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        } finally {
+            this.state.isLoadingLines = false;
+        }
     }
     
    async viewInvoice(invoice) {
         this.state.selectedInvoice = invoice;
         this.state.isEditingInvoice = false;
+        this.state.isLoadingLines = true; 
 
-        // Grab the correct integer database ID
-        const invoiceDbId = invoice.odoo_id || invoice.id;
+        try {
+            const invoiceDbId = invoice.odoo_id || invoice.id;
 
-        // 1. Fetch the invoice lines
-        const lines = await this.orm.searchRead(
-            "account.move.line",
-            [
-                ["move_id", "=", invoiceDbId],
-                ["display_type", "=", "product"] // Only get actual product lines
-            ],
-            ["id", "name", "quantity", "price_unit", "tax_ids", "price_subtotal"]
-        );
+            const lines = await this.orm.searchRead(
+                "account.move.line",
+                [
+                    ["move_id", "=", invoiceDbId],
+                    ["display_type", "=", "product"] 
+                ],
+                ["id", "name", "product_id", "quantity", "price_unit", "tax_ids", "price_subtotal"]
+            );
 
-        // 2. Map the lines to include the taxes text
-        this.state.selectedInvoice.full_lines = lines.map(l => ({
-            id: l.id,
-            product: l.name,
-            qty: l.quantity,
-            price: l.price_unit,
-            taxes: l.tax_ids && l.tax_ids.length > 0 ? `${l.tax_ids.length} Taxes` : 'None',
-            subtotal: l.price_subtotal
-        }));
+            const mappedLines = lines.map(l => {
+                const taxIds = l.tax_ids || [];
+                const taxNames = taxIds.map(id => {
+                    const tax = this.state.availableTaxes.find(t => t.id === id);
+                    return tax ? tax.name : `Tax`;
+                }).join(', ');
 
-        // 3. Fetch the invoice totals (Untaxed, Tax, Total)
-        const moveData = await this.orm.read(
-            "account.move", 
-            [invoiceDbId], 
-            ["amount_untaxed", "amount_tax", "amount_total"]
-        );
-        
-        if (moveData.length > 0) {
-            this.state.selectedInvoice.amount_untaxed = moveData[0].amount_untaxed;
-            this.state.selectedInvoice.amount_tax = moveData[0].amount_tax;
-            this.state.selectedInvoice.amount_total = moveData[0].amount_total;
+                return {
+                    id: l.id,
+                    product_id: l.product_id ? l.product_id[0] : null, // Used by credit notes edit view
+                    productId: l.product_id ? l.product_id[0] : null,   // Used by invoices edit view
+                    product: l.name,
+                    qty: l.quantity,
+                    price: l.price_unit,
+                    tax_id: taxIds.length > 0 ? taxIds[0] : "", 
+                    taxes: taxNames || 'None',
+                    subtotal: l.price_subtotal
+                };
+            });
+
+            // FIX: Populate BOTH variables so whichever one your XML table looks at, it finds the data
+            this.state.selectedInvoice.full_lines = mappedLines;
+            this.state.selectedInvoiceLines = mappedLines;
+            
+            const moveData = await this.orm.read(
+                "account.move", 
+                [invoiceDbId], 
+                ["amount_untaxed", "amount_tax", "amount_total"]
+            );
+            
+            if (moveData.length > 0) {
+                this.state.selectedInvoice.amount_untaxed = moveData[0].amount_untaxed;
+                this.state.selectedInvoice.amount_tax = moveData[0].amount_tax;
+                this.state.selectedInvoice.amount_total = moveData[0].amount_total;
+            }
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        } finally {
+            this.state.isLoadingLines = false; 
         }
     }
     viewPayment(payment) { this.state.selectedPayment = payment; }
@@ -560,63 +613,93 @@ export class FinancialsInvoicing extends Component {
         });
     }
 
-    // --- FULL INVOICE LINE EDITING ---
     toggleEditInvoice() { 
         this.state.isEditingInvoice = true; 
         this.state.removedLineIds = [];
+        
+        // Populate editable array for credit notes
+        if(this.state.invoiceSubTab === 'credit_notes') {
+             this.state.selectedInvoiceLines = [...this.state.selectedInvoice.full_lines];
+        }
     }
     
     cancelEditInvoice() { 
         this.state.isEditingInvoice = false; 
-        this.viewInvoice(this.state.selectedInvoice); // Revert changes
+        this.viewInvoice(this.state.selectedInvoice); 
     }
 
     addLine() {
-        this.state.selectedInvoiceLines.push({
+        const newLine = {
             id: 'new_' + Date.now(),
             product_id: '',
+            productId: '',
             product: '',
             qty: 1,
             price: 0,
+            tax_id: "",
+            taxes: 'None',
             subtotal: 0
-        });
+        };
+        
+        if (this.state.invoiceSubTab === 'credit_notes') {
+            this.state.selectedInvoiceLines.push(newLine);
+        } else {
+            this.state.selectedInvoice.full_lines.push(newLine);
+        }
     }
 
-    removeLine(lineId) {
-        if (this.state.selectedInvoiceLines.length <= 1) {
+    removeLine(lineIdOrIndex, lineObj) {
+        const linesArray = this.state.invoiceSubTab === 'credit_notes' 
+            ? this.state.selectedInvoiceLines 
+            : this.state.selectedInvoice.full_lines;
+            
+        if (linesArray.length <= 1) {
             alert("An invoice must have at least one product line.");
             return;
         }
-        if (!String(lineId).startsWith('new_')) {
-            this.state.removedLineIds.push(lineId); // Queue for backend deletion
+
+        const idToCheck = lineObj ? lineObj.id : lineIdOrIndex;
+        
+        if (idToCheck && !String(idToCheck).startsWith('new_')) {
+            this.state.removedLineIds.push(idToCheck); 
         }
-        this.state.selectedInvoiceLines = this.state.selectedInvoiceLines.filter(l => l.id !== lineId);
+
+        if (this.state.invoiceSubTab === 'credit_notes') {
+            this.state.selectedInvoiceLines = this.state.selectedInvoiceLines.filter(l => l.id !== idToCheck);
+        } else {
+            this.state.selectedInvoice.full_lines.splice(lineIdOrIndex, 1);
+        }
     }
 
     async saveInvoiceEdits() {
         this.state.isSavingInvoice = true;
         try {
             const commands = [];
-            // Delete removed lines
             for (const id of this.state.removedLineIds) {
                 commands.push([2, id, false]);
             }
-            // Add or Update remaining lines
-            for (const line of this.state.selectedInvoiceLines) {
-                if (!line.product_id) {
+            
+            const linesToSave = this.state.invoiceSubTab === 'credit_notes' 
+                ? this.state.selectedInvoiceLines 
+                : this.state.selectedInvoice.full_lines;
+
+            for (const line of linesToSave) {
+                const prodId = line.productId || line.product_id;
+                if (!prodId) {
                     alert("Please select a product for all lines.");
                     this.state.isSavingInvoice = false;
                     return;
                 }
                 const vals = {
-                    product_id: parseInt(line.product_id),
+                    product_id: parseInt(prodId),
                     quantity: parseFloat(line.qty) || 1,
-                    price_unit: parseFloat(line.price) || 0
+                    price_unit: parseFloat(line.price) || 0,
+                    tax_ids: line.tax_id ? [[6, 0, [parseInt(line.tax_id)]]] : [[5, 0, 0]]
                 };
                 if (String(line.id).startsWith('new_')) {
-                    commands.push([0, 0, vals]); // Create new
+                    commands.push([0, 0, vals]); 
                 } else {
-                    commands.push([1, line.id, vals]); // Update existing
+                    commands.push([1, line.id, vals]); 
                 }
             }
 
@@ -627,7 +710,7 @@ export class FinancialsInvoicing extends Component {
             this.state.isEditingInvoice = false;
             await this.fetchRealData();
             this._refreshSelectedInvoiceState(this.state.selectedInvoice.id);
-            await this.viewInvoice(this.state.selectedInvoice); // Reload fresh totals and DB IDs
+            await this.viewInvoice(this.state.selectedInvoice); 
         } catch (error) {
             alert("Failed to save invoice edits: " + (error.data?.message || error.message));
         }
@@ -698,7 +781,6 @@ export class FinancialsInvoicing extends Component {
                 journal_id: parseInt(form.journal_id),
                 amount: parseFloat(form.amount),
                 payment_date: form.date,
-                // --- NEW PAYLOAD DATA ---
                 shahtaj_payment_channel: form.method,
                 shahtaj_payer_bank_name: form.method === 'cheque' ? form.bank_name : false,
                 shahtaj_payer_account_number: form.method === 'cheque' ? form.account_number : false,
