@@ -345,13 +345,13 @@
                                             </td>
                                         </tr>
                                     </t>
-                                    <t t-elif="this.state.selectedOrderLines.length === 0">
+                                    <!-- <t t-elif="this.state.selectedOrderLines.length === 0">
                                         <tr>
                                             <td colspan="7" class="text-center py-4 text-muted">
                                                 <i class="fa fa-exclamation-circle me-2"></i> No order lines found.
                                             </td>
                                         </tr>
-                                    </t>
+                                    </t> -->
                                     <t t-foreach="this.filteredOrders" t-as="ord" t-key="ord.id">
                                         <tr>
                                             <td class="ps-4 fw-bold text-primary">
