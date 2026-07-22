@@ -2,10 +2,12 @@
 
 import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
+import { hasFinancialAccess } from "../shahtaj_access";
 import { ConfirmModal } from "./confirm_modal"; // FIXED: Missing import
+import { BankTransactions } from "./bank_transactions";
 
 export class FinancialsInvoicing extends Component {
-    static components = { ConfirmModal }; // FIXED: Component registration
+    static components = { ConfirmModal, BankTransactions };
     static props = {
         requestedSubTab: { type: String, optional: true },
     };
@@ -18,11 +20,15 @@ export class FinancialsInvoicing extends Component {
         const formatDate = (d) => d.toISOString().split('T')[0];
         // 2. SMART INITIALIZATION
         const target = this.props.requestedSubTab || 'invoices';
-        const initActive = target === 'credit' ? 'credit' : 'invoices';
-        const initInvoice = (target === 'credit' || target === 'invoices') ? 'all_orders' : target;
+        const topLevelTabs = ['credit', 'pnl', 'money', 'cash'];
+        const initActive = topLevelTabs.includes(target) ? target : 'invoices';
+        const initInvoice = (target === 'credit' || target === 'pnl' || target === 'money' || target === 'cash' || target === 'invoices')
+            ? 'all_orders'
+            : target;
         this.state = useState({
             activeSubTab: initActive,
             invoiceSubTab: initInvoice,
+            cashDirection: 'all',
             
             selectedOrder: null, 
             selectedOrderLines: [], 
@@ -69,6 +75,18 @@ export class FinancialsInvoicing extends Component {
                 isLoading: false,
                 selectedProductLineId: ''
             },
+            money: {
+                date_from: formatDate(firstDay),
+                date_to: formatDate(today),
+                isLoading: false,
+                collected: 0,
+                paidOut: 0,
+                netCash: 0,
+                stillOwed: 0,
+                openInvoiceAmount: 0,
+                paymentCountIn: 0,
+                paymentCountOut: 0,
+            },
             
             stats: { totalOrders: 0, toInvoice: 0, openInvoices: 0, creditNotes: 0, approvedShops: 0 },
 
@@ -102,9 +120,14 @@ export class FinancialsInvoicing extends Component {
             if (nextProps.requestedSubTab) {
                 const req = nextProps.requestedSubTab;
                 
-                // Elevate both Credit and P&L to main isolated views
-                if (req === 'credit' || req === 'pnl') {
+                if (['credit', 'pnl', 'money', 'cash'].includes(req)) {
                     this.state.activeSubTab = req;
+                    if (req === 'money') {
+                        this.loadMoneyOverview();
+                    }
+                    if (req === 'cash') {
+                        this.state.cashDirection = 'all';
+                    }
                 } 
                 // Everything else belongs inside the Invoice Management parent
                 else {
@@ -116,7 +139,52 @@ export class FinancialsInvoicing extends Component {
         });
 
         onWillStart(async () => {
+            if (!hasFinancialAccess()) {
+                return;
+            }
             await this.fetchRealData();
+            if (this.state.activeSubTab === 'money') {
+                await this.loadMoneyOverview();
+            }
+        });
+    }
+    // --- NEW: Core Methods ---
+    async refreshData() {
+        this.state.isRefreshing = true;
+        try {
+            await this.fetchRealData();
+            if (this.state.activeSubTab === 'money') {
+                await this.loadMoneyOverview();
+            }
+        } finally {
+            this.state.isRefreshing = false;
+        }
+    }
+
+    showConfirm(title, message, onConfirmCallback) {
+        this.state.confirmModal = {
+            isOpen: true,
+            title: title,
+            message: message,
+            onConfirm: async () => {
+                this.state.confirmModal.isOpen = false;
+                if (onConfirmCallback) await onConfirmCallback();
+            }
+        };
+    }
+
+    closeConfirm() {
+        this.state.confirmModal.isOpen = false;
+    }
+
+    // --- DYNAMIC FILTER GETTERS ---
+    get filteredAllOrders() {
+        const query = this.state.filters.allOrders.search.toLowerCase();
+        const status = this.state.filters.allOrders.status;
+        return this.state.allOrders.filter(o => {
+            const matchesSearch = !query || o.display_name.toLowerCase().includes(query) || o.shop.toLowerCase().includes(query);
+            const matchesStatus = status === 'all' || o.status === status;
+            return matchesSearch && matchesStatus;
         });
     }
     // --- NEW: Core Methods ---
@@ -324,7 +392,8 @@ export class FinancialsInvoicing extends Component {
             this.state.balances = shopsData.map(shop => ({
                 id: shop.id, shopId: shop.id, shop: shop.name, owner: shop.owner_name || 'N/A', route: shop.route_id ? shop.route_id[1] : 'Unassigned',
                 category: shop.shahtaj_shop_category === 'cash' ? 'Cash' : 'Credit', limit: shop.shahtaj_shop_category === 'cash' ? 'N/A' : (shop.credit_limit || 0).toLocaleString(),
-                rawLimit: shop.credit_limit || 0, outstanding: (shop.credit || 0).toLocaleString(), 
+                rawLimit: shop.credit_limit || 0, outstanding: (shop.credit || 0).toLocaleString(),
+                rawOutstanding: shop.credit || 0, 
             }));
 
             this.state.credits = shopsData.map(shop => {
@@ -448,6 +517,218 @@ export class FinancialsInvoicing extends Component {
 
     setSubTab(tabName) { this.state.activeSubTab = tabName; this.resetDetailViews(); }
     setInvoiceSubTab(subTabName) { this.state.invoiceSubTab = subTabName; this.resetDetailViews(); }
+    
+    resetDetailViews() {
+        this.state.selectedInvoice = null;
+        this.state.selectedInvoiceLines = [];
+        this.state.isEditingInvoice = false;
+        this.state.selectedOrder = null;
+        this.state.selectedOrderLines = []; 
+        this.state.selectedPayment = null;
+        this.state.selectedShop = null;
+        this.closePaymentModal();
+        this.closeRefundModal();
+    }
+
+    _refreshSelectedInvoiceState(invoiceId) {
+        let updatedInv = this.state.invoices.find(i => i.id === invoiceId);
+        if (!updatedInv) updatedInv = this.state.creditNotes.find(i => i.id === invoiceId);
+        if (updatedInv) this.state.selectedInvoice = updatedInv;
+    }
+  
+
+    async viewOrder(order) { 
+        this.state.selectedOrder = order; 
+        this.state.selectedOrderLines = []; 
+        this.state.isLoadingLines = true; // Block UI while fetching
+
+        try {
+            const lines = await this.orm.searchRead(
+                "sale.order.line",
+                [["order_id", "=", order.odoo_id || order.id]],
+                ["name", "product_uom_qty", "qty_delivered", "qty_invoiced", "price_unit", "price_subtotal", "tax_ids"]
+            );
+            
+            this.state.selectedOrderLines = lines.map(l => {
+                const taxIds = l.tax_ids || [];
+                const taxNames = taxIds.map(id => {
+                    const tax = this.state.availableTaxes.find(t => t.id === id);
+                    return tax ? tax.name : `Tax`;
+                }).join(', ');
+
+                return {
+                    id: l.id,
+                    product: l.name,
+                    qty: l.product_uom_qty,
+                    delivered: l.qty_delivered,
+                    invoiced: l.qty_invoiced,
+                    price: l.price_unit,
+                    taxes: taxNames || 'None', 
+                    subtotal: l.price_subtotal
+                };
+            });
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        } finally {
+            this.state.isLoadingLines = false;
+        }
+    }
+    
+   async viewInvoice(invoice) {
+        this.state.selectedInvoice = invoice;
+        this.state.isEditingInvoice = false;
+        this.state.isLoadingLines = true; 
+
+        try {
+            const invoiceDbId = invoice.odoo_id || invoice.id;
+
+            const lines = await this.orm.searchRead(
+                "account.move.line",
+                [
+                    ["move_id", "=", invoiceDbId],
+                    ["display_type", "=", "product"] 
+                ],
+                ["id", "name", "product_id", "quantity", "price_unit", "tax_ids", "price_subtotal"]
+            );
+
+            const mappedLines = lines.map(l => {
+                const taxIds = l.tax_ids || [];
+                const taxNames = taxIds.map(id => {
+                    const tax = this.state.availableTaxes.find(t => t.id === id);
+                    return tax ? tax.name : `Tax`;
+                }).join(', ');
+
+                return {
+                    id: l.id,
+                    product_id: l.product_id ? l.product_id[0] : null, // Used by credit notes edit view
+                    productId: l.product_id ? l.product_id[0] : null,   // Used by invoices edit view
+                    product: l.name,
+                    qty: l.quantity,
+                    price: l.price_unit,
+                    tax_id: taxIds.length > 0 ? taxIds[0] : "", 
+                    taxes: taxNames || 'None',
+                    subtotal: l.price_subtotal
+                };
+            });
+
+            // FIX: Populate BOTH variables so whichever one your XML table looks at, it finds the data
+            this.state.selectedInvoice.full_lines = mappedLines;
+            this.state.selectedInvoiceLines = mappedLines;
+            
+            const moveData = await this.orm.read(
+                "account.move", 
+                [invoiceDbId], 
+                ["amount_untaxed", "amount_tax", "amount_total"]
+            );
+            
+            if (moveData.length > 0) {
+                this.state.selectedInvoice.amount_untaxed = moveData[0].amount_untaxed;
+                this.state.selectedInvoice.amount_tax = moveData[0].amount_tax;
+                this.state.selectedInvoice.amount_total = moveData[0].amount_total;
+            }
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        } finally {
+            this.state.isLoadingLines = false; 
+        }
+    }
+    viewPayment(payment) { this.state.selectedPayment = payment; }
+    viewShop(shop) { this.state.selectedShop = { ...shop }; }
+
+    async triggerCreateInvoice(order) {
+        this.state.isCreatingInvoice = true;
+        try {
+            const context = { active_model: 'sale.order', active_ids: [order.id] };
+            const wizardIds = await this.orm.create("sale.advance.payment.inv", [{ advance_payment_method: 'delivered' }], { context });
+            await this.orm.call("sale.advance.payment.inv", "create_invoices", [wizardIds], { context });
+            await this.fetchRealData();
+            this.setInvoiceSubTab('customer_invoices');
+        } catch (error) { 
+            alert(`Backend rejected the invoice creation:\n\n${error.data?.message || error.message}`);
+        }
+        this.state.isCreatingInvoice = false;
+    }
+
+    setSubTab(tabName) {
+        this.state.activeSubTab = tabName;
+        this.resetDetailViews();
+        if (tabName === 'money') {
+            this.loadMoneyOverview();
+        }
+        if (tabName === 'cash') {
+            this.state.cashDirection = this.state.cashDirection || 'all';
+        }
+    }
+    setInvoiceSubTab(subTabName) { this.state.invoiceSubTab = subTabName; this.resetDetailViews(); }
+
+    async loadMoneyOverview() {
+        this.state.money.isLoading = true;
+        try {
+            const from = this.state.money.date_from;
+            const to = this.state.money.date_to;
+            const payments = await this.orm.searchRead(
+                "account.payment",
+                [
+                    ["journal_id.type", "in", ["bank", "cash"]],
+                    ["date", ">=", from],
+                    ["date", "<=", to],
+                    ["state", "in", ["paid", "in_process", "posted", "reconciled"]],
+                ],
+                ["amount", "amount_signed", "payment_type"]
+            );
+
+            let collected = 0;
+            let paidOut = 0;
+            let paymentCountIn = 0;
+            let paymentCountOut = 0;
+            for (const payment of payments) {
+                const amount = Math.abs(payment.amount_signed || payment.amount || 0);
+                if (payment.payment_type === "outbound") {
+                    paidOut += amount;
+                    paymentCountOut += 1;
+                } else {
+                    collected += amount;
+                    paymentCountIn += 1;
+                }
+            }
+
+            const stillOwed = this.state.balances.reduce(
+                (sum, shop) => sum + (shop.rawOutstanding || 0),
+                0
+            );
+            const openInvoiceAmount = this.state.invoices
+                .filter((inv) => inv.status === "Posted" || inv.status === "Partial")
+                .reduce((sum, inv) => sum + (inv.rawResidual || 0), 0);
+
+            this.state.money.collected = collected;
+            this.state.money.paidOut = paidOut;
+            this.state.money.netCash = collected - paidOut;
+            this.state.money.stillOwed = stillOwed;
+            this.state.money.openInvoiceAmount = openInvoiceAmount;
+            this.state.money.paymentCountIn = paymentCountIn;
+            this.state.money.paymentCountOut = paymentCountOut;
+        } catch (error) {
+            console.error("Money Overview Fetch Error:", error);
+            alert("Failed to load money overview: " + (error.data?.message || error.message));
+        } finally {
+            this.state.money.isLoading = false;
+        }
+    }
+
+    openCashActivity(direction = "all") {
+        this.state.cashDirection = direction || "all";
+        this.setSubTab("cash");
+    }
+
+    openShopBalancesFromMoney() {
+        this.state.activeSubTab = "invoices";
+        this.setInvoiceSubTab("balances");
+    }
+
+    openCreditNotesFromMoney() {
+        this.state.activeSubTab = "invoices";
+        this.setInvoiceSubTab("credit_notes");
+    }
     
     resetDetailViews() {
         this.state.selectedInvoice = null;

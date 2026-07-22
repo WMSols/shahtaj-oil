@@ -88,9 +88,9 @@
                         <div t-attf-class="smooth-accordion #{this.state.expandedMenus.warehouse ? 'open' : ''}">
                             <div class="smooth-accordion-inner">
                                 <div class="d-flex flex-column ps-4 mt-1 pe-2 gap-1 border-start ms-3 border-2 border-light mb-1">
-                                    <button t-on-click="() => this.switchTab('warehouse', 'inventory')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'warehouse' and this.state.activeSubTab === 'inventory' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Product List</button>
+                                    <button t-if="this.hasFinancialAccess" t-on-click="() => this.switchTab('warehouse', 'inventory')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'warehouse' and this.state.activeSubTab === 'inventory' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Product List</button>
                                     <button t-on-click="() => this.switchTab('warehouse', 'management')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'warehouse' and this.state.activeSubTab === 'management' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Stock Overview</button>
-                                    <button t-on-click="() => this.switchTab('warehouse', 'taxes')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'warehouse' and this.state.activeSubTab === 'taxes' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Sales Taxes</button>
+                                    <button t-if="this.hasFinancialAccess" t-on-click="() => this.switchTab('warehouse', 'taxes')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'warehouse' and this.state.activeSubTab === 'taxes' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Sales Taxes</button>
                                 </div>
                             </div>
                         </div>
@@ -124,8 +124,8 @@
                         </div>
                     </div>
 
-                    <div class="mb-2">
-                        <button t-on-click="() => this.toggleMenu('financials', 'invoices')" class="list-group-item list-group-item-action border-0 rounded text-start d-flex align-items-center justify-content-between transition-all w-100" t-att-style="this.state.activeTab === 'financials' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
+                    <div class="mb-2" t-if="this.hasFinancialAccess">
+                        <button t-on-click="() => this.toggleMenu('financials', 'money')" class="list-group-item list-group-item-action border-0 rounded text-start d-flex align-items-center justify-content-between transition-all w-100" t-att-style="this.state.activeTab === 'financials' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
                             <div class="d-flex align-items-center">
                                 <span class="me-3 d-flex align-items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-dollar-sign">
@@ -145,6 +145,8 @@
                         <div t-attf-class="smooth-accordion #{this.state.expandedMenus.financials ? 'open' : ''}">
                             <div class="smooth-accordion-inner">
                                 <div class="d-flex flex-column ps-4 mt-1 pe-2 gap-1 border-start ms-3 border-2 border-light mb-1">
+                                    <button t-on-click="() => this.switchTab('financials', 'money')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'financials' and this.state.activeSubTab === 'money' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Money Overview</button>
+                                    <button t-on-click="() => this.switchTab('financials', 'cash')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'financials' and this.state.activeSubTab === 'cash' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Cash Activity</button>
                                     <button t-on-click="() => this.switchTab('financials', 'invoices')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'financials' and this.state.activeSubTab === 'invoices' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Invoice Management</button>
                                     <button t-on-click="() => this.switchTab('financials', 'credit')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'financials' and this.state.activeSubTab === 'credit' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Credit Risk Control</button>
                                     <button t-on-click="() => this.switchTab('financials', 'pnl')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'financials' and this.state.activeSubTab === 'pnl' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Profit &amp; Loss</button>
@@ -190,7 +192,7 @@
 
 
 
-                    <button t-on-click="() => this.switchTab('transactions')" class="list-group-item list-group-item-action border-0 rounded mb-2 text-start d-flex align-items-center transition-all" t-att-style="this.state.activeTab === 'transactions' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
+                    <button t-if="this.hasFinancialAccess" t-on-click="() => this.switchTab('transactions')" class="list-group-item list-group-item-action border-0 rounded mb-2 text-start d-flex align-items-center transition-all" t-att-style="this.state.activeTab === 'transactions' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
                         <span class="me-3 d-flex align-items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-landmark-icon lucide-landmark">
                                 <path d="M10 18v-7"/>
@@ -249,7 +251,7 @@
                         <OperationsTracking requestedSubTab="this.state.activeTab === 'operations' ? this.state.activeSubTab : ''" />
                     </div>
 
-                    <div t-attf-class="h-100 #{this.state.activeTab === 'financials' ? '' : 'd-none'}">
+                    <div t-if="this.hasFinancialAccess" t-attf-class="h-100 #{this.state.activeTab === 'financials' ? '' : 'd-none'}">
                         <FinancialsInvoicing requestedSubTab="this.state.activeTab === 'financials' ? this.state.activeSubTab : ''" />
                     </div>
 
@@ -261,7 +263,7 @@
                         <SchedulesTargets requestedSubTab="this.state.activeTab === 'schedules' ? this.state.activeSubTab : ''" />
                     </div>
 
-                    <div t-attf-class="h-100 #{this.state.activeTab === 'transactions' ? '' : 'd-none'}">
+                    <div t-if="this.hasFinancialAccess" t-attf-class="h-100 #{this.state.activeTab === 'transactions' ? '' : 'd-none'}">
                         <BankTransactions />
                     </div>
 

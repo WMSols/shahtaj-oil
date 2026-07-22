@@ -47,7 +47,10 @@
                                 <tr>
                                     <th class="ps-4 border-top-0">Order Ref</th>
                                     <th class="border-top-0">Shop &amp; Booker</th>
-                                    <th class="border-top-0">Order Value</th>
+                                    <th class="border-top-0">
+                                        <t t-if="this.hasFinancialAccess">Order Value</t>
+                                        <t t-else="">Units</t>
+                                    </th>
                                     <th class="text-center border-top-0">Status</th>
                                     <th class="text-end pe-4 border-top-0">Action</th>
                                 </tr>
@@ -81,7 +84,12 @@
                                             </small>
                                         </td>
                                         <td class="fw-bold text-dark">
-                                            <t t-esc="dlv.total"/>
+                                            <t t-if="this.hasFinancialAccess">
+                                                <t t-esc="dlv.total"/>
+                                            </t>
+                                            <t t-else="">
+                                                <t t-esc="dlv.items"/> units
+                                            </t>
                                         </td>
                                        <td class="text-center">
     <span t-attf-class="badge #{dlv.is_fully_delivered ? 'bg-success text-white' : 'bg-warning text-dark'} px-2 py-1 shadow-sm">
@@ -132,7 +140,7 @@
                                 <t t-if="!this.state.isEditingDelivery">
                                     
                                     <!-- Create Invoice Button -->
-                                    <t t-if="this.state.selectedDelivery.invoice_status === 'to invoice'">
+                                    <t t-if="this.hasFinancialAccess and this.state.selectedDelivery.invoice_status === 'to invoice'">
                                         <button class="btn btn-sm btn-light border shadow-sm fw-bold px-3" t-on-click="createInvoiceFromDelivery" t-att-disabled="this.state.isCreatingInvoice">
                                             <t t-if="this.state.isCreatingInvoice">
                                                 <span class="spinner-border spinner-border-sm me-1"/> Working...
@@ -151,7 +159,7 @@
                                     </t>
 
                                     <!-- Edit Details Button -->
-                                    <button class="btn btn-sm btn-dark shadow-sm fw-bold px-3 d-flex align-items-center" t-on-click="toggleEditDelivery">
+                                    <button t-if="this.hasFinancialAccess" class="btn btn-sm btn-dark shadow-sm fw-bold px-3 d-flex align-items-center" t-on-click="toggleEditDelivery">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil me-1"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
                                         Edit Details
                                     </button>
@@ -217,10 +225,10 @@
                                         <th class="ps-4 py-3">Product</th>
                                         <th class="text-center" style="width: 120px;">Quantity</th>
                                         <th class="text-center" style="width: 100px;">Delivered</th>
-                                        <th class="text-center" style="width: 100px;">Invoiced</th>
-                                        <th class="text-end" style="width: 140px;">Unit Price</th>
-                                        <th class="text-center">Taxes</th>
-                                        <th class="text-end pe-4" style="width: 150px;">Amount</th>
+                                        <th t-if="this.hasFinancialAccess" class="text-center" style="width: 100px;">Invoiced</th>
+                                        <th t-if="this.hasFinancialAccess" class="text-end" style="width: 140px;">Unit Price</th>
+                                        <th t-if="this.hasFinancialAccess" class="text-center">Taxes</th>
+                                        <th t-if="this.hasFinancialAccess" class="text-end pe-4" style="width: 150px;">Amount</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -256,11 +264,11 @@
                                                 <t t-esc="line.delivered"/>
                                             </td>
 
-                                            <td class="text-center align-middle text-success fw-bold">
+                                            <td t-if="this.hasFinancialAccess" class="text-center align-middle text-success fw-bold">
                                                 <t t-esc="line.invoiced"/>
                                             </td>
 
-                                            <td class="text-end align-middle">
+                                            <td t-if="this.hasFinancialAccess" class="text-end align-middle">
                                                 <t t-if="this.state.isEditingDelivery">
                                                     <input type="number" step="any" class="form-control form-control-sm text-end shadow-sm" t-model="line.price"/>
                                                 </t>
@@ -268,7 +276,7 @@
                                                 </t>
                                             </td>
 
-                                            <td class="text-center align-middle">
+                                            <td t-if="this.hasFinancialAccess" class="text-center align-middle">
                                                 <t t-if="this.state.isEditingDelivery">
                                                     <select class="form-select form-select-sm shadow-sm" t-model="line.tax_id">
                                                         <option value="">None</option>
@@ -286,7 +294,7 @@
                                                 </t>
                                             </td>
                                             
-                                            <td class="text-end pe-4 align-middle fw-bold text-dark">
+                                            <td t-if="this.hasFinancialAccess" class="text-end pe-4 align-middle fw-bold text-dark">
                                                 <t t-if="this.state.isEditingDelivery">
                                                     <button class="btn btn-sm btn-outline-danger shadow-sm" t-on-click="() => this.removeDeliveryLine(line.id)" title="Remove Product">
                                                         <i class="fa fa-trash"></i>
@@ -314,7 +322,7 @@
                         </div>
 
                         <!-- Summary Totals with Null-Checks -->
-                        <div class="bg-light p-4 border-top d-flex justify-content-end">
+                        <div t-if="this.hasFinancialAccess" class="bg-light p-4 border-top d-flex justify-content-end">
                             <div style="min-width: 300px;">
                                 <div class="d-flex justify-content-between mb-2">
                                     <span class="text-muted fw-bold">Untaxed Amount:</span>
@@ -543,7 +551,10 @@
                 <tr>
                     <th class="border-top-0 ps-4">Order Ref</th>
                     <th class="border-top-0">Shop Details</th>
-                    <th class="border-top-0" title="Total monetary value and number of items requested">Order Value</th>
+                    <th class="border-top-0">
+                        <t t-if="this.hasFinancialAccess" title="Total monetary value and number of items requested">Order Value</t>
+                        <t t-else="" title="Total number of items requested">Units</t>
+                    </th>
                     <th class="border-top-0" title="Current stage of the order in the system">Status</th>
                     <th class="border-top-0 text-end pe-4">Action</th>
                 </tr>
@@ -579,7 +590,12 @@
                 </td>
                 <td class="align-middle">
                     <div class="fw-bold fs-6">
-                        <t t-esc="ord.total"/>
+                        <t t-if="this.hasFinancialAccess">
+                            <t t-esc="ord.total"/>
+                        </t>
+                        <t t-else="">
+                            <t t-esc="ord.items"/> units
+                        </t>
                     </div>
                     <small class="text-muted">
                         <t t-esc="ord.items"/>
@@ -592,7 +608,7 @@
                     </span>
                 </td>
                 <td class="align-middle text-end pe-4">
-                    <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewOrder(ord)" title="Open full order details and generate invoice">
+                    <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewOrder(ord)" t-att-title="this.hasFinancialAccess ? 'Open full order details and generate invoice' : 'Open full order details'">
                                                 View Details →
                     </button>
                 </td>
@@ -633,7 +649,7 @@
     </button>
 </div>
 <div class="d-flex align-items-center">
-    <t t-if="this.state.selectedOrder.invoice_status === 'to invoice'">
+    <t t-if="this.hasFinancialAccess and this.state.selectedOrder.invoice_status === 'to invoice'">
         <button class="btn btn-sm btn-success text-white shadow-sm fw-bold px-3 d-flex align-items-center" t-on-click="createInvoice" t-att-disabled="this.state.isCreatingInvoice" title="Generate a draft invoice for this order. This step is required for accounting.">
             <t t-if="this.state.isCreatingInvoice">
                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -727,9 +743,9 @@
             <tr>
                 <th class="ps-4">Product Description</th>
                 <th class="text-center">Quantity</th>
-                <th class="text-end">Unit Price</th>
-                <th class="text-center">Taxes</th>
-                <th class="text-end pe-4">Subtotal</th>
+                <th t-if="this.hasFinancialAccess" class="text-end">Unit Price</th>
+                <th t-if="this.hasFinancialAccess" class="text-center">Taxes</th>
+                <th t-if="this.hasFinancialAccess" class="text-end pe-4">Subtotal</th>
             </tr>
         </thead>
         <tbody>
@@ -749,10 +765,10 @@
                             <t t-esc="line.unit"/>
                         </small>
                     </td>
-                    <td class="text-end">Rs. <t t-esc="line.price"/>
+                    <td t-if="this.hasFinancialAccess" class="text-end">Rs. <t t-esc="line.price"/>
                     </td>
-                    <td class="text-center"><span class="badge bg-light border text-dark"><t t-esc="line.taxes"/></span></td>
-                    <td class="text-end pe-4 fw-bold">Rs. <t t-esc="line.subtotal"/>
+                    <td t-if="this.hasFinancialAccess" class="text-center"><span class="badge bg-light border text-dark"><t t-esc="line.taxes"/></span></td>
+                    <td t-if="this.hasFinancialAccess" class="text-end pe-4 fw-bold">Rs. <t t-esc="line.subtotal"/>
                     </td>
                 </tr>
             </t>
@@ -764,12 +780,12 @@
     <div class="row justify-content-end">
         <div class="col-md-5">
             <div class="d-flex justify-content-between mb-2">
-                <span class="text-muted">Total Units Requested:</span>
+                <span class="text-muted">Total Products Requested:</span>
                 <span class="fw-bold">
                     <t t-esc="this.state.selectedOrder.items"/>
                 </span>
             </div>
-            <div class="d-flex justify-content-between border-top pt-3 mt-2">
+            <div t-if="this.hasFinancialAccess" class="d-flex justify-content-between border-top pt-3 mt-2">
                 <span class="text-dark fw-bold text-uppercase">Grand Total:</span>
                 <h4 class="fw-bold text-success mb-0">
                     <t t-esc="this.state.selectedOrder.total"/>

@@ -2,6 +2,7 @@
 
 import { Component, useState } from "@odoo/owl";
 import { registry } from "@web/core/registry";
+import { hasFinancialAccess } from "../shahtaj_access";
 import { StaffManagement } from "./staff_management";
 import { OperationsTracking } from "./operations_tracking";
 import { TerritoryRoutes } from "./territory_routes";
@@ -32,6 +33,10 @@ export class ShahtajDashboard extends Component {
         });
     }
 
+    get hasFinancialAccess() {
+        return hasFinancialAccess();
+    }
+
     toggleMenu(menuName, defaultSubTab = '') {
         const isCurrentlyOpen = this.state.expandedMenus[menuName];
         
@@ -50,6 +55,13 @@ export class ShahtajDashboard extends Component {
     }
 
     switchTab(tabName, subTabName = '') {
+        if (!this.hasFinancialAccess && (tabName === 'financials' || tabName === 'transactions')) {
+            tabName = 'operations';
+            subTabName = 'checkins';
+        }
+        if (!this.hasFinancialAccess && tabName === 'warehouse' && ['inventory', 'taxes'].includes(subTabName)) {
+            subTabName = 'management';
+        }
         this.state.activeTab = tabName;
         this.state.activeSubTab = subTabName;
         

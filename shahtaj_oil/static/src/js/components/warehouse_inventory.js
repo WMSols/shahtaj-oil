@@ -3,6 +3,7 @@
 import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { ConfirmModal } from "./confirm_modal";
+import { hasFinancialAccess } from "../shahtaj_access";
 
 export class WarehouseInventory extends Component {
     static props = {
@@ -13,7 +14,7 @@ export class WarehouseInventory extends Component {
         this.orm = useService("orm");
         
         this.state = useState({
-            activeSubTab: this.props.requestedSubTab || 'inventory',
+            activeSubTab: this._normalizeSubTab(this.props.requestedSubTab || 'inventory'),
             previousSubTab: 'inventory',
             
             showWarehouseForm: false,
@@ -59,10 +60,43 @@ export class WarehouseInventory extends Component {
         });
 
         onWillStart(async () => {
-            await this.loadSaleTaxes();
-            await this.loadInventory();
-            await this.loadTaxesList(); // Fetch the main tax configurations
+            this.state.activeSubTab = this._normalizeSubTab(this.state.activeSubTab);
+            if (!hasFinancialAccess()) {
+                await this.loadInventory();
+            } else {
+                await this.loadSaleTaxes();
+                await this.loadInventory();
+                await this.loadTaxesList();
+            }
         });
+    }
+    // NEW Refresh Method
+    async refreshData() {
+        this.state.isLoading = true;
+        try {
+            await Promise.all([
+                this.loadInventory(),
+                this.loadTaxesList()
+            ]);
+        } finally {
+            this.state.isLoading = false;
+        }
+    }
+   // --- Dynamic Search, Filter, and Sort Getters ---
+    get displayProducts() {
+        let filtered = this.state.inventory.filter(product =>
+            product.active && product.name.toLowerCase().includes(this.state.productSearchQuery.toLowerCase())
+        )};
+
+    get hasFinancialAccess() {
+        return hasFinancialAccess();
+    }
+
+    _normalizeSubTab(tabName) {
+        if (!hasFinancialAccess() && ['inventory', 'taxes', 'archive'].includes(tabName)) {
+            return 'management';
+        }
+        return tabName || 'management';
     }
     // NEW Refresh Method
     async refreshData() {
@@ -250,6 +284,7 @@ export class WarehouseInventory extends Component {
     }
 
    setSubTab(tabName) {
+        tabName = this._normalizeSubTab(tabName);
         // Save the current tab if we are navigating to the archive
         if (tabName === 'archive' && this.state.activeSubTab !== 'archive') {
             this.state.previousSubTab = this.state.activeSubTab;

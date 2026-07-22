@@ -30,7 +30,7 @@
                         </svg>
                     Inventory Engine Active
                     </span>
-                    <button class="btn btn-outline-danger ms-3 fw-bold shadow-sm d-inline-flex align-items-center" t-on-click="() => this.setSubTab('archive')" title="View Archived Items">
+                    <button t-if="this.hasFinancialAccess" class="btn btn-outline-danger ms-3 fw-bold shadow-sm d-inline-flex align-items-center" t-on-click="() => this.setSubTab('archive')" title="View Archived Items">
                         <i class="fa fa-archive me-2"></i> View Archive
                     </button>
                 </div>
@@ -38,7 +38,7 @@
             </div>
 
 
-            <t t-if="this.state.activeSubTab === 'inventory'">
+            <t t-if="this.hasFinancialAccess and this.state.activeSubTab === 'inventory'">
 
                 <div class="p-4 bg-white border-bottom d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                     <div>
@@ -335,13 +335,13 @@
                             <th class="border-top-0 py-3 text-end" title="Total physical units located in the warehouse">On-Hand Qty</th>
                             <th class="border-top-0 py-3 text-end" title="Units currently available for order bookers to sell (On-Hand minus Reserved)">Available to Book</th>
                             <th class="border-top-0 py-3 text-end" title="Predicted future stock based on incoming/outgoing orders">Forecast</th>
-                            <th class="border-top-0 py-3 text-end pe-4">Unit Price</th>
+                            <th t-if="this.hasFinancialAccess" class="border-top-0 py-3 text-end pe-4">Unit Price</th>
                         </tr>
                     </thead>
                     <tbody>
                         <t t-if="this.state.inventory.length === 0">
                             <tr>
-                                <td colspan="5" class="text-center py-5 text-muted">
+                                <td colspan="4" class="text-center py-5 text-muted">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search mb-2 opacity-50">
                                         <circle cx="11" cy="11" r="8"/>
                                         <path d="m21 21-4.3-4.3"/>
@@ -352,7 +352,7 @@
                         </t>
                         <t t-elif="this.displayStock.length === 0">
                             <tr>
-                                <td colspan="5" class="text-center py-4 text-muted fw-bold">No stock matches your search or filter criteria.</td>
+                                <td t-att-colspan="this.hasFinancialAccess ? 5 : 4" class="text-center py-4 text-muted fw-bold">No stock matches your search or filter criteria.</td>
                             </tr>
                         </t>
                         <t t-foreach="this.displayStock" t-as="item" t-key="item.id">
@@ -383,7 +383,7 @@
                                         <t t-esc="item.uom_name"/>
                                     </span>
                                 </td>
-                                <td class="text-end pe-4 text-muted fw-bold">
+                                <td t-if="this.hasFinancialAccess" class="text-end pe-4 text-muted fw-bold">
                                         Rs. <t t-esc="item.list_price"/>
                                 </td>
                             </tr>
@@ -393,7 +393,7 @@
             </div>
         </t>
 
-        <t t-if="this.state.activeSubTab === 'taxes'">
+        <t t-if="this.hasFinancialAccess and this.state.activeSubTab === 'taxes'">
             <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center">
                 <div>
                     <h2 class="fw-bold mb-0">Sales Taxes Configuration</h2>

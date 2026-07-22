@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <templates xml:space="preserve">
     <t t-name="shahtaj_oil.TerritoryRoutes" owl="1">
-        <div class="card border-0 shadow-sm bg-white rounded-3">
+        <div class="card border-0 shadow-sm bg-white rounded-3" t-on-click="closeShopActionMenu">
 
             <div class="p-4 border-bottom bg-light d-flex justify-content-between align-items-center rounded-top">
                 <div>
@@ -262,8 +262,11 @@
                 <t t-if="this.state.selectedShopDetails">
                     <div class="p-4 bg-light border-bottom d-flex justify-content-between align-items-center">
                         <div>
-                            <h4 class="fw-bold text-dark mb-0">
+                            <h4 class="fw-bold text-dark mb-0 d-flex align-items-center gap-2 flex-wrap">
                                 <t t-esc="this.state.selectedShopDetails.name"/>
+                                <span t-attf-class="badge #{this.state.selectedShopDetails.shop_approval_state === 'approved' ? 'bg-success text-white' : (this.state.selectedShopDetails.shop_approval_state === 'rejected' ? 'bg-danger text-white' : 'bg-warning text-dark')}">
+                                    <t t-esc="(this.state.selectedShopDetails.shop_approval_state || '').toUpperCase()"/>
+                                </span>
                             </h4>
                             <small class="text-muted">
                             Shop ID: <strong>
@@ -330,13 +333,13 @@
                                         Save Category
                             </button>
                         </p>
-                        <p class="mb-1" t-if="this.state.selectedShopDetails.shahtaj_shop_category === 'credit'">
+                        <p class="mb-1" t-if="this.hasFinancialAccess and this.state.selectedShopDetails.shahtaj_shop_category === 'credit'">
                             <strong>Credit Limit:</strong> Rs. <t t-esc="this.state.selectedShopDetails.credit_limit"/>
                         </p>
-                        <p class="mb-1">
+                        <p class="mb-1" t-if="this.hasFinancialAccess">
                             <strong>Legacy Balance:</strong> Rs. <t t-esc="this.state.selectedShopDetails.legacy_balance"/>
                         </p>
-                        <p class="mb-0">
+                        <p class="mb-0" t-if="this.hasFinancialAccess">
                             <strong>Outstanding Balance:</strong> Rs. <t t-esc="this.state.selectedShopDetails.outstanding_balance"/>
                         </p>
                     </div>
@@ -397,6 +400,35 @@
                     </t>
                     <t t-else="">
                         <div class="p-4 bg-light border rounded text-muted small">No Image Uploaded</div>
+                    </t>
+                </div>
+            </div>
+
+            <div class="border-top pt-3 mt-2 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                <div>
+                    <t t-if="this.state.selectedShopDetails.shop_approval_state === 'pending'">
+                        <small class="text-muted fw-bold">Verify photos, location, and details, then approve or reject this application.</small>
+                    </t>
+                    <t t-elif="this.state.selectedShopDetails.shop_approval_state === 'approved'">
+                        <small class="text-success fw-bold">This shop is approved and available for schedules and visits.</small>
+                    </t>
+                    <t t-elif="this.state.selectedShopDetails.shop_approval_state === 'rejected'">
+                        <small class="text-danger fw-bold">This shop was rejected. You can approve it if the application should proceed.</small>
+                    </t>
+                </div>
+                <div class="d-flex gap-2 flex-wrap justify-content-md-end">
+                    <t t-if="this.state.selectedShopDetails.shop_approval_state === 'pending'">
+                        <button class="btn btn-outline-danger fw-bold" t-on-click="rejectSelectedShop" title="Reject this shop application">
+                            Reject
+                        </button>
+                        <button class="btn btn-success fw-bold text-white" t-on-click="approveSelectedShop" title="Approve and activate this shop">
+                            Approve Shop
+                        </button>
+                    </t>
+                    <t t-elif="this.state.selectedShopDetails.shop_approval_state === 'rejected'">
+                        <button class="btn btn-success fw-bold text-white" t-on-click="approveSelectedShop" title="Approve this previously rejected shop">
+                            Approve Shop
+                        </button>
                     </t>
                 </div>
             </div>
@@ -504,24 +536,48 @@
                             </span>
                         </td>
                         <td class="align-middle text-end pe-4">
-                            <button class="btn btn-sm btn-outline-secondary me-2" t-on-click="() => this.editShop(shop)" title="Edit basic details or update GPS">Edit</button>
-                            <button class="btn btn-sm btn-outline-danger me-2 ms-2" t-on-click="() => this.toggleArchive('res.partner', shop.id, false)" title="Move to Archive">Archive</button>
-                            <t t-if="shop.shop_approval_state === 'pending'">
-                                <button class="btn btn-sm btn-outline-primary me-2" t-on-click="() => this.viewShopDetails(shop.id)" title="Open details and verify images before approving">
-                                                Review
+                            <div class="d-inline-flex align-items-center justify-content-end gap-2">
+                                <button
+                                    t-attf-class="btn btn-sm fw-bold #{shop.shop_approval_state === 'approved' ? 'btn-outline-primary' : 'btn-primary text-white'}"
+                                    t-on-click="() => this.viewShopDetails(shop.id)"
+                                    t-att-title="shop.shop_approval_state === 'pending' ? 'Open details and verify before approving' : (shop.shop_approval_state === 'rejected' ? 'Open details to review and approve again' : 'View full details and live map')"
+                                >
+                                    <t t-if="shop.shop_approval_state === 'approved'">View Details</t>
+                                    <t t-else="">Review</t>
                                 </button>
-                                <button class="btn btn-sm btn-success me-2 fw-bold" t-on-click="() => this.approveShop(shop.id)" title="Approve and activate this shop">
-                                                Approve
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.rejectShop(shop.id)" title="Reject this shop application">
-                                                Reject
-                                </button>
-                            </t>
-                            <t t-else="">
-                                <button class="btn btn-sm btn-outline-primary" t-on-click="() => this.viewShopDetails(shop.id)" title="View full details and live map">
-                                                View Details
-                                </button>
-                            </t>
+                                <div class="dropdown position-relative">
+                                    <button
+                                        class="btn btn-sm btn-outline-secondary"
+                                        type="button"
+                                        t-on-click="(ev) => this.toggleShopActionMenu(shop.id, ev)"
+                                        title="More actions"
+                                        aria-label="More actions"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                            <circle cx="5" cy="12" r="2"/>
+                                            <circle cx="12" cy="12" r="2"/>
+                                            <circle cx="19" cy="12" r="2"/>
+                                        </svg>
+                                    </button>
+                                    <ul
+                                        t-if="this.state.shopActionMenuId === shop.id"
+                                        class="dropdown-menu dropdown-menu-end show shadow border mt-1 py-1"
+                                        style="display: block; position: absolute; right: 0; left: auto; z-index: 1050; min-width: 10rem;"
+                                    >
+                                        <li>
+                                            <button type="button" class="dropdown-item small py-2" t-on-click="() => this.onShopMenuEdit(shop)">
+                                                Edit
+                                            </button>
+                                        </li>
+                                        <li><hr class="dropdown-divider my-1"/></li>
+                                        <li>
+                                            <button type="button" class="dropdown-item small py-2 text-danger" t-on-click="() => this.onShopMenuArchive(shop)">
+                                                Archive
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
                         </td>
                     </tr>
                 </t>
@@ -629,11 +685,11 @@
                             <option value="cash">Cash (Immediate Payment)</option>
                         </select>
                     </div>
-                    <div class="col-md-4 mb-3" t-if="this.state.shopForm.shopCategory === 'credit'">
+                    <div class="col-md-4 mb-3" t-if="this.hasFinancialAccess and this.state.shopForm.shopCategory === 'credit'">
                         <label class="small fw-bold">Approved Credit Limit (Rs.)</label>
                         <input type="number" class="form-control" t-model="this.state.shopForm.creditLimit" placeholder="e.g. 150000"/>
                     </div>
-                    <div class="col-md-4 mb-3">
+                    <div class="col-md-4 mb-3" t-if="this.hasFinancialAccess">
                         <label class="small fw-bold">Legacy Balance Brought Forward</label>
                         <input type="number" class="form-control" t-model="this.state.shopForm.legacyBalance" placeholder="0.00" title="Any existing unpaid amount prior to this registration"/>
                     </div>

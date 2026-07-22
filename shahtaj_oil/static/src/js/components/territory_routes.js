@@ -2,7 +2,8 @@
 
 import { Component, useState, onWillStart, useEffect, useRef,onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { ConfirmModal } from "./confirm_modal"; 
+import { ConfirmModal } from "./confirm_modal";
+import { hasFinancialAccess } from "../shahtaj_access"; 
 
 export class TerritoryRoutes extends Component {
     static props = {
@@ -24,6 +25,7 @@ export class TerritoryRoutes extends Component {
             showShopForm: false,
             selectedShopDetails: null,
             shopCategoryEdit: 'credit',
+            shopActionMenuId: null,
 
             editingAreaId: null,
             editingRouteId: null,
@@ -155,6 +157,58 @@ export class TerritoryRoutes extends Component {
         });
     }
 
+    get hasFinancialAccess() {
+        return hasFinancialAccess();
+    }
+
+    // NEW Refresh Method
+    async refreshData() {
+        this.state.isLoading = true;
+        try {
+            await this.fetchDashboardData();
+        } finally {
+            this.state.isLoading = false;
+        }
+    }
+    // Custom Modal Controller
+    showConfirm(title, message, onConfirmCallback) {
+     this.state.confirmModal = {
+         isOpen: true,
+         title: title,
+         message: message,
+         onConfirm: async () => {
+             this.state.confirmModal.isOpen = false;
+             await onConfirmCallback();
+         }
+     };
+ }
+
+ closeConfirm() {
+     this.state.confirmModal.isOpen = false;
+ }
+
+    // --- Dynamic Search & Filter Getters ---
+  get displayAreas() {
+        return this.state.areas.filter(area => area.active && area.name.toLowerCase().includes(this.state.areaSearchQuery.toLowerCase()));
+    }
+
+    get displayRoutes() {
+        return this.state.routes.filter(route => route.active && route.name.toLowerCase().includes(this.state.routeSearchQuery.toLowerCase()));
+    }
+
+    get displayShops() {
+        return this.state.shops.filter(shop => {
+            if (!shop.active) return false;
+            
+            const query = this.state.shopSearchQuery.toLowerCase();
+            const searchMatch = shop.name.toLowerCase().includes(query) || (shop.owner_name || '').toLowerCase().includes(query);
+            const categoryMatch = this.state.shopFilterCategory !== 'all' ? shop.shahtaj_shop_category === this.state.shopFilterCategory : true;
+            const statusMatch = this.state.shopFilterStatus !== 'all' ? shop.shop_approval_state === this.state.shopFilterStatus : true;
+
+            return searchMatch && categoryMatch && statusMatch;
+        });
+    }
+
     // --- Data Fetching Logic ---
     async fetchDashboardData() {
         const includeArchivedDomain = ['|', ['active', '=', true], ['active', '=', false]];
@@ -187,6 +241,7 @@ export class TerritoryRoutes extends Component {
         this.state.activeSubTab = tabName;
         this.cancelForms();
         this.state.selectedShopDetails = null;
+        this.closeShopActionMenu();
     }
     cancelForms() {
         this.state.showAreaForm = false;
@@ -196,6 +251,7 @@ export class TerritoryRoutes extends Component {
         this.state.editingAreaId = null;
         this.state.editingRouteId = null;
         this.state.editingShopId = null;
+        this.closeShopActionMenu();
 
         this.resetForms();
     }
@@ -215,24 +271,78 @@ export class TerritoryRoutes extends Component {
         };
     }
     // --- Archive Logic & Getters ---
-    toggleArchive(model, id, makeActive) {
-     if (makeActive) {
-         // Restoring typically doesn't need a heavy confirmation prompt
-         this.executeToggleArchive(model, id, makeActive);
-     } else {
-         // Archiving gets the new custom modal
-         this.showConfirm(
-             "Archive Item",
-             "Are you sure you want to move this item to the archive?",
-             () => this.executeToggleArchive(model, id, makeActive)
-         );
-     }
- }
+    async toggleArchive(model, id, makeActive) {
+        if (makeActive) {
+            if (model === 'shahtaj.route') {
+                try {
+                    const impact = await this.orm.call('shahtaj.route', 'get_restore_impact', [[id]]);
+                    const message = this.buildRestoreMessage(model, impact);
+                    this.showConfirm(
+                        "Restore Route",
+                        message,
+                        () => this.executeToggleArchive(model, id, makeActive),
+                    );
+                } catch (error) {
+                    alert("Could not load restore impact: " + (error.data?.message || error.message));
+                }
+                return;
+            }
+            this.executeToggleArchive(model, id, makeActive);
+            return;
+        }
+        try {
+            const impact = await this.getArchiveImpact(model, id);
+            const message = this.buildArchiveMessage(model, impact);
+            this.showConfirm(
+                "Archive Territory Item",
+                message,
+                () => this.executeToggleArchive(model, id, makeActive),
+            );
+        } catch (error) {
+            alert("Could not load archive impact: " + (error.data?.message || error.message));
+        }
+    }
+
+    async getArchiveImpact(model, id) {
+        if (model === 'shahtaj.zone') {
+            return this.orm.call('shahtaj.zone', 'get_archive_impact', [[id]]);
+        }
+        if (model === 'shahtaj.route') {
+            return this.orm.call('shahtaj.route', 'get_archive_impact', [[id]]);
+        }
+        if (model === 'res.partner') {
+            return this.orm.call('res.partner', 'get_archive_impact', [[id]]);
+        }
+        return {};
+    }
+
+    buildRestoreMessage(model, impact) {
+        if (model === 'shahtaj.route') {
+            return `Restoring this route will also restore ${impact.archived_shop_count || 0} archived shop(s), reactivate ${impact.inactive_schedule_count || 0} weekly schedule(s), and regenerate visit tasks for assigned order bookers. Continue?`;
+        }
+        return "Restore this item?";
+    }
+
+    buildArchiveMessage(model, impact) {
+        if (model === 'shahtaj.zone') {
+            return `This will archive the zone and also archive ${impact.active_route_count || 0} active route(s), ${impact.active_shop_count || 0} active shop(s), and deactivate ${impact.active_schedule_count || 0} weekly schedule(s). Pending visit tasks for these shops will be cancelled. Continue?`;
+        }
+        if (model === 'shahtaj.route') {
+            return `This will archive the route and also archive ${impact.active_shop_count || 0} active shop(s) and deactivate ${impact.active_schedule_count || 0} weekly schedule(s). Pending visit tasks for these shops will be cancelled. Continue?`;
+        }
+        if (model === 'res.partner') {
+            return `This will archive the shop and cancel ${impact.pending_task_count || 0} pending visit task(s). Continue?`;
+        }
+        return "Are you sure you want to move this item to the archive?";
+    }
 
  async executeToggleArchive(model, id, makeActive) {
      try {
          await this.orm.write(model, [id], { active: makeActive });
          await this.fetchDashboardData();
+         if (this.state.selectedShopDetails && this.state.selectedShopDetails.id === id) {
+             this.closeShopDetails();
+         }
      } catch (error) {
          alert("Failed to update archive status: " + (error.data?.message || error.message));
      }
@@ -249,7 +359,13 @@ export class TerritoryRoutes extends Component {
     get filteredRoutes() {
         if (!this.state.shopForm.zone_id) return [];
         const selectedZoneId = parseInt(this.state.shopForm.zone_id);
-        return this.state.routes.filter(r => r.zone_id && r.zone_id[0] === selectedZoneId);
+        const zone = this.state.areas.find((area) => area.id === selectedZoneId);
+        if (!zone || !zone.active) return [];
+        return this.state.routes.filter(
+            (route) => route.active
+                && route.zone_id
+                && route.zone_id[0] === selectedZoneId,
+        );
     }
 
     onFileChange(ev, fieldName) {
@@ -267,7 +383,30 @@ export class TerritoryRoutes extends Component {
         reader.readAsDataURL(file);
     }
 
+    toggleShopActionMenu(shopId, ev) {
+        if (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+        }
+        this.state.shopActionMenuId = this.state.shopActionMenuId === shopId ? null : shopId;
+    }
+
+    closeShopActionMenu() {
+        this.state.shopActionMenuId = null;
+    }
+
+    onShopMenuEdit(shop) {
+        this.closeShopActionMenu();
+        this.editShop(shop);
+    }
+
+    onShopMenuArchive(shop) {
+        this.closeShopActionMenu();
+        this.toggleArchive('res.partner', shop.id, false);
+    }
+
     async viewShopDetails(shopId) {
+        this.closeShopActionMenu();
         const details = await this.orm.read(
             "res.partner",
             [shopId],
@@ -275,7 +414,7 @@ export class TerritoryRoutes extends Component {
                 "id", "name", "owner_name", "phone", "owner_cnic_number", "partner_latitude", "partner_longitude",
                 "shahtaj_shop_category", "credit_limit", "legacy_balance", "outstanding_balance",
                 "route_id", "zone_id", "registered_by_id",
-                "owner_cnic_front", "owner_cnic_back", "owner_photo", "shop_exterior_photo", 
+                "owner_cnic_front", "owner_cnic_back", "owner_photo", "shop_exterior_photo",
                 "shop_approval_state"
             ]
         );
@@ -288,6 +427,7 @@ export class TerritoryRoutes extends Component {
     closeShopDetails() {
         this.state.selectedShopDetails = null;
         this.state.shopCategoryEdit = 'credit';
+        this.closeShopActionMenu();
     }
 
     async saveShopCategory() {
@@ -308,6 +448,9 @@ export class TerritoryRoutes extends Component {
         try {
             await this.orm.call("res.partner", "action_approve_shop", [[shopId]]);
             await this.fetchDashboardData();
+            if (this.state.selectedShopDetails && this.state.selectedShopDetails.id === shopId) {
+                await this.viewShopDetails(shopId);
+            }
         } catch (error) {
             alert("Failed to approve shop: " + (error.data?.message || error.message));
         }
@@ -317,9 +460,30 @@ export class TerritoryRoutes extends Component {
         try {
             await this.orm.call("res.partner", "action_reject_shop", [[shopId]]);
             await this.fetchDashboardData();
+            if (this.state.selectedShopDetails && this.state.selectedShopDetails.id === shopId) {
+                await this.viewShopDetails(shopId);
+            }
         } catch (error) {
             alert("Failed to reject shop: " + (error.data?.message || error.message));
         }
+    }
+
+    confirmRejectShop(shopId) {
+        this.showConfirm(
+            "Reject Shop Application",
+            "Reject this shop registration? The order booker can update and resubmit if needed.",
+            () => this.rejectShop(shopId),
+        );
+    }
+
+    approveSelectedShop() {
+        if (!this.state.selectedShopDetails) return;
+        this.approveShop(this.state.selectedShopDetails.id);
+    }
+
+    rejectSelectedShop() {
+        if (!this.state.selectedShopDetails) return;
+        this.confirmRejectShop(this.state.selectedShopDetails.id);
     }
 
     editArea(area) {

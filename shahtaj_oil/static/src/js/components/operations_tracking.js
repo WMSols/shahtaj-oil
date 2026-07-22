@@ -2,6 +2,7 @@
 
 import { Component, useState, onWillStart,onWillUpdateProps  } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
+import { hasFinancialAccess } from "../shahtaj_access";
 
 export class OperationsTracking extends Component {
      static props = {
@@ -70,12 +71,15 @@ export class OperationsTracking extends Component {
         })
 
         onWillStart(async () => {
-            await Promise.all([
+            const tasks = [
                 this.fetchLiveVisits(),
                 this.fetchLiveOrders(),
                 this.fetchPerformanceData(),
-                this.loadTaxAndProductData()
-            ]);
+            ];
+            if (hasFinancialAccess()) {
+                tasks.push(this.loadTaxAndProductData());
+            }
+            await Promise.all(tasks);
         });
     }
     // --- NEW: Global Refresh Method ---
@@ -88,6 +92,29 @@ export class OperationsTracking extends Component {
                 this.fetchPerformanceData(),
                 this.loadTaxAndProductData()
             ]);
+        } finally {
+            this.state.isRefreshing = false;
+        }
+    }
+    // --- DATA FETCHING (EXISTING) ---
+
+    get hasFinancialAccess() {
+        return hasFinancialAccess();
+    }
+
+    // --- NEW: Global Refresh Method ---
+    async refreshData() {
+        this.state.isRefreshing = true;
+        try {
+            const tasks = [
+                this.fetchLiveVisits(),
+                this.fetchLiveOrders(),
+                this.fetchPerformanceData(),
+            ];
+            if (hasFinancialAccess()) {
+                tasks.push(this.loadTaxAndProductData());
+            }
+            await Promise.all(tasks);
         } finally {
             this.state.isRefreshing = false;
         }
@@ -256,6 +283,9 @@ export class OperationsTracking extends Component {
     }
 
     toggleEditDelivery() {
+        if (!hasFinancialAccess()) {
+            return;
+        }
         if (this.state.isEditingDelivery) {
             // If discarding changes, re-fetch to restore original data
             this.viewDelivery(this.state.selectedDelivery);
@@ -311,6 +341,9 @@ export class OperationsTracking extends Component {
     }
 
     async createInvoiceFromDelivery() {
+        if (!hasFinancialAccess()) {
+            return;
+        }
         if (!this.state.selectedDelivery || this.state.isCreatingInvoice) return;
         
         // Temporarily hijack the selectedOrder state so we can reuse your existing createInvoice function
@@ -323,6 +356,9 @@ export class OperationsTracking extends Component {
     }
 
    async loadTaxAndProductData() {
+        if (!hasFinancialAccess()) {
+            return;
+        }
         // Fetch standard Odoo Sales Taxes
         const taxes = await this.orm.searchRead(
             "account.tax",
@@ -412,6 +448,9 @@ export class OperationsTracking extends Component {
     }
 
    async saveDeliveryChanges() {
+        if (!hasFinancialAccess()) {
+            return;
+        }
         try {
             if (this.state.linesToDelete && this.state.linesToDelete.length > 0) {
                 await this.orm.unlink("sale.order.line", this.state.linesToDelete);
@@ -709,6 +748,9 @@ export class OperationsTracking extends Component {
     }
 
    async createInvoice() {
+        if (!hasFinancialAccess()) {
+            return;
+        }
         if (!this.state.selectedOrder || this.state.isCreatingInvoice) return;
         this.state.isCreatingInvoice = true;
         

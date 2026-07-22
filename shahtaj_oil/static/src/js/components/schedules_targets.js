@@ -32,7 +32,9 @@ export class SchedulesTargets extends Component {
             deleteTitle: '',
 
             // Form Data
-            scheduleForm: { day: '', route_id: '', zone_name: '', is_active: true },
+            scheduleForm: {
+                day: '', route_id: '', zone_name: '', is_active: true, operational_shop_count: null,
+            },
             targetForm: {
                 startDate: '', endDate: '', is_active: true,
                 type: '', target_value: '', product_id: '', currency_id: '',
@@ -109,17 +111,25 @@ export class SchedulesTargets extends Component {
     }
 
     async _loadDropdownOptions() {
-        const [routes, products, currencies] = await Promise.all([
+        const [routes, zones, products, currencies] = await Promise.all([
             this.orm.searchRead('shahtaj.route', [['active', '=', true]], ['id', 'name', 'zone_id']),
-            this.orm.searchRead('product.product', [], ['id', 'name']),
+            this.orm.searchRead('shahtaj.zone', [['active', '=', true]], ['id']),
+            this.orm.searchRead('product.product', [
+                ['sale_ok', '=', true],
+                ['active', '=', true],
+                ['default_code', '!=', 'SHAHTAJ-LEGACY'],
+            ], ['id', 'name']),
             this.orm.searchRead('res.currency', [['active', '=', true]], ['id', 'name']),
         ]);
+        const activeZoneIds = new Set(zones.map((zone) => zone.id));
 
-        this.state.routes = routes.map(r => ({
-            id: r.id,
-            name: r.name,
-            zone_name: r.zone_id ? r.zone_id[1] : '',
-        }));
+        this.state.routes = routes
+            .filter((route) => route.zone_id && activeZoneIds.has(route.zone_id[0]))
+            .map((route) => ({
+                id: route.id,
+                name: route.name,
+                zone_name: route.zone_id ? route.zone_id[1] : '',
+            }));
         this.state.products = products.map(p => ({ id: p.id, name: p.name }));
         this.state.currencies = currencies.map(c => ({ id: c.id, name: c.name }));
     }
@@ -237,7 +247,9 @@ export class SchedulesTargets extends Component {
         this.state.errorMessage = '';
         this.state.editingScheduleId = null;
         this.state.editingTargetId = null;
-        this.state.scheduleForm = { day: '', route_id: '', zone_name: '', is_active: true };
+        this.state.scheduleForm = {
+            day: '', route_id: '', zone_name: '', is_active: true, operational_shop_count: null,
+        };
         this.state.targetForm = {
             startDate: '', endDate: '', is_active: true,
             type: '', target_value: '', product_id: '', currency_id: '',
@@ -253,10 +265,32 @@ export class SchedulesTargets extends Component {
             day: sched.day_raw.toString(),
             route_id: sched.route_id,
             zone_name: sched.zone,
-            is_active: sched.status === 'Active'
+            is_active: sched.status === 'Active',
+            operational_shop_count: sched.shops,
         };
         this.state.editingScheduleId = sched.id;
         this.state.showForm = true;
+        if (sched.route_id) {
+            this.refreshScheduleRouteShopCount(parseInt(sched.route_id));
+        }
+    }
+
+    async refreshScheduleRouteShopCount(routeId) {
+        if (!routeId) {
+            this.state.scheduleForm.operational_shop_count = null;
+            return;
+        }
+        this.state.scheduleForm.operational_shop_count = await this.orm.searchCount('res.partner', [
+            ['route_id', '=', routeId],
+            ['is_shahtaj_shop', '=', true],
+            ['active', '=', true],
+            ['shop_approval_state', '=', 'approved'],
+        ]);
+    }
+
+    onScheduleRouteChange(ev) {
+        const routeId = parseInt(ev.target.value, 10);
+        this.refreshScheduleRouteShopCount(Number.isNaN(routeId) ? null : routeId);
     }
 
     editTarget(tgt) {
@@ -310,12 +344,45 @@ export class SchedulesTargets extends Component {
             return;
         }
 
-        const dayExists = this.currentBookerSchedules.some(s => s.day_raw.toString() === form.day && s.id !== this.state.editingScheduleId);
-        if (dayExists) {
-            const msg = `A schedule for this day already exists for this Order Booker.`;
+        const activeDayConflict = this.currentBookerSchedules.some(
+            (s) => s.day_raw.toString() === form.day
+                && s.status === 'Active'
+                && s.id !== this.state.editingScheduleId
+        );
+        if (activeDayConflict) {
+            const msg = 'An active schedule for this day already exists. Edit that row or deactivate it first.';
             this.state.errorMessage = msg;
             this.notification.add(msg, { type: "warning" });
             return;
+        }
+
+        let editingScheduleId = this.state.editingScheduleId;
+        if (!editingScheduleId) {
+            const inactiveExisting = this.currentBookerSchedules.find(
+                (s) => s.day_raw.toString() === form.day && s.status === 'Inactive'
+            );
+            if (inactiveExisting) {
+                editingScheduleId = inactiveExisting.id;
+                this.notification.add(
+                    `Reactivating the existing inactive ${inactiveExisting.day} schedule.`,
+                    { type: "info" }
+                );
+            }
+        }
+
+        const routeId = parseInt(form.route_id, 10);
+        const operationalShopCount = await this.orm.searchCount('res.partner', [
+            ['route_id', '=', routeId],
+            ['is_shahtaj_shop', '=', true],
+            ['active', '=', true],
+            ['shop_approval_state', '=', 'approved'],
+        ]);
+
+        if (form.is_active && operationalShopCount === 0) {
+            this.notification.add(
+                'This route has no active approved shops. The order booker will not see visits until shops are assigned and active.',
+                { type: "warning" }
+            );
         }
 
         this.state.isLoading = true;
@@ -325,12 +392,12 @@ export class SchedulesTargets extends Component {
             const payload = {
                 order_booker_id: this.state.selectedBooker.id,
                 day_of_week: form.day,
-                route_id: parseInt(form.route_id),
+                route_id: routeId,
                 active: form.is_active,
             };
 
-            if (this.state.editingScheduleId) {
-                await this.orm.write('shahtaj.weekly.schedule', [this.state.editingScheduleId], payload);
+            if (editingScheduleId) {
+                await this.orm.write('shahtaj.weekly.schedule', [editingScheduleId], payload);
                 this.notification.add("Schedule updated successfully.", { type: "success" });
             } else {
                 await this.orm.create('shahtaj.weekly.schedule', [payload]);
