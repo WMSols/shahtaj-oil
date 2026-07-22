@@ -109,7 +109,7 @@
                                                 </span>
                                             </td>
                                             <td class="text-center">
-                                                <span t-attf-class="badge #{t.state === 'posted' ? 'bg-success' : (t.state === 'draft' ? 'bg-warning text-dark' : 'bg-secondary')}">
+                                                <span t-attf-class="badge #{t.state === 'paid' ? 'bg-success text-white' : (t.state === 'in_process' ? 'bg-warning text-dark' : 'bg-secondary')}">
                                                     <t t-esc="t.state.toUpperCase()"/>
                                                 </span>
                                             </td>
@@ -169,7 +169,7 @@
                             <h4 class="fw-bold mb-0">Configured Journals</h4>
                             <small class="text-muted">Manage your physical cash registers and bank accounts.</small>
                         </div>
-                        <button class="btn btn-dark fw-bold  ms-2 shadow-sm d-flex align-items-center" t-on-click="openJournalModal">
+                        <button class="btn btn-dark fw-bold  me-2 shadow-sm d-flex align-items-center" t-on-click="openJournalModal">
                             <i class="fa fa-plus me-2"></i> Create Journal
                         </button>
                     </div>
@@ -246,7 +246,7 @@
                         </div>
                         <div class="modal-footer border-top-0 bg-light">
                             <button type="button" class="btn btn-outline-secondary fw-bold px-4" t-on-click="closeJournalModal" t-att-disabled="this.state.isLoading.saveJournal">Cancel</button>
-                            <button type="button" class="btn btn-dark fw-bold px-4 d-flex align-items-center" t-on-click="saveJournal" t-att-disabled="this.state.isLoading.saveJournal">
+                            <button type="button" class="btn btn-dark ms-2 fw-bold px-4 d-flex align-items-center" t-on-click="saveJournal" t-att-disabled="this.state.isLoading.saveJournal">
                                 <t t-if="this.state.isLoading.saveJournal">
                                     <i class="fa fa-circle-o-notch fa-spin me-2"></i> Saving...
                                 </t>

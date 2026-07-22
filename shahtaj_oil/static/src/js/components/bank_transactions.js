@@ -6,7 +6,7 @@ import { useService } from "@web/core/utils/hooks";
 export class BankTransactions extends Component {
     setup() {
         this.orm = useService("orm");
-        
+        this.notification = useService("notification");
         this.state = useState({
             // View Control
             activeTab: 'transactions', // 'transactions' or 'journals'
@@ -132,7 +132,7 @@ export class BankTransactions extends Component {
 
     async saveJournal() {
         if (!this.state.journalForm.name || !this.state.journalForm.code) {
-            alert("Please provide both a Name and a Short Code for the journal.");
+            this.notification("Please provide both a Name and a Short Code for the journal.");
             return;
         }
 
