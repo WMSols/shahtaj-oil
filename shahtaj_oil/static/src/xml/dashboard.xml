@@ -236,33 +236,65 @@
                     </button>
                 </div>
 
-                <div class="flex-grow-1 p-2 p-md-3 overflow-y-auto" style="min-height: 0; background-color: #f8fafc;">
+                <div class="flex-grow-1 p-2 p-md-3 overflow-y-auto position-relative" style="min-height: 0; background-color: #f8fafc;">
 
-                    <div t-if="this.state.activeTab === 'territory'" class="h-100">
+                    <!-- THE LOGO LOADING OVERLAY -->
+                    <t t-if="this.state.isSwitchingTab">
+                        <!-- <style>
+                            @keyframes logo-bounce {
+                                0%, 100% { transform: translateY(0); }
+                                50% { transform: translateY(-15px); }
+                            }
+                            @keyframes shadow-pulse {
+                                0%, 100% { transform: scale(1); opacity: 0.15; }
+                                50% { transform: scale(0.7); opacity: 0.05; }
+                            }
+                        </style> -->
+                        <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center" style="background-color: rgba(248, 250, 252, 0.85); z-index: 1000; backdrop-filter: blur(3px);">
+                            
+                            <!-- Bouncing Logo -->
+                            <div style="animation: logo-bounce 1s infinite ease-in-out;">
+                                <!-- Replace the src path with your exact webp image path -->
+                                <img src="/shahtaj_oil/static/src/img/logo-img.webp" alt="Loading..." style="height: 142px; width: auto; object-fit: contain;"/>
+                            </div>
+                            
+                            <!-- Animated Shadow -->
+                            <!-- <div style="width: 50px; height: 6px; background-color: #000; border-radius: 50%; animation: shadow-pulse 1s infinite ease-in-out; margin-top: 10px; margin-bottom: 20px;"></div> -->
+
+                            <!-- Text & Spinner -->
+                            <h5 class="fw-bold text-muted d-flex align-items-center" style="letter-spacing: 0.5px;">
+                                <span class="spinner-border spinner-border-sm text-primary me-2" role="status"></span>
+                                Loading Workspace...
+                            </h5>
+                        </div>
+                    </t>
+
+
+                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'territory'" class="h-100">
                         <TerritoryRoutes requestedSubTab="this.state.activeSubTab" />
                     </div>
 
-                    <div t-if="this.state.activeTab === 'warehouse'" class="h-100">
+                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'warehouse'" class="h-100">
                         <WarehouseInventory requestedSubTab="this.state.activeSubTab" />
                     </div>
 
-                    <div t-if="this.state.activeTab === 'operations'" class="h-100">
+                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'operations'" class="h-100">
                         <OperationsTracking requestedSubTab="this.state.activeSubTab" />
                     </div>
 
-                    <div t-if="this.hasFinancialAccess and this.state.activeTab === 'financials'" class="h-100">
+                    <div t-if="!this.state.isSwitchingTab and this.hasFinancialAccess and this.state.activeTab === 'financials'" class="h-100">
                         <FinancialsInvoicing requestedSubTab="this.state.activeSubTab" />
                     </div>
 
-                    <div t-if="this.state.activeTab === 'staff'" class="h-100">
+                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'staff'" class="h-100">
                         <StaffManagement />
                     </div>
 
-                    <div t-if="this.state.activeTab === 'schedules'" class="h-100">
+                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'schedules'" class="h-100">
                         <SchedulesTargets requestedSubTab="this.state.activeSubTab" />
                     </div>
 
-                    <div t-if="this.hasFinancialAccess and this.state.activeTab === 'transactions'" class="h-100">
+                    <div t-if="!this.state.isSwitchingTab and this.hasFinancialAccess and this.state.activeTab === 'transactions'" class="h-100">
                         <BankTransactions />
                     </div>
 

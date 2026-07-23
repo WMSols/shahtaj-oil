@@ -15,9 +15,18 @@ export class FinancialsInvoicing extends Component {
         this.notification = useService("notification");
         this.orm = useService("orm");
         this.action = useService("action");
+        // --- TIMEZONE SAFE DATE FORMATTING ---
         const today = new Date();
         const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-        const formatDate = (d) => d.toISOString().split('T')[0];
+        
+        // Manually build the string using local time to prevent UTC shift
+        const formatDate = (d) => {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+        this.todayStr = formatDate(today);
         // 2. SMART INITIALIZATION
         const target = this.props.requestedSubTab || 'invoices';
         const topLevelTabs = ['credit', 'pnl', 'money', 'cash'];

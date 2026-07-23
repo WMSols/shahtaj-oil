@@ -361,7 +361,7 @@
                                 <td class="ps-4 fw-bold text-dark">
                                     <t t-esc="item.name"/>
                                     <t t-if="item.qty_available &lt;= 0">
-                                        <span class="badge bg-danger ms-2" style="font-size: 0.65rem;">Out of Stock</span>
+                                        <span class="badge bg-danger text-white ms-2" style="font-size: 0.65rem;">Out of Stock</span>
                                     </t>
                                 </td>
                                 <td class="text-end fw-bold">
