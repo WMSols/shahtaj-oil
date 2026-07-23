@@ -115,6 +115,7 @@ export class FinancialsInvoicing extends Component {
             isRefreshing: false,
             confirmModal: { isOpen: false, title: '', message: '', onConfirm: null },
         });
+        
      // 3. SMART PROP LISTENER FOR 2-LEVEL TABS
         onWillUpdateProps((nextProps) => {
             if (nextProps.requestedSubTab) {
@@ -147,6 +148,23 @@ export class FinancialsInvoicing extends Component {
                 await this.loadMoneyOverview();
             }
         });
+    }
+    //  NEW HELPER METHOD FOR GLOBAL SUBTAB SWITCHING ---
+    requestTabSwitch(tabName, subTabName) {
+        // Dispatch a global event so the parent Dashboard can update the sidebar highlight
+        window.dispatchEvent(new CustomEvent('shahtaj-dashboard-switch', { 
+            detail: { tab: tabName, subTab: subTabName } 
+        }));
+        
+        // Also update local state instantly for a snappy UI transition
+        if (tabName === 'financials') {
+            if (['credit', 'pnl', 'money', 'cash'].includes(subTabName)) {
+                this.setSubTab(subTabName);
+            } else {
+                this.state.activeSubTab = 'invoices';
+                this.setInvoiceSubTab(subTabName);
+            }
+        }
     }
     // --- NEW: Core Methods ---
     async refreshData() {
@@ -326,7 +344,11 @@ export class FinancialsInvoicing extends Component {
             ["id", "name", "amount"]
         );
         this.state.availableTaxes = taxes;
-        const prods = await this.orm.searchRead("product.product", [["sale_ok", "=", true]], ["id", "name"]);
+        const prods = await this.orm.searchRead("product.product", [
+            ["sale_ok", "=", true],
+            ["active", "=", true],
+            ["product_tmpl_id.active", "=", true],
+        ], ["id", "name"]);
         this.state.allProducts = prods;
         
         try {
@@ -357,7 +379,11 @@ export class FinancialsInvoicing extends Component {
         try { this.state.journals = await this.orm.searchRead("account.journal", [["type", "in", ["bank", "cash"]]], ["name", "type"]); } catch (error) {}
 
         try {
-            const prodData = await this.orm.searchRead("product.product", [["sale_ok", "=", true]], ["id", "display_name"]);
+            const prodData = await this.orm.searchRead("product.product", [
+                ["sale_ok", "=", true],
+                ["active", "=", true],
+                ["product_tmpl_id.active", "=", true],
+            ], ["id", "display_name"]);
             this.state.products = prodData.map(p => ({ id: p.id, name: p.display_name }));
         } catch (error) {}
 
@@ -480,38 +506,34 @@ export class FinancialsInvoicing extends Component {
         this.state.pnl.isLoading = false;
     }
     // --- MANUFACTURER SUMMARY PRINTING ---
-    async printManufacturerSummary() {
+   async printManufacturerSummary() {
+        // Optional: Trigger your existing loading spinner so the UI doesn't freeze
+        this.state.pnl.isLoading = true; 
+        
         try {
-            // Base domain for storable products
-            let domain = [["sale_ok", "=", true], ["is_storable", "=", true]];
-            
-            // If a specific product is selected in the UI dropdown, apply the filter
-            if (this.state.pnl.selectedProductLineId) {
-                const selectedLine = this.state.pnl.lines.find(l => String(l.id) === String(this.state.pnl.selectedProductLineId));
-                if (selectedLine && selectedLine.productId) {
-                    domain.push(["product_variant_ids", "in", [selectedLine.productId]]);
-                }
-            }
+            // 1. Create a Manufacturer Summary wizard record using your P&L dates
+            const summaryIds = await this.orm.create("shahtaj.manufacturer.summary", [{
+                date_from: this.state.pnl.date_from,
+                date_to: this.state.pnl.date_to
+            }]);
+            const summaryId = summaryIds[0];
 
-            const products = await this.orm.searchRead("product.template", domain, ["id"]);
-            const productIds = products.map(p => p.id);
+            // 2. Trigger the backend Python logic to calculate stats and populate the line items
+            await this.orm.call("shahtaj.manufacturer.summary", "action_refresh", [[summaryId]]);
 
-            if (productIds.length === 0) {
-                alert("No storable products found for this selection.");
-                return;
-            }
-
-            // Trigger Odoo's native PDF report
+            // 3. Trigger Odoo's native PDF report, strictly passing the Summary ID (not Product IDs)
             this.action.doAction({
                 type: 'ir.actions.report',
                 report_type: 'qweb-pdf',
                 report_name: 'shahtaj_oil.report_manufacturer_summary',
                 report_file: 'shahtaj_oil.report_manufacturer_summary',
-                context: { active_ids: productIds },
+                context: { active_ids: [summaryId] },
             });
         } catch (error) {
             console.error("Print Error:", error);
             alert("Failed to print Manufacturer Summary.");
+        } finally {
+            this.state.pnl.isLoading = false;
         }
     }
 
@@ -715,19 +737,17 @@ export class FinancialsInvoicing extends Component {
         }
     }
 
-    openCashActivity(direction = "all") {
+   openCashActivity(direction = "all") {
         this.state.cashDirection = direction || "all";
-        this.setSubTab("cash");
+        this.requestTabSwitch('financials', 'cash');
     }
 
     openShopBalancesFromMoney() {
-        this.state.activeSubTab = "invoices";
-        this.setInvoiceSubTab("balances");
+        this.requestTabSwitch('financials', 'balances');
     }
 
-    openCreditNotesFromMoney() {
-        this.state.activeSubTab = "invoices";
-        this.setInvoiceSubTab("credit_notes");
+   openCreditNotesFromMoney() {
+        this.requestTabSwitch('financials', 'credit_notes');
     }
     
     resetDetailViews() {

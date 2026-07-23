@@ -21,9 +21,12 @@
                 </ul>
                 
                 <!-- NEW REFRESH BUTTON -->
-                <button class="btn btn-outline-secondary fw-bold shadow-sm d-inline-flex align-items-center" t-on-click="refreshData" t-att-disabled="this.state.isLoading.data" title="Refresh Financial Data">
+                 <div class="d-flex flex-column align-items-end">
+                <button class="btn btn-outline-secondary fw-bold shadow-sm d-inline-flex align-items-center" t-on-click="refreshData" t-att-disabled="this.state.isLoading.data" title="Refresh Bank Transaction Data">
                     <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.isLoading.data}"></i> Refresh
                 </button>
+                <span class="small text-muted">Use this Refresh Button to update your cash activity data</span>
+                </div>
             </div>
 
             <!-- Global Loading State -->
@@ -190,6 +193,7 @@
                                     <h6 class="fw-bold text-primary mb-3">Payment Details</h6>
                                     <p class="mb-2"><strong>Method:</strong> <span class="text-capitalize"><t t-esc="this.state.selectedTransaction.shahtaj_payment_channel || 'N/A'"/></span></p>
                                     <p class="mb-2" t-if="this.state.selectedTransaction.shahtaj_payer_bank_name"><strong>Bank:</strong> <t t-esc="this.state.selectedTransaction.shahtaj_payer_bank_name"/></p>
+                                    <p class="mb-2" t-if="this.state.selectedTransaction.shahtaj_payer_account_number"><strong>Account No:</strong> <t t-esc="this.state.selectedTransaction.shahtaj_payer_account_number"/></p>
                                     <p class="mb-2" t-if="this.state.selectedTransaction.shahtaj_instrument_reference"><strong>Reference:</strong> <t t-esc="this.state.selectedTransaction.shahtaj_instrument_reference"/></p>
                                     <p class="mb-0" t-if="this.state.selectedTransaction.shahtaj_payment_notes"><strong>Notes:</strong> <t t-esc="this.state.selectedTransaction.shahtaj_payment_notes"/></p>
                                 </div>

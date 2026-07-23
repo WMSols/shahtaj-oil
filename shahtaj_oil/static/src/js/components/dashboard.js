@@ -31,6 +31,10 @@ export class ShahtajDashboard extends Component {
                 schedules: false
             }
         });
+        // Global Event listnere to sync child component tab switches with the main dashboard state
+        window.addEventListener('shahtaj-dashboard-switch', (ev) => {
+            this.switchTab(ev.detail.tab, ev.detail.subTab);
+        });
     }
 
     get hasFinancialAccess() {

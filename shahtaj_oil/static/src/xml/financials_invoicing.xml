@@ -8,9 +8,11 @@
                     <h2 class="h4 fw-bold text-dark mb-0">Financials &amp; Invoicing</h2>
                     <p class="text-muted">Process field orders into invoices, register received payments, and manage shop credit limits.</p>
                 </div>
+                <t t-if="this.state.activeSubTab !== 'pnl' and this.state.activeSubTab !== 'cash'">
                 <button class="btn btn-outline-secondary fw-bold shadow-sm d-inline-flex align-items-center bg-white" t-on-click="refreshData" t-att-disabled="this.state.isRefreshing" title="Refresh Live Data">
                     <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.isRefreshing}"></i> Refresh
                 </button>
+                </t>
             </div>
             <t t-if="this.state.activeSubTab !== 'pnl' and this.state.activeSubTab !== 'money' and this.state.activeSubTab !== 'cash'">
                 <div class="row g-3 px-4 pb-4 bg-light border-bottom">
@@ -169,7 +171,7 @@
                                 </div>
                                 <h4 class="fw-bold text-dark mb-2">Rs. <t t-esc="this.state.money.openInvoiceAmount.toLocaleString()"/></h4>
                                 <p class="small text-muted mb-3">Amount still open on posted shop invoices.</p>
-                                <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => { this.state.activeSubTab = 'invoices'; this.setInvoiceSubTab('customer_invoices'); }">
+                               <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.requestTabSwitch('financials', 'customer_invoices')">
                                     View Invoices
                                 </button>
                             </div>
@@ -179,11 +181,11 @@
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <h6 class="fw-bold mb-0">Quick Links</h6>
                                 </div>
-                                <div class="d-flex flex-wrap gap-2">
+                               <div class="d-flex flex-wrap gap-2">
                                     <button class="btn btn-sm btn-dark fw-bold text-white" t-on-click="() => this.openCashActivity('all')">Cash Activity</button>
                                     <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="openCreditNotesFromMoney">Credit Notes</button>
-                                    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.setSubTab('credit')">Credit Risk</button>
-                                    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.setSubTab('pnl')">Profit &amp; Loss</button>
+                                    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.requestTabSwitch('financials', 'credit')">Credit Risk</button>
+                                    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.requestTabSwitch('financials', 'pnl')">Profit &amp; Loss</button>
                                 </div>
                                 <p class="small text-muted mt-3 mb-0">
                                     Flow: Sold (invoices) → Collected (cash in) → Still with shops → Paid back (cash out).
@@ -201,7 +203,7 @@
                             <h3 class="fw-bold text-dark mb-0">Cash Activity</h3>
                             <small class="text-muted">Money in and out across bank &amp; cash journals.</small>
                         </div>
-                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.setSubTab('money')">
+                       <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.requestTabSwitch('financials', 'money')">
                             Back to Money Overview
                         </button>
                     </div>
@@ -1708,8 +1710,12 @@
                                 </div>
                                 <div>
                                     <small class="fw-bold text-muted text-uppercase tracking-wider d-block mb-1">Stock Purchased (period)</small>
-                                    <h5 class="fw-bold text-dark mb-0">Rs. <t t-esc="this.state.pnl.stats.amount_manufacturer_payable ? this.state.pnl.stats.amount_manufacturer_payable.toLocaleString() : '0'"/>
-                                    </h5>
+                                    
+                                    <h4 class="fw-bold text-dark mb-0">Rs. <t t-esc="this.state.pnl.stats.amount_manufacturer_payable ? this.state.pnl.stats.amount_manufacturer_payable.toLocaleString() : '0'"/>
+                                    </h4>
+                                    <div class="pt-2 border-top mt-3">
+                                        <small class=" text-muted  mb-1">Total Stock Purchased in selected date range</small>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1721,8 +1727,11 @@
                                 </div>
                                 <div>
                                     <small class="fw-bold text-muted text-uppercase tracking-wider d-block mb-1">Payments Collected</small>
-                                    <h5 class="fw-bold text-info mb-0">Rs. <t t-esc="this.state.pnl.stats.amount_payments_received ? this.state.pnl.stats.amount_payments_received.toLocaleString() : '0'"/>
-                                    </h5>
+                                    <h4 class="fw-bold text-info mb-0">Rs. <t t-esc="this.state.pnl.stats.amount_payments_received ? this.state.pnl.stats.amount_payments_received.toLocaleString() : '0'"/>
+                                    </h4>
+                                    <div class="pt-2 border-top mt-3">
+                                        <small class=" text-muted   mb-1">Total Payments Collected in selected date range</small>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1734,8 +1743,11 @@
                                 </div>
                                 <div>
                                     <small class="fw-bold text-muted text-uppercase tracking-wider d-block mb-1">Total Shop AR</small>
-                                    <h5 class="fw-bold text-danger mb-0">Rs. <t t-esc="this.state.pnl.stats.amount_shop_outstanding ? this.state.pnl.stats.amount_shop_outstanding.toLocaleString() : '0'"/>
-                                    </h5>
+                                    <h4 class="fw-bold text-danger mb-0">Rs. <t t-esc="this.state.pnl.stats.amount_shop_outstanding ? this.state.pnl.stats.amount_shop_outstanding.toLocaleString() : '0'"/>
+                                    </h4>
+                                    <div class="pt-2 border-top mt-3">
+                                        <small class=" text-muted   mb-1">Total Outstanding Amount from Shops</small>
+                                    </div>
                                 </div>
                             </div>
                         </div>

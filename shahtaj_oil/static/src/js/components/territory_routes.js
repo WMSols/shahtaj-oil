@@ -12,7 +12,7 @@ export class TerritoryRoutes extends Component {
     static components = { ConfirmModal };
     setup() {
         this.orm = useService("orm");
-
+        this.notification = useService("notification");
         this.mapRef = useRef("mapContainer");
         this.mapInstance = null; 
 
@@ -277,13 +277,9 @@ export class TerritoryRoutes extends Component {
                 try {
                     const impact = await this.orm.call('shahtaj.route', 'get_restore_impact', [[id]]);
                     const message = this.buildRestoreMessage(model, impact);
-                    this.showConfirm(
-                        "Restore Route",
-                        message,
-                        () => this.executeToggleArchive(model, id, makeActive),
-                    );
+                    this.showConfirm("Restore Route", message, () => this.executeToggleArchive(model, id, makeActive));
                 } catch (error) {
-                    alert("Could not load restore impact: " + (error.data?.message || error.message));
+                    this.notification.add("Could not load restore impact: " + (error.data?.message || error.message), { type: "danger" });
                 }
                 return;
             }
@@ -293,13 +289,9 @@ export class TerritoryRoutes extends Component {
         try {
             const impact = await this.getArchiveImpact(model, id);
             const message = this.buildArchiveMessage(model, impact);
-            this.showConfirm(
-                "Archive Territory Item",
-                message,
-                () => this.executeToggleArchive(model, id, makeActive),
-            );
+            this.showConfirm("Archive Territory Item", message, () => this.executeToggleArchive(model, id, makeActive));
         } catch (error) {
-            alert("Could not load archive impact: " + (error.data?.message || error.message));
+            this.notification.add("Could not load archive impact: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
 
@@ -337,16 +329,17 @@ export class TerritoryRoutes extends Component {
     }
 
  async executeToggleArchive(model, id, makeActive) {
-     try {
-         await this.orm.write(model, [id], { active: makeActive });
-         await this.fetchDashboardData();
-         if (this.state.selectedShopDetails && this.state.selectedShopDetails.id === id) {
-             this.closeShopDetails();
-         }
-     } catch (error) {
-         alert("Failed to update archive status: " + (error.data?.message || error.message));
-     }
- }
+        try {
+            await this.orm.write(model, [id], { active: makeActive });
+            await this.fetchDashboardData();
+            if (this.state.selectedShopDetails && this.state.selectedShopDetails.id === id) {
+                this.closeShopDetails();
+            }
+            this.notification.add(`Item successfully ${makeActive ? 'restored' : 'archived'}.`, { type: "success" });
+        } catch (error) {
+            this.notification.add("Failed to update archive status: " + (error.data?.message || error.message), { type: "danger" });
+        }
+    }
 
     get archivedZones() { return this.state.areas.filter(a => !a.active); }
     get archivedRoutes() { return this.state.routes.filter(r => !r.active); }
@@ -434,13 +427,12 @@ export class TerritoryRoutes extends Component {
         if (!this.state.selectedShopDetails) return;
         const shopId = this.state.selectedShopDetails.id;
         try {
-            await this.orm.write("res.partner", [shopId], {
-                shahtaj_shop_category: this.state.shopCategoryEdit,
-            });
+            await this.orm.write("res.partner", [shopId], { shahtaj_shop_category: this.state.shopCategoryEdit });
             await this.viewShopDetails(shopId);
             await this.fetchDashboardData();
+            this.notification.add("Shop category updated.", { type: "success" });
         } catch (error) {
-            alert("Failed to update shop category: " + (error.data?.message || error.message));
+            this.notification.add("Failed to update shop category: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
 
@@ -451,8 +443,9 @@ export class TerritoryRoutes extends Component {
             if (this.state.selectedShopDetails && this.state.selectedShopDetails.id === shopId) {
                 await this.viewShopDetails(shopId);
             }
+            this.notification.add("Shop approved successfully.", { type: "success" });
         } catch (error) {
-            alert("Failed to approve shop: " + (error.data?.message || error.message));
+            this.notification.add("Failed to approve shop: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
 
@@ -463,8 +456,9 @@ export class TerritoryRoutes extends Component {
             if (this.state.selectedShopDetails && this.state.selectedShopDetails.id === shopId) {
                 await this.viewShopDetails(shopId);
             }
+            this.notification.add("Shop application rejected.", { type: "info" });
         } catch (error) {
-            alert("Failed to reject shop: " + (error.data?.message || error.message));
+            this.notification.add("Failed to reject shop: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
 
@@ -550,9 +544,9 @@ export class TerritoryRoutes extends Component {
         await this.fetchDashboardData(); 
     }
 
-    async saveRoute() {
+   async saveRoute() {
         if (!this.state.routeForm.name || !this.state.routeForm.zone_id) {
-            alert("Route Name and Parent Zone are required.");
+            this.notification.add("Route Name and Parent Zone are required.", { type: "warning" });
             return;
         }
 
@@ -562,22 +556,40 @@ export class TerritoryRoutes extends Component {
             active: this.state.routeForm.is_active
         };
 
-        if (this.state.editingRouteId) {
-            await this.orm.write("shahtaj.route", [this.state.editingRouteId], payload);
-        } else {
-            await this.orm.create("shahtaj.route", [payload]);
+        try {
+            if (this.state.editingRouteId) {
+                await this.orm.write("shahtaj.route", [this.state.editingRouteId], payload);
+            } else {
+                await this.orm.create("shahtaj.route", [payload]);
+            }
+            this.cancelForms();
+            await this.fetchDashboardData();
+        } catch (error) {
+            this.notification.add("Failed to save route: " + (error.data?.message || error.message), { type: "danger" });
         }
-
-        this.cancelForms();
-        await this.fetchDashboardData();
     }
 
     async saveShop() {
         const lat = parseFloat(this.state.shopForm.lat);
         const lng = parseFloat(this.state.shopForm.lng);
+        const phone = this.state.shopForm.owner_phone;
+        const cnic = this.state.shopForm.owner_cnic_number;
 
+        // 1. General Required Fields Validation
         if (!this.state.shopForm.name || !this.state.shopForm.owner_name || isNaN(lat) || isNaN(lng)) {
-            alert("Please fill all required fields including valid GPS coordinates.");
+            this.notification.add("Please fill all required fields including valid GPS coordinates.", { type: "warning" });
+            return;
+        }
+
+        // 2. Strict Pakistan Contact Number Validation (11 digits, starts with 0)
+        if (phone && !/^0\d{10}$/.test(phone)) {
+            this.notification.add("Contact Number must be exactly 11 numeric digits starting with 0 (e.g., 03001234567).", { type: "danger" });
+            return;
+        }
+
+        // 3. Strict Pakistan CNIC Validation (13 digits, no dashes)
+        if (cnic && !/^\d{13}$/.test(cnic)) {
+            this.notification.add("CNIC must be exactly 13 numeric digits without dashes (e.g., 3520212345678).", { type: "danger" });
             return;
         }
 
@@ -587,9 +599,9 @@ export class TerritoryRoutes extends Component {
             shahtaj_shop_category: this.state.shopForm.shopCategory || 'credit',
             name: this.state.shopForm.name,
             owner_name: this.state.shopForm.owner_name,
-            owner_phone: this.state.shopForm.owner_phone,
-            phone: this.state.shopForm.owner_phone,
-            owner_cnic_number: this.state.shopForm.owner_cnic_number || false,
+            owner_phone: phone,
+            phone: phone,
+            owner_cnic_number: cnic || false,
             zone_id: this.state.shopForm.zone_id ? parseInt(this.state.shopForm.zone_id) : false,
             route_id: this.state.shopForm.route_id ? parseInt(this.state.shopForm.route_id) : false,
             partner_latitude: lat,
@@ -605,15 +617,21 @@ export class TerritoryRoutes extends Component {
         if (this.state.shopForm.owner_photo) payload.owner_photo = this.state.shopForm.owner_photo;
         if (this.state.shopForm.shop_exterior_photo) payload.shop_exterior_photo = this.state.shopForm.shop_exterior_photo;
 
-        if (this.state.editingShopId) {
-            await this.orm.write("res.partner", [this.state.editingShopId], payload);
-        } else {
-            payload.shop_approval_state = 'pending';
-            await this.orm.create("res.partner", [payload]);
-        }
+        try {
+            if (this.state.editingShopId) {
+                await this.orm.write("res.partner", [this.state.editingShopId], payload);
+                this.notification.add("Shop updated successfully.", { type: "success" });
+            } else {
+                payload.shop_approval_state = 'pending';
+                await this.orm.create("res.partner", [payload]);
+                this.notification.add("Shop registered and pending approval.", { type: "success" });
+            }
 
-        this.cancelForms();
-        await this.fetchDashboardData();
+            this.cancelForms();
+            await this.fetchDashboardData();
+        } catch (error) {
+            this.notification.add("Failed to save shop: " + (error.data?.message || error.message), { type: "danger" });
+        }
     }
 }
 

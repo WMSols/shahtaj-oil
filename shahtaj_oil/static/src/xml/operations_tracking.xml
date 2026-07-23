@@ -13,13 +13,13 @@
                     <button class="btn btn-outline-secondary fw-bold shadow-sm d-inline-flex align-items-center bg-white" t-on-click="refreshData" t-att-disabled="this.state.isRefreshing" title="Refresh Live Data">
                         <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.isRefreshing}"></i> Refresh
                     </button>
-                    
-                    <span class="badge bg-success text-white px-3 py-2 fs-6 shadow-sm d-flex align-items-center" title="The system is actively receiving live updates from the field apps">
+                    <!-- Removed Non-Functional Elements -->
+                    <!-- <span class="badge bg-success text-white px-3 py-2 fs-6 shadow-sm d-flex align-items-center" title="The system is actively receiving live updates from the field apps">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-activity text-white me-2">
                             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                         </svg>
                         System Online
-                    </span>
+                    </span> -->
                 </div>
             </div>
 
