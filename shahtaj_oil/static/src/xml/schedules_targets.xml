@@ -338,25 +338,45 @@
                                             <div class="text-muted small">to <t t-esc="tgt.endDate"/>
                                             </div>
                                         </td>
+                                        
+                                        <!-- TARGET GOAL COLUMN -->
                                         <td class="align-middle">
                                             <div class="text-dark fw-bold text-capitalize">
                                                 <t t-esc="tgt.type.replace('_', ' ')"/>
                                             </div>
                                             <small class="text-muted">
                                                 <t t-esc="tgt.amount"/>
-                                                <t t-if="tgt.weightUom"> <t t-esc="tgt.weightUom"/></t>
-                                                <t t-if="tgt.currency"> <t t-esc="tgt.currency"/></t>
-                                                <t t-if="tgt.product"> (<t t-esc="tgt.product"/>) </t>
+                                                <!-- Only show weight for Product Weight targets -->
+                                                <t t-if="tgt.type === 'product_weight' and tgt.weightUom"> <t t-esc="tgt.weightUom"/></t>
+                                                <!-- Only show currency for Sales Amount targets -->
+                                                <t t-if="tgt.type === 'sales_amount' and tgt.currency"> <t t-esc="tgt.currency"/></t>
+                                                <!-- Only show product name for Product-related targets -->
+                                                <t t-if="(tgt.type === 'product_qty' or tgt.type === 'product_weight') and tgt.product"> (<t t-esc="tgt.product"/>) </t>
                                             </small>
                                         </td>
+                                        
+                                        <!-- ACHIEVED COLUMN -->
                                         <td class="align-middle fw-bold">
                                             <t t-esc="tgt.achievedAmount"/>
+                                            
+                                            <!-- Dynamically display remaining units based on type -->
                                             <t t-if="tgt.type === 'product_weight' and tgt.weightUom">
                                                 <small class="d-block text-muted fw-normal">
                                                     <t t-esc="tgt.remainingAmount"/> <t t-esc="tgt.weightUom"/> left
                                                 </small>
                                             </t>
+                                            <t t-elif="tgt.type === 'sales_amount' and tgt.currency">
+                                                <small class="d-block text-muted fw-normal">
+                                                    <t t-esc="tgt.remainingAmount"/> <t t-esc="tgt.currency"/> left
+                                                </small>
+                                            </t>
+                                            <t t-else="">
+                                                <small class="d-block text-muted fw-normal">
+                                                    <t t-esc="tgt.remainingAmount"/> left
+                                                </small>
+                                            </t>
                                         </td>
+                                        
                                         <td class="align-middle">
                                             <span t-attf-class="badge #{tgt.status === 'Active' ? 'bg-success text-white' : 'bg-secondary text-white'} px-2 py-1 shadow-sm">
                                                 <t t-esc="tgt.status"/>
