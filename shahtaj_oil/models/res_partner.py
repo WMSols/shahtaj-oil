@@ -21,7 +21,8 @@ _SHAHTAJ_CREDIT_GROUPS = (
 
 
 class ResPartner(models.Model):
-    _inherit = 'res.partner'
+    _name = 'res.partner'
+    _inherit = ['res.partner', 'shahtaj.territory.sync.mixin']
 
     def _check_access(self, operation):
         """Let distributors read company partners required by accounting screens."""
@@ -107,11 +108,13 @@ class ResPartner(models.Model):
     legacy_balance = fields.Monetary(
         string='Legacy Balance',
         currency_field='currency_id',
-        help='Outstanding balance from before the system. Posted to accounting when the shop is approved.',
+        help='Previous amount the shop already owed before this system. '
+             'When the shop is approved, a customer invoice is created so you can '
+             'collect payment against it (Register Payment).',
     )
     legacy_balance_move_id = fields.Many2one(
         'account.move',
-        string='Legacy Balance Entry',
+        string='Legacy Balance Invoice',
         readonly=True,
         copy=False,
         ondelete='restrict',
@@ -145,7 +148,64 @@ class ResPartner(models.Model):
         domain = [('active', '=', True)]
         if zone_id:
             domain.append(('zone_id', '=', zone_id))
+            zone = self.env['shahtaj.zone'].browse(zone_id).exists()
+            if not zone or not zone.active:
+                return []
         return self.env['shahtaj.route'].search(domain).ids
+
+    def _shahtaj_is_operational_for_booker(self):
+        """Shop is usable by order bookers only when the full territory chain is active."""
+        self.ensure_one()
+        if not self.is_shahtaj_shop:
+            return False
+        partner = self.with_context(active_test=False)
+        if not partner.active:
+            return False
+        if partner.shop_approval_state != 'approved':
+            return False
+        route = partner.route_id.with_context(active_test=False)
+        if not route or not route.active:
+            return False
+        zone = route.zone_id.with_context(active_test=False)
+        if not zone or not zone.active:
+            return False
+        return True
+
+    def get_archive_impact(self):
+        self.ensure_one()
+        if not self.is_shahtaj_shop:
+            return {'pending_task_count': 0}
+        pending_tasks = self.env['shahtaj.visit.task'].search_count([
+            ('shop_id', '=', self.id),
+            ('state', '=', 'pending'),
+        ])
+        return {'pending_task_count': pending_tasks}
+
+    def _validate_operational_territory_assignment(self):
+        for partner in self.filtered('is_shahtaj_shop'):
+            if partner.route_id and not partner.route_id._shahtaj_is_operational_for_booker():
+                raise ValidationError(_(
+                    'Route "%(route)s" is archived or its zone is inactive.',
+                    route=partner.route_id.display_name,
+                ))
+            if partner.zone_id and not partner.zone_id.active:
+                raise ValidationError(_(
+                    'Zone "%(zone)s" is archived.',
+                    zone=partner.zone_id.display_name,
+                ))
+
+    def _sync_visit_tasks_after_territory_restore(self):
+        Task = self.env['shahtaj.visit.task']
+        for partner in self.filtered('is_shahtaj_shop'):
+            if not partner._shahtaj_is_operational_for_booker():
+                continue
+            bookers = partner.route_id.mapped('weekly_schedule_ids.order_booker_id')
+            partner._reactivate_cancelled_visit_tasks(bookers=bookers)
+            if bookers:
+                for booker in bookers:
+                    Task._auto_generate_window(order_booker=booker)
+            else:
+                Task._auto_generate_window()
 
     @api.depends('zone_id')
     @api.depends_context('uid')
@@ -252,9 +312,14 @@ class ResPartner(models.Model):
                 raise ValidationError(_('Shop GPS latitude and longitude are required.'))
 
     def _prepare_shop_vals(self, vals):
-        """Set defaults when creating a shop from distributor or booker forms."""
+        """Set defaults when creating a shop from distributor, portal, or booker API."""
         vals = dict(vals)
-        if vals.get('is_shahtaj_shop') or self.env.context.get('shahtaj_shop_form'):
+        is_shop_create = (
+            vals.get('is_shahtaj_shop')
+            or self.env.context.get('shahtaj_shop_form')
+            or self.env.context.get('shahtaj_shop_register')
+        )
+        if is_shop_create:
             vals.setdefault('is_shahtaj_shop', True)
             vals.setdefault('shahtaj_shop_category', 'credit')
             vals.setdefault('company_type', 'company')
@@ -303,8 +368,31 @@ class ResPartner(models.Model):
             partner.sudo().property_account_receivable_id = receivable
         return receivable
 
+    def _get_legacy_balance_income_account(self, company):
+        """Income account for opening-balance invoice lines (no product)."""
+        self.ensure_one()
+        Account = self.env['account.account'].sudo()
+        category = self.env['product.template']._get_shahtaj_default_category()
+        if category and category.property_account_income_categ_id:
+            return category.property_account_income_categ_id
+        income = Account.search([
+            ('company_ids', 'in', company.id),
+            ('account_type', '=', 'income'),
+            ('active', '=', True),
+        ], limit=1)
+        if not income:
+            raise UserError(_(
+                'No income account found. Install the chart of accounts '
+                'before setting legacy balance.'
+            ))
+        return income
+
     def _post_legacy_balance_entry(self):
-        """Post one journal entry: debit shop receivable, credit opening balance."""
+        """Create and post a customer invoice for previous shop debt (no product).
+
+        Line is description + amount on an income account so distributors can
+        Register Payment without a confusing catalog product.
+        """
         AccountMove = self.env['account.move'].sudo()
         AccountJournal = self.env['account.journal'].sudo()
         for partner in self.filtered(
@@ -315,48 +403,38 @@ class ResPartner(models.Model):
         ):
             company = partner.company_id or self.env.company
             partner = partner.with_company(company)
+            currency = partner.currency_id or company.currency_id
             if float_is_zero(
                 partner.legacy_balance,
-                precision_rounding=(partner.currency_id or company.currency_id).rounding,
+                precision_rounding=currency.rounding,
             ):
                 continue
-            receivable = partner._get_shop_receivable_account(company)
-            if not receivable:
-                raise UserError(_(
-                    'No receivable account found for shop "%(shop)s". '
-                    'Install a chart of accounts for company "%(company)s" first.',
-                    shop=partner.name,
-                    company=company.display_name,
-                ))
+            partner._get_shop_receivable_account(company)
             journal = AccountJournal.search([
-                ('type', '=', 'general'),
+                ('type', '=', 'sale'),
                 ('company_id', '=', company.id),
             ], limit=1)
             if not journal:
                 raise UserError(_(
-                    'No miscellaneous journal found. Install accounting before setting legacy balance.'
+                    'No Sales journal found. Install accounting / chart of accounts '
+                    'before setting legacy balance.'
                 ))
-            equity_account = company.sudo().get_unaffected_earnings_account()
+            income_account = partner._get_legacy_balance_income_account(company)
             move = AccountMove.create({
-                'move_type': 'entry',
+                'move_type': 'out_invoice',
+                'partner_id': partner.id,
                 'journal_id': journal.id,
-                'date': fields.Date.context_today(self),
+                'invoice_date': fields.Date.context_today(self),
+                'invoice_origin': _('Legacy balance'),
                 'ref': _('Legacy shop balance: %s', partner.name),
-                'line_ids': [
-                    (0, 0, {
-                        'name': _('Legacy balance'),
-                        'partner_id': partner.id,
-                        'account_id': receivable.id,
-                        'debit': partner.legacy_balance,
-                        'credit': 0.0,
-                    }),
-                    (0, 0, {
-                        'name': _('Legacy balance'),
-                        'account_id': equity_account.id,
-                        'debit': 0.0,
-                        'credit': partner.legacy_balance,
-                    }),
-                ],
+                'shahtaj_is_legacy_balance': True,
+                'invoice_line_ids': [(0, 0, {
+                    'name': _('Opening / Legacy Balance — %s', partner.name),
+                    'quantity': 1.0,
+                    'price_unit': partner.legacy_balance,
+                    'tax_ids': [(5, 0, 0)],
+                    'account_id': income_account.id,
+                })],
             })
             move.action_post()
             partner.with_context(shahtaj_posting_legacy_move=True).write({
@@ -369,21 +447,47 @@ class ResPartner(models.Model):
         partners = super().create(prepared)
         shop_partners = partners.filtered('is_shahtaj_shop')
         shop_partners._validate_shop_required_fields()
+        shop_partners._validate_operational_territory_assignment()
         shop_partners.filtered(
             lambda p: p.shop_approval_state == 'approved'
         )._post_legacy_balance_entry()
         return partners
 
     def write(self, vals):
+        if vals.get('active') is True:
+            for partner in self.filtered('is_shahtaj_shop'):
+                route = partner.route_id.with_context(active_test=False)
+                if route and not route.active:
+                    self._shahtaj_raise_restore_parent_error(
+                        _('shop'),
+                        route.display_name,
+                    )
+                zone = route.zone_id.with_context(active_test=False) if route else False
+                if zone and not zone.active:
+                    self._shahtaj_raise_restore_parent_error(
+                        _('shop'),
+                        zone.display_name,
+                    )
         vals = self._sync_shop_category_credit_flags(vals)
         if vals.get('owner_phone'):
             vals.setdefault('phone', vals['owner_phone'])
         if vals.get('legacy_balance_move_id') and not self.env.context.get(
             'shahtaj_posting_legacy_move'
         ):
-            # Block manual edits; only _post_legacy_balance_entry may set this link.
-            raise UserError(_('Legacy balance journal entry cannot be changed manually.'))
+            raise UserError(_('Legacy balance invoice cannot be changed manually.'))
         res = super().write(vals)
+        if vals.get('active') is False:
+            shops = self.filtered('is_shahtaj_shop')
+            if shops:
+                today = fields.Date.context_today(self)
+                self._shahtaj_cancel_pending_tasks_for_shops(
+                    shops.ids,
+                    date_from=today,
+                )
+        if vals.get('active') is True:
+            self.filtered('is_shahtaj_shop')._sync_visit_tasks_after_territory_restore()
+        if any(k in vals for k in ('route_id', 'zone_id')):
+            self.filtered('is_shahtaj_shop')._validate_operational_territory_assignment()
         if 'shahtaj_shop_category' in vals:
             credit_shops = self.filtered(
                 lambda p: p.is_shahtaj_shop
@@ -458,10 +562,10 @@ class ResPartner(models.Model):
     def action_view_legacy_balance_move(self):
         self.ensure_one()
         if not self.legacy_balance_move_id:
-            raise UserError(_('No legacy balance journal entry exists for this shop.'))
+            raise UserError(_('No legacy balance invoice exists for this shop.'))
         return {
             'type': 'ir.actions.act_window',
-            'name': _('Legacy Balance Entry'),
+            'name': _('Legacy Balance Invoice'),
             'res_model': 'account.move',
             'res_id': self.legacy_balance_move_id.id,
             'view_mode': 'form',

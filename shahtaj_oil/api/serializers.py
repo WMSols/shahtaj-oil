@@ -10,21 +10,26 @@ def _m2o(record):
 
 
 def user_brief(user):
+    last_seen = user.shahtaj_last_seen_at
     return {
         'id': user.id,
         'order_booker_id': user.id,
         'name': user.name,
         'login': user.login,
         'employee_code': user.shahtaj_employee_code or False,
+        'online_status': user.shahtaj_online_status or False,
+        'last_seen_at': last_seen.isoformat(sep=' ') if last_seen else False,
     }
 
 
 def task_dict(task):
+    operational = task._shahtaj_is_operational_for_booker()
     return {
         'id': task.id,
         'order_booker_id': task.order_booker_id.id,
         'scheduled_date': str(task.scheduled_date) if task.scheduled_date else False,
         'state': task.state,
+        'is_operational': operational,
         'route': _m2o(task.route_id),
         'zone': _m2o(task.zone_id),
         'shop': shop_brief(task.shop_id),
@@ -38,6 +43,15 @@ def task_dict(task):
 def shop_brief(partner):
     if not partner:
         return None
+    # Bookers are in the Shahtaj credit groups; sudo covers receivable read safely.
+    shop = partner.sudo()
+    category = shop.shahtaj_shop_category or 'credit'
+    credit_limit = float(shop.credit_limit or 0.0)
+    outstanding = float(shop.outstanding_balance or 0.0)
+    if category == 'cash':
+        credit_remaining = False
+    else:
+        credit_remaining = max(credit_limit - outstanding, 0.0)
     return {
         'id': partner.id,
         'shop_id': partner.id,
@@ -48,7 +62,12 @@ def shop_brief(partner):
         'latitude': partner.partner_latitude,
         'longitude': partner.partner_longitude,
         'approval_state': partner.shop_approval_state,
-        'shop_category': partner.shahtaj_shop_category,
+        'is_operational': partner._shahtaj_is_operational_for_booker(),
+        'is_active': partner.active,
+        'shop_category': category,
+        'credit_limit': credit_limit,
+        'outstanding_balance': outstanding,
+        'credit_remaining': credit_remaining,
         'photos': shop_photo_flags(partner),
     }
 
@@ -75,6 +94,9 @@ def visit_line_dict(line):
 
 def product_brief(product, bookable_qty=None, visit_line_ids=None):
     if not product:
+        return None
+    # Never expose archived catalog items to API clients.
+    if not product.active or not product.product_tmpl_id.active:
         return None
     if bookable_qty is None:
         bookable_qty = product._get_shahtaj_bookable_qty(
@@ -110,6 +132,7 @@ def visit_dict(visit, include_lines=True):
         'ended_at': visit.ended_at.isoformat() if visit.ended_at else False,
         'duration_minutes': visit.duration_minutes,
         'check_in_distance_m': visit.check_in_distance_m,
+        'place_order_distance_m': visit.place_order_distance_m,
         'notes': visit.notes or '',
         'task_id': visit.visit_task_id.id,
         'shop': shop_brief(visit.shop_id),
@@ -124,6 +147,31 @@ def visit_dict(visit, include_lines=True):
     return data
 
 
+def zone_brief(zone):
+    if not zone:
+        return None
+    return {
+        'id': zone.id,
+        'name': zone.name,
+        'route_count': zone.route_count,
+        'is_active': zone.active,
+    }
+
+
+def route_brief(route):
+    if not route:
+        return None
+    return {
+        'id': route.id,
+        'name': route.name,
+        'zone_id': route.zone_id.id,
+        'zone': _m2o(route.zone_id),
+        'shop_count': route.shop_count,
+        'is_active': route.active,
+        'is_operational': route._shahtaj_is_operational_for_booker(),
+    }
+
+
 def schedule_dict(schedule):
     return {
         'id': schedule.id,
@@ -131,6 +179,7 @@ def schedule_dict(schedule):
         'day_label': dict(schedule._fields['day_of_week'].selection).get(
             schedule.day_of_week, ''
         ),
+        'is_operational': schedule.route_id._shahtaj_is_operational_for_booker(),
         'route': _m2o(schedule.route_id),
         'zone': _m2o(schedule.zone_id),
         'shop_count': schedule.shop_count,

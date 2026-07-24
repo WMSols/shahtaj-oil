@@ -20,6 +20,12 @@
       params: [],
     },
     {
+      path: '/api/shahtaj/v1/presence/heartbeat',
+      purpose: 'Keep booker online',
+      auth: true,
+      params: [],
+    },
+    {
       path: '/api/shahtaj/v1/tasks/today',
       purpose: 'List today tasks',
       auth: true,
@@ -101,9 +107,13 @@
     },
     {
       path: '/api/shahtaj/v1/visits/place-order',
-      purpose: 'Submit sales order',
+      purpose: 'Submit sales order (GPS required, same 100m rule as check-in)',
       auth: true,
-      params: [{ name: 'visit_id', required: true, type: 'int' }],
+      params: [
+        { name: 'visit_id', required: true, type: 'int' },
+        { name: 'latitude', required: true, type: 'float' },
+        { name: 'longitude', required: true, type: 'float' },
+      ],
     },
     {
       path: '/api/shahtaj/v1/visits/end-without-order',
@@ -146,6 +156,20 @@
       params: [],
     },
     {
+      path: '/api/shahtaj/v1/zones/list',
+      purpose: 'Zone picker for shop registration',
+      auth: true,
+      params: [],
+    },
+    {
+      path: '/api/shahtaj/v1/routes/list',
+      purpose: 'Route picker (filter by zone)',
+      auth: true,
+      params: [
+        { name: 'zone_id', required: false, type: 'int', note: 'When set, only routes in that zone' },
+      ],
+    },
+    {
       path: '/api/shahtaj/v1/shops/register',
       purpose: 'Register new shop',
       auth: true,
@@ -160,7 +184,7 @@
         { name: 'route_id', required: false, type: 'int' },
         { name: 'credit_limit', required: false, type: 'float' },
         { name: 'legacy_balance', required: false, type: 'float' },
-        { name: 'shop_category', required: false, type: 'string', note: 'Read-only in API response; set by distributor (credit|cash). Defaults to credit on register.' },
+        { name: 'shop_category', required: false, type: 'string', note: 'credit|cash — accepted on register (defaults to credit). Returned on all shop payloads with credit_limit, outstanding_balance, credit_remaining.' },
         { name: 'owner_cnic_front', required: false, type: 'base64' },
         { name: 'owner_cnic_back', required: false, type: 'base64' },
         { name: 'owner_photo', required: false, type: 'base64' },
@@ -405,8 +429,55 @@
     if (tab === 'history') await loadVisitHistory();
     if (tab === 'schedule') await loadSchedule();
     if (tab === 'targets') await loadTargets();
-    if (tab === 'shops') await loadMyShops();
+    if (tab === 'shops') {
+      await loadZonePicker();
+      await loadMyShops();
+    }
   }
+
+  async function loadZonePicker() {
+    const zoneSelect = $('reg-zone');
+    const routeSelect = $('reg-route');
+    zoneSelect.innerHTML = '<option value="">— Select zone —</option>';
+    routeSelect.innerHTML = '<option value="">— Select route —</option>';
+    routeSelect.disabled = true;
+    try {
+      const data = await api('/api/shahtaj/v1/zones/list', {});
+      (data.zones || []).forEach((zone) => {
+        const opt = document.createElement('option');
+        opt.value = zone.id;
+        opt.textContent = `${zone.name} (${zone.route_count} routes)`;
+        zoneSelect.appendChild(opt);
+      });
+    } catch (e) {
+      console.warn('zones/list failed', e);
+    }
+  }
+
+  async function loadRoutePicker(zoneId) {
+    const routeSelect = $('reg-route');
+    routeSelect.innerHTML = '<option value="">— Select route —</option>';
+    if (!zoneId) {
+      routeSelect.disabled = true;
+      return;
+    }
+    routeSelect.disabled = false;
+    try {
+      const data = await api('/api/shahtaj/v1/routes/list', { zone_id: parseInt(zoneId, 10) });
+      (data.routes || []).forEach((route) => {
+        const opt = document.createElement('option');
+        opt.value = route.id;
+        opt.textContent = `${route.name} (${route.shop_count} shops)`;
+        routeSelect.appendChild(opt);
+      });
+    } catch (e) {
+      console.warn('routes/list failed', e);
+    }
+  }
+
+  $('reg-zone').addEventListener('change', () => {
+    loadRoutePicker($('reg-zone').value).catch(console.warn);
+  });
 
   function switchTab(name) {
     const btn = document.querySelector(`.tab[data-tab="${name}"]`);
@@ -424,6 +495,7 @@
     const password = $('inp-password').value;
     $('login-status').textContent = 'Logging in...';
     $('login-status').className = 'status';
+    state.database=database;
     try {
       const data = await api('/api/shahtaj/v1/auth/login', { database, login, password });
       state.apiKey = data.api_key;
@@ -825,8 +897,16 @@
     if (!state.visit) return;
     if (!confirm('Place order from cart lines?')) return;
     try {
+      const lat = parseFloat($('inp-lat').value);
+      const lng = parseFloat($('inp-lng').value);
+      if (Number.isNaN(lat) || Number.isNaN(lng)) {
+        alert('Set latitude/longitude (same GPS fields as check-in) before placing order.');
+        return;
+      }
       const data = await api('/api/shahtaj/v1/visits/place-order', {
         visit_id: state.visit.id,
+        latitude: lat,
+        longitude: lng,
       });
       state.lastCompletedVisit = data.visit;
       state.visit = null;

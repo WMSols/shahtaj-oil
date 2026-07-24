@@ -72,8 +72,13 @@ class ShahtajApiVisits(http.Controller):
         if visit.state != 'in_progress':
             raise UserError(_('This visit is not in progress.'))
         product = request.env['product.product'].browse(int(product_id))
-        if not product.exists() or not product.sale_ok:
-            raise UserError(_('Product not found or not for sale.'))
+        if (
+            not product.exists()
+            or not product.active
+            or not product.product_tmpl_id.active
+            or not product.sale_ok
+        ):
+            raise UserError(_('Product not found, archived, or not for sale.'))
         qty = float(quantity)
         if qty <= 0:
             raise UserError(_('Quantity must be greater than zero.'))
@@ -125,9 +130,22 @@ class ShahtajApiVisits(http.Controller):
         return api_success({'visit': serializers.visit_dict(visit)})
 
     @http.route('/api/shahtaj/v1/visits/place-order', **API_ROUTE)
-    def place_order(self, visit_id=None, **kwargs):
+    def place_order(self, visit_id=None, latitude=None, longitude=None, **kwargs):
+        """Place order — requires current GPS (same 100 m rule as check-in)."""
         visit = visit_for_booker(visit_id)
-        visit.action_place_order()
+        if latitude is None or longitude is None or latitude == '' or longitude == '':
+            raise UserError(_(
+                'latitude and longitude are required to place an order.'
+            ))
+        try:
+            lat = float(latitude)
+            lng = float(longitude)
+        except (TypeError, ValueError):
+            raise UserError(_('latitude and longitude must be valid numbers.'))
+        visit.with_context(shahtaj_require_place_order_gps=True).action_place_order(
+            latitude=lat,
+            longitude=lng,
+        )
         return api_success({'visit': serializers.visit_dict(visit)})
 
     @http.route('/api/shahtaj/v1/visits/end-without-order', **API_ROUTE)

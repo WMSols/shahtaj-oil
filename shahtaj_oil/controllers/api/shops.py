@@ -32,6 +32,8 @@ class ShahtajApiShops(http.Controller):
             raise UserError(_(
                 'name, owner_name, owner_phone, latitude, and longitude are required.'
             ))
+        # Explicit shop flags so create() always marks this as a pending Shahtaj shop
+        # (visible in shops/mine and distributor pending-approval screens).
         vals = {
             'name': name,
             'owner_name': owner_name,
@@ -39,7 +41,20 @@ class ShahtajApiShops(http.Controller):
             'owner_cnic_number': kwargs.get('owner_cnic_number') or False,
             'partner_latitude': float(latitude),
             'partner_longitude': float(longitude),
+            'is_shahtaj_shop': True,
+            'shop_approval_state': 'pending',
+            'registered_by_id': request.env.user.id,
+            'company_type': 'company',
+            'customer_rank': 1,
         }
+        shop_category = (
+            kwargs.get('shop_category')
+            or kwargs.get('shahtaj_shop_category')
+            or 'credit'
+        )
+        if shop_category not in ('credit', 'cash'):
+            raise UserError(_('shop_category must be "credit" or "cash".'))
+        vals['shahtaj_shop_category'] = shop_category
         if kwargs.get('zone_id'):
             vals['zone_id'] = int(kwargs['zone_id'])
         if kwargs.get('route_id'):
@@ -48,6 +63,14 @@ class ShahtajApiShops(http.Controller):
             vals['credit_limit'] = float(kwargs['credit_limit'])
         if kwargs.get('legacy_balance') is not None:
             vals['legacy_balance'] = float(kwargs['legacy_balance'])
+        if kwargs.get('zone_id'):
+            zone = request.env['shahtaj.zone'].browse(int(kwargs['zone_id']))
+            if not zone.exists() or not zone.active:
+                raise UserError(_('Zone not found or archived.'))
+        if kwargs.get('route_id'):
+            route = request.env['shahtaj.route'].browse(int(kwargs['route_id']))
+            if not route.exists() or not route._shahtaj_is_operational_for_booker():
+                raise UserError(_('Route not found or archived.'))
         vals.update(shop_photo_vals_from_kwargs(kwargs))
 
         partner = request.env['res.partner'].with_context(
@@ -60,10 +83,16 @@ class ShahtajApiShops(http.Controller):
 
     @http.route('/api/shahtaj/v1/shops/mine', **API_ROUTE)
     def my_shops(self, **kwargs):
+        """Return all shops this booker registered (pending / approved / rejected).
+
+        Each shop includes approval_state and is_operational so the app can show
+        rejection or pending status. Only approved+operational shops are visitable.
+        """
         ensure_order_booker()
         shops = request.env['res.partner'].search([
             ('is_shahtaj_shop', '=', True),
             ('registered_by_id', '=', request.env.user.id),
+            ('active', '=', True),
         ], order='create_date desc', limit=50)
         return api_success({
             'shops': [serializers.shop_brief(shop) for shop in shops],

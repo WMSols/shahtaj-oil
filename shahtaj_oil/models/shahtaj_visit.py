@@ -8,7 +8,7 @@ from odoo import _, api, fields, models
 from odoo.exceptions import UserError, ValidationError
 from odoo.tools import float_compare
 
-from .shahtaj_gps import MAX_SHOP_DISTANCE_M, shahtaj_distance_meters
+from .shahtaj_gps import shahtaj_distance_meters, get_shop_distance_limits
 
 VISIT_STATES = [
     ('in_progress', 'In Progress'),
@@ -20,6 +20,7 @@ VISIT_OUTCOMES = [
     ('none', 'In Progress'),
     ('order', 'Order Placed'),
     ('no_order', 'No Order'),
+    ('incomplete', 'Incomplete'),
 ]
 
 # Fields a booker may change on their own during a visit (security in write()).
@@ -100,6 +101,22 @@ class ShahtajVisit(models.Model):
         string='Distance at Check-in (m)',
         digits=(16, 2),
         readonly=True,
+    )
+    place_order_latitude = fields.Float(
+        string='Place-order Latitude',
+        digits=(10, 7),
+        copy=False,
+    )
+    place_order_longitude = fields.Float(
+        string='Place-order Longitude',
+        digits=(10, 7),
+        copy=False,
+    )
+    place_order_distance_m = fields.Float(
+        string='Distance at Place Order (m)',
+        digits=(16, 2),
+        readonly=True,
+        copy=False,
     )
     sale_order_id = fields.Many2one(
         'sale.order',
@@ -218,10 +235,64 @@ class ShahtajVisit(models.Model):
     @api.model
     def _get_active_visit_for_user(self, user=None):
         user = user or self.env.user
+        # Drop leftover visits from previous days so they cannot block today.
+        self._close_stale_in_progress_visits(order_booker=user)
         return self.search([
             ('order_booker_id', '=', user.id),
             ('state', '=', 'in_progress'),
         ], limit=1)
+
+    @api.model
+    def _close_stale_in_progress_visits(self, order_booker=None):
+        """End visits still in progress after their check-in day has passed.
+
+        Called by cron and before resolving the booker's active visit so
+        yesterday's abandoned check-in cannot block today's work.
+        """
+        today = fields.Date.context_today(self)
+        domain = [('state', '=', 'in_progress')]
+        if order_booker:
+            domain.append(('order_booker_id', '=', order_booker.id))
+        stale = self.sudo().search(domain).filtered(
+            lambda v: fields.Datetime.context_timestamp(v, v.started_at).date() < today
+        )
+        for visit in stale:
+            visit._auto_close_incomplete()
+        return stale
+
+    def _auto_close_incomplete(self):
+        """Mark an abandoned overnight visit incomplete and free the booker."""
+        self.ensure_one()
+        if self.state != 'in_progress':
+            return
+        note = _(
+            'Auto-closed: visit was still in progress after the day ended '
+            '(incomplete — no order placed).'
+        )
+        existing = (self.notes or '').strip()
+        notes = f'{existing}\n{note}' if existing else note
+        now = fields.Datetime.now()
+        duration = int((now - self.started_at).total_seconds()) if self.started_at else 0
+        self.with_context(shahtaj_system_visit_write=True).write({
+            'state': 'completed',
+            'outcome': 'incomplete',
+            'ended_at': now,
+            'duration_seconds': max(duration, 0),
+            'notes': notes,
+        })
+        task = self.visit_task_id
+        if task and task.state == 'in_progress':
+            task_note = _('Skipped automatically: visit left incomplete overnight.')
+            task_notes = (task.notes or '').strip()
+            task.with_context(shahtaj_system_visit_write=True).write({
+                'state': 'skipped',
+                'notes': f'{task_notes}\n{task_note}' if task_notes else task_note,
+            })
+
+    @api.model
+    def _cron_close_stale_visits(self):
+        """Daily job: close leftover in-progress visits from previous days."""
+        self._close_stale_in_progress_visits()
 
     def action_open_booker_form(self):
         """Open the order-booker visit form (continue active or review completed)."""
@@ -251,8 +322,10 @@ class ShahtajVisit(models.Model):
         )
 
     @api.model
-    def _validate_check_in_coordinates(self, shop, latitude, longitude):
-        """Reject check-in if booker is farther than MAX_SHOP_DISTANCE_M from shop."""
+    def _validate_check_in_coordinates(
+        self, shop, latitude, longitude, purpose='start a visit',
+    ):
+        """Reject if booker is outside company min/max shop GPS distance."""
         if not shop.partner_latitude or not shop.partner_longitude:
             raise UserError(_(
                 'Shop "%(shop)s" has no GPS coordinates. '
@@ -260,22 +333,40 @@ class ShahtajVisit(models.Model):
                 shop=shop.name,
             ))
         if latitude is None or longitude is None:
-            raise UserError(_('Your GPS coordinates are required to check in at the shop.'))
+            raise UserError(_(
+                'Your GPS coordinates are required to %(purpose)s.',
+                purpose=purpose,
+            ))
         if not (-90 <= latitude <= 90):
             raise ValidationError(_('GPS latitude must be between -90 and 90.'))
         if not (-180 <= longitude <= 180):
             raise ValidationError(_('GPS longitude must be between -180 and 180.'))
+        limits = get_shop_distance_limits(self.env)
+        min_m = limits['min_m']
+        max_m = limits['max_m']
         distance = shahtaj_distance_meters(
             latitude, longitude,
             shop.partner_latitude, shop.partner_longitude,
         )
-        if distance > MAX_SHOP_DISTANCE_M:
+        if distance < min_m:
             raise UserError(_(
                 'You are %(distance).0f m from shop "%(shop)s". '
-                'You must be within %(max).0f m to start a visit.',
+                'You must be at least %(min).0f m away to %(purpose)s '
+                '(current company setting).',
                 distance=distance,
                 shop=shop.name,
-                max=MAX_SHOP_DISTANCE_M,
+                min=min_m,
+                purpose=purpose,
+            ))
+        if distance > max_m:
+            raise UserError(_(
+                'You are %(distance).0f m from shop "%(shop)s". '
+                'You must be within %(max).0f m to %(purpose)s '
+                '(current company setting).',
+                distance=distance,
+                shop=shop.name,
+                max=max_m,
+                purpose=purpose,
             ))
         return distance
 
@@ -289,6 +380,12 @@ class ShahtajVisit(models.Model):
             raise UserError(_(
                 'Shop "%(shop)s" is not approved yet. '
                 'You cannot visit until the distributor approves it.',
+                shop=task.shop_id.name,
+            ))
+        if not task._shahtaj_is_operational_for_booker():
+            raise UserError(_(
+                'Shop "%(shop)s" is no longer active on an operational route/zone. '
+                'Ask your distributor to review the territory setup.',
                 shop=task.shop_id.name,
             ))
         if task.state in ('completed', 'cancelled', 'skipped'):
@@ -411,11 +508,41 @@ class ShahtajVisit(models.Model):
                     exclude_visit_line_ids=exclude_lines,
                 )
 
-    def action_place_order(self):
-        """Create and confirm sale order from visit lines; finish visit."""
+    def action_place_order(self, latitude=None, longitude=None):
+        """Create and confirm sale order from visit lines; finish visit.
+
+        Mobile/API place-order must pass GPS with context
+        ``shahtaj_require_place_order_gps=True`` (same distance rule as check-in).
+
+        Native Odoo "Place Order" on the visit form has no GPS capture UI, so it
+        does not require coordinates (check-in already validated location).
+        """
         self.ensure_one()
         if self.state != 'in_progress':
             raise UserError(_('This visit is not in progress.'))
+        if not self.shop_id._shahtaj_is_operational_for_booker():
+            raise UserError(_(
+                'Shop "%(shop)s" is no longer active on an operational route/zone.',
+                shop=self.shop_id.name,
+            ))
+        # API sets shahtaj_require_place_order_gps=True. Native form button does not.
+        require_gps = bool(self.env.context.get('shahtaj_require_place_order_gps'))
+        if require_gps or latitude is not None or longitude is not None:
+            if latitude is None or longitude is None:
+                raise UserError(_(
+                    'Your GPS coordinates are required to place an order.'
+                ))
+            distance = self._validate_check_in_coordinates(
+                self.shop_id,
+                float(latitude),
+                float(longitude),
+                purpose='place an order',
+            )
+            self.with_context(shahtaj_system_visit_write=True).write({
+                'place_order_latitude': float(latitude),
+                'place_order_longitude': float(longitude),
+                'place_order_distance_m': distance,
+            })
         if not self.line_ids:
             raise UserError(_('Add at least one product before placing an order.'))
         self._check_visit_line_stock()
@@ -490,7 +617,11 @@ class ShahtajVisitLine(models.Model):
         'product.product',
         string='Product',
         required=True,
-        domain=[('sale_ok', '=', True)],
+        domain=[
+            ('active', '=', True),
+            ('product_tmpl_id.active', '=', True),
+            ('sale_ok', '=', True),
+        ],
     )
     product_name = fields.Char(
         string='Product',
@@ -553,15 +684,41 @@ class ShahtajVisitLine(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
-            if vals.get('product_id') and not vals.get('product_name'):
-                product = self.env['product.product'].browse(vals['product_id'])
-                vals['product_name'] = product.display_name
+            if vals.get('product_id'):
+                product = self.env['product.product'].with_context(
+                    active_test=False,
+                ).browse(vals['product_id'])
+                if (
+                    not product.exists()
+                    or not product.active
+                    or not product.product_tmpl_id.active
+                    or not product.sale_ok
+                ):
+                    raise UserError(_(
+                        'Cannot add archived or unavailable product "%(product)s".',
+                        product=product.display_name or vals['product_id'],
+                    ))
+                if not vals.get('product_name'):
+                    vals['product_name'] = product.display_name
         return super().create(vals_list)
 
     def write(self, vals):
-        if vals.get('product_id') and not vals.get('product_name'):
-            product = self.env['product.product'].browse(vals['product_id'])
-            vals['product_name'] = product.display_name
+        if vals.get('product_id'):
+            product = self.env['product.product'].with_context(
+                active_test=False,
+            ).browse(vals['product_id'])
+            if (
+                not product.exists()
+                or not product.active
+                or not product.product_tmpl_id.active
+                or not product.sale_ok
+            ):
+                raise UserError(_(
+                    'Cannot use archived or unavailable product "%(product)s".',
+                    product=product.display_name or vals['product_id'],
+                ))
+            if not vals.get('product_name'):
+                vals['product_name'] = product.display_name
         return super().write(vals)
 
     @api.constrains('product_uom_qty', 'product_id', 'visit_id')

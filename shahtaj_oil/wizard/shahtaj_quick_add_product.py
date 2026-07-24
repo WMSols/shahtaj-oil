@@ -10,6 +10,12 @@ class ShahtajQuickAddProductWizard(models.TransientModel):
     _description = 'Quick Add Product'
 
     name = fields.Char(string='Product Name', required=True)
+    standard_price = fields.Float(
+        string='Cost Price',
+        digits='Product Price',
+        default=0.0,
+        help='What you pay the manufacturer per unit.',
+    )
     list_price = fields.Float(
         string='Sales Price',
         required=True,
@@ -71,9 +77,11 @@ class ShahtajQuickAddProductWizard(models.TransientModel):
         if self.shahtaj_sale_uom:
             self.shahtaj_kg_per_unit = defaults.get(self.shahtaj_sale_uom, 1.0)
 
-    @api.constrains('list_price', 'opening_qty')
+    @api.constrains('list_price', 'opening_qty', 'standard_price')
     def _check_values(self):
         for wizard in self:
+            if float_compare(wizard.standard_price, 0.0, precision_digits=2) < 0:
+                raise UserError(_('Cost price cannot be negative.'))
             if float_compare(wizard.list_price, 0.0, precision_digits=2) < 0:
                 raise UserError(_('Sales price cannot be negative.'))
             if float_compare(wizard.opening_qty, 0.0, precision_digits=2) < 0:
@@ -81,17 +89,19 @@ class ShahtajQuickAddProductWizard(models.TransientModel):
 
     def action_create_product(self):
         self.ensure_one()
-        Product = self.env['product.template'].with_context(shahtaj_simple_product=True)
+        create_ctx = {'shahtaj_simple_product': True}
+        if self.track_inventory and self.opening_qty > 0:
+            create_ctx['shahtaj_initial_on_hand'] = self.opening_qty
+        Product = self.env['product.template'].with_context(**create_ctx)
         product = Product.create({
             'name': self.name.strip(),
+            'standard_price': self.standard_price,
             'list_price': self.list_price,
             'is_storable': self.track_inventory,
             'shahtaj_sale_uom': self.shahtaj_sale_uom,
             'shahtaj_kg_per_unit': self.shahtaj_kg_per_unit,
             'taxes_id': [(6, 0, self.tax_ids.ids)],
         })
-        if self.track_inventory and self.opening_qty > 0:
-            product._shahtaj_set_on_hand_qty(self.opening_qty)
         return {
             'type': 'ir.actions.act_window',
             'name': _('Product'),

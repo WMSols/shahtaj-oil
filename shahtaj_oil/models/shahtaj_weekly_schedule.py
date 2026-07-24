@@ -2,7 +2,8 @@
 """Weekly plan: which order booker works which route on which weekday.
 
 Changing schedules refreshes visit tasks for the next ~2 weeks.
-Today's schedule lines are locked so visit stats are not broken mid-day.
+A schedule day is locked only while it is *today* and visits are already
+in progress or completed. Past weekdays can be edited for upcoming weeks.
 """
 from datetime import timedelta
 
@@ -71,11 +72,27 @@ class ShahtajWeeklySchedule(models.Model):
         string='Day Progress %',
         compute='_compute_week_progress',
     )
+    week_tasks_skipped = fields.Integer(
+        string='Tasks Skipped',
+        compute='_compute_week_progress',
+        store=True,
+    )
     is_day_locked = fields.Boolean(
         string='Locked (Today)',
         compute='_compute_is_day_locked',
-        help='Schedule lines for today cannot be edited — protects visit statistics.',
+        help='Locked only when this schedule day is today and visits are '
+             'already in progress or completed. Past weekdays stay editable '
+             'so distributors can plan the next occurrence.',
     )
+
+    @api.constrains('route_id', 'active')
+    def _check_route_operational(self):
+        for schedule in self.filtered('active'):
+            if schedule.route_id and not schedule.route_id._shahtaj_is_operational_for_booker():
+                raise ValidationError(_(
+                    'Weekly schedule route "%(route)s" is archived or its zone is inactive.',
+                    route=schedule.route_id.display_name,
+                ))
 
     _booker_route_day_unique = models.Constraint(
         'unique(order_booker_id, route_id, day_of_week)',
@@ -118,44 +135,131 @@ class ShahtajWeeklySchedule(models.Model):
             schedule.week_tasks_progress = (
                 (completed / planned * 100.0) if planned else 0.0
             )
-
-    @api.depends('day_of_week')
-    def _compute_is_day_locked(self):
-        today_weekday = str(fields.Date.context_today(self).weekday())
-        for schedule in self:
-            schedule.is_day_locked = bool(
-                schedule.id and schedule.day_of_week == today_weekday
-            )
+            skipped_count = self.env['shahtaj.visit.task'].search_count([
+            ('weekly_schedule_id', '=', schedule.id),
+            ('state', 'in', ('skipped', 'cancelled'))
+           ])
+            schedule.week_tasks_skipped = skipped_count
 
     def _today_weekday(self):
         return str(fields.Date.context_today(self).weekday())
 
+    def _occurrence_date(self):
+        self.ensure_one()
+        today = fields.Date.context_today(self)
+        week_start = today - timedelta(days=today.weekday())
+        return week_start + timedelta(days=int(self.day_of_week))
+
+    def _is_today_occurrence(self):
+        self.ensure_one()
+        return self.day_of_week == self._today_weekday()
+
+    def _get_occurrence_tasks(self):
+        """Visit tasks for this schedule line on its occurrence date this week."""
+        Task = self.env['shahtaj.visit.task']
+        tasks = Task.browse()
+        for schedule in self:
+            if not schedule.order_booker_id or not schedule.route_id:
+                continue
+            tasks |= Task.search([
+                ('order_booker_id', '=', schedule.order_booker_id.id),
+                ('route_id', '=', schedule.route_id.id),
+                ('scheduled_date', '=', schedule._occurrence_date()),
+                ('state', '!=', 'cancelled'),
+            ])
+        return tasks
+
+    def _get_blocking_tasks(self):
+        """Blocking only applies when the schedule day is today."""
+        tasks = self.env['shahtaj.visit.task']
+        for schedule in self:
+            if not schedule._is_today_occurrence():
+                continue
+            tasks |= schedule._get_occurrence_tasks().filtered(
+                lambda t: t.state in ('in_progress', 'completed'),
+            )
+        return tasks
+
+    def _cancel_pending_occurrence_tasks(self):
+        pending = self._get_occurrence_tasks().filtered(lambda t: t.state == 'pending')
+        if pending:
+            pending.with_context(shahtaj_system_visit_write=True).write({
+                'state': 'cancelled',
+            })
+
+    def _cancel_pending_forward_tasks(self):
+        """Cancel pending tasks from today forward for this weekday/route/schedule.
+
+        Completed and in-progress visits are never cancelled. Used before a
+        route/day/booker change so regeneration can create clean next-week tasks.
+        """
+        Task = self.env['shahtaj.visit.task']
+        today = fields.Date.context_today(self)
+        for schedule in self:
+            if not schedule.order_booker_id or not schedule.route_id:
+                continue
+            pending = Task.search([
+                ('order_booker_id', '=', schedule.order_booker_id.id),
+                ('state', '=', 'pending'),
+                ('scheduled_date', '>=', today),
+                '|',
+                ('weekly_schedule_id', '=', schedule.id),
+                ('route_id', '=', schedule.route_id.id),
+            ])
+            weekday = schedule.day_of_week
+            to_cancel = pending.filtered(
+                lambda t, sched_id=schedule.id, route_id=schedule.route_id.id, wd=weekday:
+                    t.weekly_schedule_id.id == sched_id
+                    or (
+                        t.route_id.id == route_id
+                        and t.scheduled_date
+                        and str(t.scheduled_date.weekday()) == wd
+                    )
+            )
+            if to_cancel:
+                to_cancel.with_context(shahtaj_system_visit_write=True).write({
+                    'state': 'cancelled',
+                })
+
+    @api.depends('order_booker_id', 'route_id', 'day_of_week')
+    def _compute_is_day_locked(self):
+        for schedule in self:
+            if not schedule.id or not schedule._is_today_occurrence():
+                schedule.is_day_locked = False
+                continue
+            schedule.is_day_locked = bool(schedule._get_blocking_tasks())
+
     def _day_label(self, day_code):
         return dict(DAY_SELECTION).get(day_code, day_code)
 
-    def _raise_day_locked_error(self):
-        day_name = self._day_label(self._today_weekday())
+    def _raise_blocking_tasks_error(self):
+        self.ensure_one()
+        day_name = self._day_label(self.day_of_week or self._today_weekday())
         raise ValidationError(_(
-            'Cannot change %(day)s schedules on %(day)s — '
-            'today\'s visit statistics are already in progress. '
-            'You can add new lines for other weekdays.',
+            'Cannot change today\'s %(day)s schedule — visits are already in '
+            'progress or completed. Finish or skip those visits first. '
+            'You can still change this weekday later for the next %(day)s.',
             day=day_name,
         ))
 
-    def _check_day_not_locked_for_write(self, vals):
-        # Prevent changing today's route assignment after visits may have started.
+    def _check_blocking_tasks_for_write(self, vals):
         locked_fields = {'route_id', 'day_of_week', 'active', 'order_booker_id'}
         if not locked_fields.intersection(vals):
             return
-        for schedule in self.filtered('is_day_locked'):
-            schedule._raise_day_locked_error()
+        for schedule in self:
+            # Past weekdays are editable so next-week planning stays available.
+            if not schedule._is_today_occurrence():
+                continue
+            if schedule._get_blocking_tasks():
+                schedule._raise_blocking_tasks_error()
 
-    def _sync_future_tasks(self):
-        """After schedule create/write, regenerate tasks for this booker (today + 13 days)."""
+    def _sync_future_tasks(self, bookers=None):
+        """After schedule create/write/unlink, regenerate tasks for bookers."""
         today = fields.Date.context_today(self)
         end = fields.Date.add(today, days=13)
         Task = self.env['shahtaj.visit.task']
-        for booker in self.mapped('order_booker_id'):
+        bookers = bookers or self.mapped('order_booker_id')
+        for booker in bookers:
             Task._generate_from_schedules(today, end, order_booker=booker)
 
     @api.model_create_multi
@@ -165,13 +269,21 @@ class ShahtajWeeklySchedule(models.Model):
         return records
 
     def write(self, vals):
-        self._check_day_not_locked_for_write(vals)
+        self._check_blocking_tasks_for_write(vals)
+        reschedule_fields = {'route_id', 'day_of_week', 'order_booker_id', 'active'}
+        if reschedule_fields.intersection(vals):
+            # Cancel pending from today forward (old route/weekday) before changing.
+            self._cancel_pending_forward_tasks()
         res = super().write(vals)
         self._sync_future_tasks()
         return res
 
     def unlink(self):
-        locked = self.filtered('is_day_locked')
-        if locked:
-            locked[0]._raise_day_locked_error()
-        return super().unlink()
+        bookers = self.mapped('order_booker_id')
+        for schedule in self:
+            if schedule._is_today_occurrence() and schedule._get_blocking_tasks():
+                schedule._raise_blocking_tasks_error()
+            schedule._cancel_pending_forward_tasks()
+        res = super().unlink()
+        self.env['shahtaj.weekly.schedule']._sync_future_tasks(bookers=bookers)
+        return res

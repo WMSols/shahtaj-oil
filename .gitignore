@@ -1,1 +1,4 @@
 /shahtaj_oil_module/
+# Python cache
+__pycache__/
+*.py[cod]
