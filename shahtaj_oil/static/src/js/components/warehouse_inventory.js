@@ -12,7 +12,7 @@ export class WarehouseInventory extends Component {
     static components = { ConfirmModal };
     setup() {
         this.orm = useService("orm");
-        
+        this.notification = useService("notification");
         this.state = useState({
             activeSubTab: this._normalizeSubTab(this.props.requestedSubTab || 'inventory'),
             previousSubTab: 'inventory',
@@ -187,7 +187,7 @@ export class WarehouseInventory extends Component {
                 await this.loadSaleTaxes();
             }
         } catch (error) {
-            alert("Failed to update archive status: " + (error.data?.message || error.message));
+            this.notification.add("Failed to update archive status: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
     // --- Data Fetching Logic ---
@@ -321,7 +321,7 @@ export class WarehouseInventory extends Component {
 
     async saveTax() {
         if (!this.state.taxForm.name) {
-            alert("Tax name is required.");
+            this.notification.add("Tax name is required.", { type: "danger" });
             return;
         }
 
@@ -343,7 +343,7 @@ export class WarehouseInventory extends Component {
             await this.loadTaxesList(); // Refresh the grid
             await this.loadSaleTaxes(); // Refresh the product creation dropdown
         } catch (error) {
-            alert("Failed to save tax: " + (error.data?.message || error.message));
+            this.notification.add("Failed to save tax: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
 
@@ -405,7 +405,7 @@ export class WarehouseInventory extends Component {
         const prod = this.activeInventory.find(p => p.id == this.state.adjustmentForm.product_id);
         return prod ? prod.qty_available : 0;
     }
-
+    // Stock Update Logic
     async saveAdjustment() {
         const pid = parseInt(this.state.adjustmentForm.product_id);
         const qty = parseFloat(this.state.adjustmentForm.qty);
@@ -414,6 +414,7 @@ export class WarehouseInventory extends Component {
             await this.orm.call("product.template", "action_shahtaj_add_on_hand_qty", [pid, qty]);
             await this.loadInventory();
         }
+        this.notification.add(`Successfully added ${qty} units to the product stock.`, { type: "success" });
         
         this.state.showAdjustmentForm = false;
         this.state.adjustmentForm = { product_id: '', qty: 0 };

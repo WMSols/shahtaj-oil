@@ -329,7 +329,7 @@
             </t>
 
             <div class="table-responsive p-0 bg-white">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table align-middle mb-0">
                     <thead class="bg-light text-uppercase small fw-bold text-muted">
                         <tr>
                             <th class="border-top-0 ps-4 py-3">Product Name</th>

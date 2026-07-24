@@ -7,6 +7,7 @@ export class StaffManagement extends Component {
     static components = { ConfirmModal };
     setup() {
         this.orm = useService("orm");
+        this.notification = useService("notification");
         this.state = useState({
             activeTab: 'order_booker',
             viewMode: 'list',
@@ -275,7 +276,7 @@ export class StaffManagement extends Component {
         } catch (error) {
             console.error("Save failed:", error);
             const errorMessage = error.data?.message || error.message || "Unknown error occurred";
-            alert(`Failed to save order booker:\n\n${errorMessage}`);
+            this.notification.add(`Failed to save order booker:\n\n${errorMessage}`, { type: "danger" });
         } finally {
             this.state.loading.save = false;
         }
@@ -304,7 +305,7 @@ export class StaffManagement extends Component {
             }
         } catch (error) {
             console.error("Failed to toggle status:", error);
-            alert("An error occurred while updating the status.");
+            this.notification.add("An error occurred while updating the status.", { type: "danger" });
         } finally {
             this.state.loading.toggle = false;
         }

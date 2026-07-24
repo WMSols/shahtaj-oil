@@ -336,7 +336,7 @@ export class OperationsTracking extends Component {
             this.state.isEditingDelivery = false;
             this.notification.add("Order saved successfully.", { type: "success" });
         } catch (error) {
-            alert("Failed to save: " + (error.data?.message || error.message));
+            this.notification.add("Failed to save: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
 

@@ -449,6 +449,7 @@
                     </span>
                     <input type="text" class="form-control border-start-0 ps-0" placeholder="Search by shop or owner..." t-model="this.state.shopSearchQuery" />
                 </div>
+                <small class="fw-bold text-muted">Filters</small>
                 <select class="form-select form-select-sm shadow-sm" style="width: 140px;" t-model="this.state.shopFilterCategory" title="Filter by payment category">
                     <option value="all">All Types</option>
                     <option value="cash">Cash Only</option>

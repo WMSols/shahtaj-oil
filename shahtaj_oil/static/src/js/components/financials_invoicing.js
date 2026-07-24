@@ -515,7 +515,7 @@ export class FinancialsInvoicing extends Component {
             }
         } catch (error) {
             console.error("P&L Fetch Error:", error);
-            alert("Failed to load Profit & Loss data.");
+            this.notification.add("Failed to load Profit & Loss data.", { type: "danger" });
         }
         this.state.pnl.isLoading = false;
     }
@@ -545,7 +545,7 @@ export class FinancialsInvoicing extends Component {
             });
         } catch (error) {
             console.error("Print Error:", error);
-            alert("Failed to print Manufacturer Summary.");
+            this.notification.add("Failed to print Manufacturer Summary.", { type: "danger" });
         } finally {
             this.state.pnl.isLoading = false;
         }
@@ -680,7 +680,7 @@ export class FinancialsInvoicing extends Component {
             await this.fetchRealData();
             this.setInvoiceSubTab('customer_invoices');
         } catch (error) { 
-            alert(`Backend rejected the invoice creation:\n\n${error.data?.message || error.message}`);
+            this.notification.add(`Backend rejected the invoice creation:\n\n${error.data?.message || error.message}`, { type: "danger" });
         }
         this.state.isCreatingInvoice = false;
     }
@@ -745,7 +745,7 @@ export class FinancialsInvoicing extends Component {
             this.state.money.paymentCountOut = paymentCountOut;
         } catch (error) {
             console.error("Money Overview Fetch Error:", error);
-            alert("Failed to load money overview: " + (error.data?.message || error.message));
+            this.notification.add("Failed to load money overview: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.money.isLoading = false;
         }
@@ -889,7 +889,7 @@ export class FinancialsInvoicing extends Component {
             await this.fetchRealData();
             this.setInvoiceSubTab('customer_invoices');
         } catch (error) { 
-            alert(`Backend rejected the invoice creation:\n\n${error.data?.message || error.message}`);
+            this.notification.add(`Backend rejected the invoice creation:\n\n${error.data?.message || error.message}`, { type: "danger" });
         }
         this.state.isCreatingInvoice = false;
     }
@@ -900,7 +900,7 @@ export class FinancialsInvoicing extends Component {
             await this.orm.call("account.move", "action_post", [[invoice.id]]);
             await this.fetchRealData();
             this._refreshSelectedInvoiceState(invoice.id);
-        } catch (error) { alert(error.data?.message || error.message); }
+        } catch (error) { this.notification.add(error.data?.message || error.message, { type: "danger" }); }
         this.state.isConfirming = false;
     }
 
@@ -910,7 +910,7 @@ export class FinancialsInvoicing extends Component {
             await this.orm.call("account.move", "button_draft", [[invoice.id]]);
             await this.fetchRealData();
             this._refreshSelectedInvoiceState(invoice.id);
-        } catch (error) { alert(error.data?.message || error.message); }
+        } catch (error) { this.notification.add(error.data?.message || error.message, { type: "danger" }); }
         this.state.isResetting = false;
     }
 
@@ -922,7 +922,7 @@ export class FinancialsInvoicing extends Component {
                 await this.refreshData();
                 this._refreshSelectedInvoiceState(invoice.id);
             } catch (error) { 
-                alert("Failed to cancel invoice: " + (error.data?.message || error.message));
+                this.notification.add("Failed to cancel invoice: " + (error.data?.message || error.message), { type: "danger" });
             }
             this.state.isCancelling = false;
         });
@@ -969,7 +969,7 @@ export class FinancialsInvoicing extends Component {
             : this.state.selectedInvoice.full_lines;
             
         if (linesArray.length <= 1) {
-            alert("An invoice must have at least one product line.");
+            this.notification.add("An invoice must have at least one product line.", { type: "danger" });
             return;
         }
 
@@ -1001,7 +1001,7 @@ export class FinancialsInvoicing extends Component {
             for (const line of linesToSave) {
                 const prodId = line.productId || line.product_id;
                 if (!prodId) {
-                    alert("Please select a product for all lines.");
+                    this.notification.add("Please select a product for all lines.", { type: "danger" });
                     this.state.isSavingInvoice = false;
                     return;
                 }
@@ -1027,7 +1027,7 @@ export class FinancialsInvoicing extends Component {
             this._refreshSelectedInvoiceState(this.state.selectedInvoice.id);
             await this.viewInvoice(this.state.selectedInvoice); 
         } catch (error) {
-            alert("Failed to save invoice edits: " + (error.data?.message || error.message));
+            this.notification.add("Failed to save invoice edits: " + (error.data?.message || error.message), { type: "danger" });
         }
         this.state.isSavingInvoice = false;
     }
@@ -1104,26 +1104,27 @@ export class FinancialsInvoicing extends Component {
     _validateRefundForm() {
         const form = this.state.refundForm;
         if (!form.date) {
-            alert('Please select a refund date.');
+            this.notification.add('Please select a refund date.', { type: "danger" });
             return false;
         }
         if (form.mode !== 'partial') {
             return true;
         }
         if (!form.lines.length) {
-            alert('This invoice has no product lines to credit.');
+            this.notification.add('This invoice has no product lines to credit.', { type: "danger" });
             return false;
         }
         let hasReturn = false;
         for (const line of form.lines) {
             const qty = parseFloat(line.qty);
             if (Number.isNaN(qty) || qty < 0) {
-                alert(`Invalid return quantity for "${line.product}".`);
+                this.notification.add(`Invalid return quantity for "${line.product}".`, { type: "danger" });
                 return false;
             }
             if (qty > line.maxQty) {
-                alert(
-                    `Return quantity for "${line.product}" cannot exceed invoiced qty (${line.maxQty}).`
+                this.notification.add(
+                    `Return quantity for "${line.product}" cannot exceed invoiced qty (${line.maxQty}).`,
+                    { type: "danger" }
                 );
                 return false;
             }
@@ -1132,7 +1133,7 @@ export class FinancialsInvoicing extends Component {
             }
         }
         if (!hasReturn) {
-            alert('Set at least one product return quantity greater than zero.');
+            this.notification.add('Set at least one product return quantity greater than zero.', { type: "danger" });
             return false;
         }
         const isFullSelection = form.lines.every(
@@ -1271,7 +1272,7 @@ export class FinancialsInvoicing extends Component {
                 { type: 'success' }
             );
         } catch (error) {
-            alert(`Refund failed:\n\n${error.data?.message || error.message}`);
+            this.notification.add(`Refund failed:\n\n${error.data?.message || error.message}`, { type: "danger" });
         }
         this.state.isRefunding = false;
     }
@@ -1329,7 +1330,7 @@ export class FinancialsInvoicing extends Component {
             this._refreshSelectedInvoiceState(form.invoice_id);
             
         } catch (error) {
-            alert(`Payment failed:\n\n${error.data?.message || error.message}`);
+            this.notification.add(`Payment failed:\n\n${error.data?.message || error.message}`, { type: "danger" });
         }
         this.state.isPaying = false;
     }
@@ -1340,7 +1341,7 @@ export class FinancialsInvoicing extends Component {
             await this.orm.write("res.partner", [shop.id], { credit_limit: parseFloat(shop.rawLimit) });
             await this.fetchRealData();
             this.state.selectedShop = null;
-        } catch (error) { alert("Failed to save limit. Ensure you have distributor rights."); }
+        } catch (error) { this.notification.add("Failed to save limit. Ensure you have distributor rights.", { type: "danger" }); }
     }
 }
 

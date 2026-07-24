@@ -12,7 +12,7 @@ export class BankTransactions extends Component {
 
     setup() {
         this.orm = useService("orm");
-
+        this.notification = useService("notification");
         this.state = useState({
             // View Control
             activeTab: 'transactions', // 'transactions' or 'journals'
@@ -168,7 +168,7 @@ export class BankTransactions extends Component {
 
     async saveJournal() {
         if (!this.state.journalForm.name || !this.state.journalForm.code) {
-            this.notification("Please provide both a Name and a Short Code for the journal.");
+            this.notification.add("Please provide both a Name and a Short Code for the journal.");
             return;
         }
 
@@ -184,7 +184,7 @@ export class BankTransactions extends Component {
             await this.loadJournals();
             this.closeJournalModal();
         } catch (error) {
-            alert("Failed to create journal: " + (error.data?.message || error.message));
+            this.notification.add("Failed to create journal: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isLoading.saveJournal = false;
         }
@@ -218,7 +218,8 @@ export class BankTransactions extends Component {
 
     async saveJournal() {
         if (!this.state.journalForm.name || !this.state.journalForm.code) {
-            alert("Name and Short Code are required."); return;
+            this.notification.add("Name and Short Code are required.", { type: "danger" });
+            return;
         }
 
         this.state.isLoading.saveJournal = true;
@@ -241,7 +242,7 @@ export class BankTransactions extends Component {
             await this.loadJournals();
             this.closeJournalModal();
         } catch (error) {
-            alert("Failed to save journal: " + (error.data?.message || error.message));
+            this.notification.add("Failed to save journal: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isLoading.saveJournal = false;
         }
