@@ -209,27 +209,31 @@ export class TerritoryRoutes extends Component {
         });
     }
 
-    // --- Data Fetching Logic ---
+    // --- Data Fetching Logic (areas/routes/shops in parallel) ---
     async fetchDashboardData() {
         const includeArchivedDomain = ['|', ['active', '=', true], ['active', '=', false]];
 
-        this.state.areas = await this.orm.searchRead(
-            "shahtaj.zone",
-            includeArchivedDomain, 
-            ["id", "name", "active", "route_count"]
-        );
+        const [areas, routes, shops] = await Promise.all([
+            this.orm.searchRead(
+                "shahtaj.zone",
+                includeArchivedDomain,
+                ["id", "name", "active", "route_count"]
+            ),
+            this.orm.searchRead(
+                "shahtaj.route",
+                includeArchivedDomain,
+                ["id", "name", "zone_id", "shop_count", "active"]
+            ),
+            this.orm.searchRead(
+                "res.partner",
+                [["is_shahtaj_shop", "=", true], ...includeArchivedDomain],
+                ["id", "name", "owner_name", "phone", "route_id", "shop_approval_state", "shahtaj_shop_category", "registered_by_id", "active"]
+            ),
+        ]);
 
-        this.state.routes = await this.orm.searchRead(
-            "shahtaj.route",
-            includeArchivedDomain,
-            ["id", "name", "zone_id", "shop_count", "active"]
-        );
-
-        this.state.shops = await this.orm.searchRead(
-            "res.partner",
-            [["is_shahtaj_shop", "=", true], ...includeArchivedDomain], 
-            ["id", "name", "owner_name", "phone", "route_id", "shop_approval_state", "shahtaj_shop_category", "registered_by_id", "active"]
-        );
+        this.state.areas = areas;
+        this.state.routes = routes;
+        this.state.shops = shops;
     }
 
     setSubTab(tabName) {

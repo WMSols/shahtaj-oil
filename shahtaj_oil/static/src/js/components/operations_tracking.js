@@ -71,15 +71,8 @@ export class OperationsTracking extends Component {
         })
 
         onWillStart(async () => {
-            const tasks = [
-                this.fetchLiveVisits(),
-                this.fetchLiveOrders(),
-                this.fetchPerformanceData(),
-            ];
-            if (hasFinancialAccess()) {
-                tasks.push(this.loadTaxAndProductData());
-            }
-            await Promise.all(tasks);
+            // Load only the tab the user opened — same queries/values as before when that tab is shown.
+            await this.ensureTabData(this.state.activeSubTab);
         });
     }
     // --- NEW: Global Refresh Method ---
@@ -102,19 +95,52 @@ export class OperationsTracking extends Component {
         return hasFinancialAccess();
     }
 
-    // --- NEW: Global Refresh Method ---
+    /**
+     * Load datasets for one Operations sub-tab.
+     * Domains, fields, and mapping stay identical; we only skip work for tabs not open yet.
+     */
+    async ensureTabData(tabName, { force = false } = {}) {
+        if (tabName === 'orders' || tabName === 'deliveries') {
+            if (force || !this._ordersLoaded) {
+                await this.fetchLiveOrders();
+                this._ordersLoaded = true;
+            }
+            return;
+        }
+        if (tabName === 'checkins') {
+            if (force || !this._visitsLoaded) {
+                await this.fetchLiveVisits();
+                this._visitsLoaded = true;
+            }
+            return;
+        }
+        if (tabName === 'performance') {
+            if (force || !this._performanceLoaded) {
+                await this.fetchPerformanceData();
+                this._performanceLoaded = true;
+            }
+        }
+    }
+
+    /** Taxes/products are only needed for delivery line tax labels and edit dropdowns. */
+    async ensureCatalogData({ force = false } = {}) {
+        if (!hasFinancialAccess()) {
+            return;
+        }
+        if (force || !this._catalogsLoaded) {
+            await this.loadTaxAndProductData();
+            this._catalogsLoaded = true;
+        }
+    }
+
     async refreshData() {
         this.state.isRefreshing = true;
         try {
-            const tasks = [
-                this.fetchLiveVisits(),
-                this.fetchLiveOrders(),
-                this.fetchPerformanceData(),
-            ];
-            if (hasFinancialAccess()) {
-                tasks.push(this.loadTaxAndProductData());
+            await this.ensureTabData(this.state.activeSubTab, { force: true });
+            // Refresh catalogs only if they were already used (keeps edit dropdowns in sync).
+            if (this._catalogsLoaded) {
+                await this.ensureCatalogData({ force: true });
             }
-            await Promise.all(tasks);
         } finally {
             this.state.isRefreshing = false;
         }
@@ -164,6 +190,7 @@ export class OperationsTracking extends Component {
                 notes: v.notes || ''
             };
         });
+        this._visitsLoaded = true;
     }
 
     async fetchLiveOrders() {
@@ -223,18 +250,26 @@ export class OperationsTracking extends Component {
         
         // Only show orders that are confirmed/to-invoice in the deliveries tab
         this.state.deliveries = this.state.orders.filter(o => o.status === 'To Invoice' || o.status === 'Delivered');
+        this._ordersLoaded = true;
     }
 
     // --- NEW: PERFORMANCE DATA FETCHING ---
     async fetchPerformanceData() {
-        const bookers = await this.orm.searchRead('res.users', [['shahtaj_is_order_booker', '=', true]], ['id', 'name']);
+        const [bookers, scheds, tgts] = await Promise.all([
+            this.orm.searchRead('res.users', [['shahtaj_is_order_booker', '=', true]], ['id', 'name']),
+            this.orm.searchRead('shahtaj.weekly.schedule', [], [
+                'id', 'name', 'day_of_week', 'route_id', 'zone_id', 'active', 'shop_count',
+                'week_tasks_planned', 'week_tasks_completed', 'week_tasks_progress',
+                'week_occurrence_date', 'order_booker_id'
+            ]),
+            this.orm.searchRead('shahtaj.visit.target', [], [
+                'id', 'name', 'date_start', 'date_end', 'target_type', 'target_value',
+                'achieved_value', 'remaining_value', 'progress_percent', 'product_id',
+                'currency_id', 'target_weight_uom', 'active', 'order_booker_id'
+            ]),
+        ]);
         this.state.bookers = bookers;
 
-        const scheds = await this.orm.searchRead('shahtaj.weekly.schedule', [], [
-            'id', 'name', 'day_of_week', 'route_id', 'zone_id', 'active', 'shop_count',
-            'week_tasks_planned', 'week_tasks_completed', 'week_tasks_progress',
-            'week_occurrence_date', 'order_booker_id'
-        ]);
         const dayMap = { '0': 'Monday', '1': 'Tuesday', '2': 'Wednesday', '3': 'Thursday', '4': 'Friday', '5': 'Saturday', '6': 'Sunday' };
         this.state.schedules = scheds.map(r => ({
             id: r.id,
@@ -253,11 +288,6 @@ export class OperationsTracking extends Component {
             occurrenceDate: r.week_occurrence_date || ''
         }));
 
-        const tgts = await this.orm.searchRead('shahtaj.visit.target', [], [
-            'id', 'name', 'date_start', 'date_end', 'target_type', 'target_value',
-            'achieved_value', 'remaining_value', 'progress_percent', 'product_id',
-            'currency_id', 'target_weight_uom', 'active', 'order_booker_id'
-        ]);
         this.state.targets = tgts.map(r => ({
             id: r.id,
             name: r.name,
@@ -276,6 +306,7 @@ export class OperationsTracking extends Component {
             weightUom: r.target_weight_uom || '',
             active: r.active
         }));
+        this._performanceLoaded = true;
     }
   
     closeDelivery() { 
@@ -359,26 +390,28 @@ export class OperationsTracking extends Component {
         if (!hasFinancialAccess()) {
             return;
         }
-        // Fetch standard Odoo Sales Taxes
-        const taxes = await this.orm.searchRead(
-            "account.tax",
-            [["type_tax_use", "=", "sale"], ["active", "=", true]],
-            ["id", "name", "amount"]
-        );
+        const [taxes, prods] = await Promise.all([
+            this.orm.searchRead(
+                "account.tax",
+                [["type_tax_use", "=", "sale"], ["active", "=", true]],
+                ["id", "name", "amount"]
+            ),
+            this.orm.searchRead("product.template", [
+                ["sale_ok", "=", true],
+                ["active", "=", true],
+            ], ["id", "name"]),
+        ]);
         this.state.saleTaxes = taxes;
-
-        // Fetch Products (for the dropdown)
-        const prods = await this.orm.searchRead("product.template", [
-            ["sale_ok", "=", true],
-            ["active", "=", true],
-        ], ["id", "name"]);
         this.state.allProducts = prods;
+        this._catalogsLoaded = true;
     }
 
     // 2. UPDATE THIS METHOD TO MAP TAX NAMES IN DELIVERIES
     async viewDelivery(dlv) {
         this.state.selectedDelivery = dlv;
-        this.state.isEditingDelivery = false; 
+        this.state.isEditingDelivery = false;
+        // Need tax catalog so line tax labels resolve the same as before.
+        await this.ensureCatalogData();
         
         try {
             // Reverted back to plural 'tax_ids'
@@ -578,6 +611,8 @@ export class OperationsTracking extends Component {
         this.state.selectedCheckin = null;
         this.state.selectedSchedule = null;
         this.state.selectedTarget = null;
+        // First visit to a tab loads its data; already-loaded tabs keep current values.
+        this.ensureTabData(tabName);
     }
 
     setPerfSubTab(tabName) {
