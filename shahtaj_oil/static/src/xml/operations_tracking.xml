@@ -370,6 +370,7 @@
                         <option value="">All Feed Statuses</option>
                         <option value="Checked In">Active (Currently Checked In)</option>
                         <option value="Checked Out">Completed (Checked Out)</option>
+                        <option value="Skipped">Skipped / Incomplete</option>
                         <option value="Cancelled">Cancelled Visits</option>
                     </select>
                 </div>
@@ -408,7 +409,7 @@
                     </div>
                     <div class="text-end d-flex align-items-center">
                         <div class="me-3 text-end">
-                            <span t-attf-class="badge #{log.status === 'Checked In' ? 'bg-info text-white shadow-sm' : log.status === 'Cancelled' ? 'bg-danger text-white shadow-sm' : 'bg-secondary text-dark shadow-sm'} p-2 fs-6 mb-1 d-inline-block">
+                            <span t-attf-class="badge #{log.status === 'Checked In' ? 'bg-info text-white shadow-sm' : log.status === 'Cancelled' ? 'bg-danger text-white shadow-sm' : log.status === 'Skipped' ? 'bg-warning text-dark shadow-sm' : 'bg-secondary text-dark shadow-sm'} p-2 fs-6 mb-1 d-inline-block">
                                 <t t-esc="log.status"/>
                             </span>
                             <div class="text-muted fw-bold small" title="Total time spent at the shop">
@@ -451,8 +452,8 @@
                 </svg>
                                 Back to List
             </button>
-            <div>
-                <span t-attf-class="badge #{this.state.selectedCheckin.status === 'Checked In' ? 'bg-info ' : this.state.selectedCheckin.status === 'Cancelled' ? 'bg-danger text-white' : 'bg-secondary text-dark'}  p-2 fs-6 text-uppercase shadow-sm" style="letter-spacing: 1px;">
+           <div>
+                <span t-attf-class="badge #{this.state.selectedCheckin.status === 'Checked In' ? 'bg-info ' : this.state.selectedCheckin.status === 'Cancelled' ? 'bg-danger text-white' : this.state.selectedCheckin.status === 'Skipped' ? 'bg-warning text-dark' : 'bg-secondary text-dark'}  p-2 fs-6 text-uppercase shadow-sm" style="letter-spacing: 1px;">
                     <t t-esc="this.state.selectedCheckin.status"/>
                 </span>
             </div>
@@ -1017,6 +1018,13 @@
                     <span class="text-dark fw-bold">Tasks Completed:</span>
                     <span class="text-success fw-bold">
                         <t t-esc="this.state.selectedSchedule.done"/>
+                    </span>
+                </div>
+                <!-- NEW SKIPPED ROW -->
+                <div class="d-flex justify-content-between mb-3 border-bottom pb-2">
+                    <span class="text-dark fw-bold">Tasks Skipped:</span>
+                    <span class="text-danger fw-bold">
+                        <t t-esc="this.state.selectedSchedule.skipped"/>
                     </span>
                 </div>
                 <label class="small fw-bold mb-1">Completion Progress</label>

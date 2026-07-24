@@ -148,13 +148,14 @@ export class OperationsTracking extends Component {
     // --- DATA FETCHING (EXISTING) ---
 
    async fetchLiveVisits() {
+        // 1. Fetch standard visit logs
         const visits = await this.orm.searchRead(
             "shahtaj.visit",
             [],
             ["id", "shop_id", "order_booker_id", "started_at", "ended_at", "state", "outcome", "visit_task_id", "sale_order_id", "notes"]
         );
 
-        this.state.checkins = visits.map(v => {
+        let checkinsData = visits.map(v => {
             let durationStr = "Active Now";
             if (v.started_at && v.ended_at) {
                 const start = new Date(v.started_at.replace(' ', 'T') + "Z");
@@ -166,6 +167,7 @@ export class OperationsTracking extends Component {
 
             let displayStatus = 'Unknown';
             if (v.state === 'in_progress') displayStatus = 'Checked In';
+            else if (v.state === 'completed' && v.outcome === 'incomplete') displayStatus = 'Skipped'; // Auto-closed overnight
             else if (v.state === 'completed') displayStatus = 'Checked Out';
             else if (v.state === 'cancelled') displayStatus = 'Cancelled';
 
@@ -173,6 +175,7 @@ export class OperationsTracking extends Component {
             if (v.outcome === 'none') displayOutcome = 'In Progress';
             else if (v.outcome === 'order') displayOutcome = 'Order Placed';
             else if (v.outcome === 'no_order') displayOutcome = 'No Order';
+            else if (v.outcome === 'incomplete') displayOutcome = 'Incomplete / Auto-Skipped';
 
             return {
                 id: v.id,
@@ -190,9 +193,42 @@ export class OperationsTracking extends Component {
                 notes: v.notes || ''
             };
         });
+
+        // 2. Fetch standalone Skipped/Cancelled tasks that never got a visit record
+        try {
+            const skippedTasks = await this.orm.searchRead(
+                "shahtaj.visit.task",
+                [["state", "in", ["skipped", "cancelled"]], ["visit_id", "=", false]],
+                ["id", "shop_id", "order_booker_id", "scheduled_date", "state", "notes", "name"]
+            );
+
+            const taskData = skippedTasks.map(t => ({
+                id: `task_${t.id}`, 
+                shop: t.shop_id ? t.shop_id[1] : 'Unknown Shop',
+                shopId: t.shop_id ? t.shop_id[0] : false,
+                booker: t.order_booker_id ? t.order_booker_id[1] : 'Unknown Booker',
+                bookerId: t.order_booker_id ? t.order_booker_id[0] : false,
+                time: t.scheduled_date || 'N/A',
+                endTime: 'N/A',
+                status: t.state === 'skipped' ? 'Skipped' : 'Cancelled',
+                duration: '0 mins',
+                outcome: t.state === 'skipped' ? 'Task Skipped' : 'Task Cancelled',
+                taskRef: t.name || `Task #${t.id}`,
+                sale_order_id: false,
+                notes: t.notes || ''
+            }));
+
+            checkinsData = [...checkinsData, ...taskData];
+        } catch (error) {
+            console.warn("Could not fetch skipped tasks:", error);
+        }
+
+        // Sort chronologically (newest first)
+        checkinsData.sort((a, b) => new Date(b.time) - new Date(a.time));
+        
+        this.state.checkins = checkinsData;
         this._visitsLoaded = true;
     }
-
     async fetchLiveOrders() {
         const orders = await this.orm.searchRead(
             "sale.order",
@@ -257,9 +293,9 @@ export class OperationsTracking extends Component {
     async fetchPerformanceData() {
         const [bookers, scheds, tgts] = await Promise.all([
             this.orm.searchRead('res.users', [['shahtaj_is_order_booker', '=', true]], ['id', 'name']),
-            this.orm.searchRead('shahtaj.weekly.schedule', [], [
+           this.orm.searchRead('shahtaj.weekly.schedule', [], [
                 'id', 'name', 'day_of_week', 'route_id', 'zone_id', 'active', 'shop_count',
-                'week_tasks_planned', 'week_tasks_completed', 'week_tasks_progress',
+                'week_tasks_planned', 'week_tasks_completed', 'week_tasks_skipped', 'week_tasks_progress',
                 'week_occurrence_date', 'order_booker_id'
             ]),
             this.orm.searchRead('shahtaj.visit.target', [], [
@@ -285,7 +321,8 @@ export class OperationsTracking extends Component {
             planned: r.week_tasks_planned,
             done: r.week_tasks_completed,
             progress: r.week_tasks_progress || 0,
-            occurrenceDate: r.week_occurrence_date || ''
+            occurrenceDate: r.week_occurrence_date || '',
+            skipped: r.week_tasks_skipped || 0,
         }));
 
         this.state.targets = tgts.map(r => ({
@@ -724,6 +761,9 @@ export class OperationsTracking extends Component {
     async viewOrder(order) { 
         this.state.selectedOrder = order; 
         
+        // ADD THIS: Ensure taxes and products are loaded before parsing lines
+        await this.ensureCatalogData();
+
         if (order.line_ids && order.line_ids.length > 0 && order.lines.length === 0) {
             const lines = await this.orm.searchRead(
                 "sale.order.line",

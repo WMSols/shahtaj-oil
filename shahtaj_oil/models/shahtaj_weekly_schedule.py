@@ -71,6 +71,11 @@ class ShahtajWeeklySchedule(models.Model):
         string='Day Progress %',
         compute='_compute_week_progress',
     )
+    week_tasks_skipped = fields.Integer(
+        string='Tasks Skipped',
+        compute='_compute_week_progress',
+        store=True,
+    )
     is_day_locked = fields.Boolean(
         string='Locked (Today)',
         compute='_compute_is_day_locked',
@@ -127,6 +132,11 @@ class ShahtajWeeklySchedule(models.Model):
             schedule.week_tasks_progress = (
                 (completed / planned * 100.0) if planned else 0.0
             )
+            skipped_count = self.env['shahtaj.visit.task'].search_count([
+            ('weekly_schedule_id', '=', schedule.id),
+            ('state', 'in', ('skipped', 'cancelled'))
+           ])
+            schedule.week_tasks_skipped = skipped_count
 
     def _today_weekday(self):
         return str(fields.Date.context_today(self).weekday())
@@ -182,8 +192,8 @@ class ShahtajWeeklySchedule(models.Model):
     def _raise_blocking_tasks_error(self):
         day_name = self._day_label(self._today_weekday())
         raise ValidationError(_(
-            'Cannot change this %(day)s route — visits are already in progress '
-            'or completed for today. Finish or skip those visits first.',
+            'Cannot modify visit tasks which are in progress or completed.'
+            'Only visit which are not attempted yet can be deleted or modified.',
             day=day_name,
         ))
 

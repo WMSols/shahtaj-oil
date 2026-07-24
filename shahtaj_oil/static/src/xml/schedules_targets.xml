@@ -132,7 +132,7 @@
                                            (No active approved shops on this route — order booker will see no visits.)
                                         </t>
                                         <t t-else="">
-                                            (<t t-esc="this.state.scheduleForm.operational_shop_count"/> active approved shop(s) on this route.)
+                                            ( <span class="fw-bold fs-4 text-black"><t t-esc="this.state.scheduleForm.operational_shop_count"/></span> active approved shop(s) on this route.)
                                         </t>
                                     </small>
                                 </t>

@@ -440,7 +440,8 @@ export class TerritoryRoutes extends Component {
         }
     }
 
-    async approveShop(shopId) {
+   async approveShop(shopId) {
+        this.state.isApprovingShop = true;
         try {
             await this.orm.call("res.partner", "action_approve_shop", [[shopId]]);
             await this.fetchDashboardData();
@@ -450,10 +451,13 @@ export class TerritoryRoutes extends Component {
             this.notification.add("Shop approved successfully.", { type: "success" });
         } catch (error) {
             this.notification.add("Failed to approve shop: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.isApprovingShop = false;
         }
     }
 
     async rejectShop(shopId) {
+        this.state.isRejectingShop = true;
         try {
             await this.orm.call("res.partner", "action_reject_shop", [[shopId]]);
             await this.fetchDashboardData();
@@ -463,6 +467,8 @@ export class TerritoryRoutes extends Component {
             this.notification.add("Shop application rejected.", { type: "info" });
         } catch (error) {
             this.notification.add("Failed to reject shop: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.isRejectingShop = false;
         }
     }
 
@@ -597,31 +603,33 @@ export class TerritoryRoutes extends Component {
             return;
         }
 
-        const payload = {
-            is_shahtaj_shop: true,
-            company_type: 'company',
-            shahtaj_shop_category: this.state.shopForm.shopCategory || 'credit',
-            name: this.state.shopForm.name,
-            owner_name: this.state.shopForm.owner_name,
-            owner_phone: phone,
-            phone: phone,
-            owner_cnic_number: cnic || false,
-            zone_id: this.state.shopForm.zone_id ? parseInt(this.state.shopForm.zone_id) : false,
-            route_id: this.state.shopForm.route_id ? parseInt(this.state.shopForm.route_id) : false,
-            partner_latitude: lat,
-            partner_longitude: lng,
-            credit_limit: this.state.shopForm.shopCategory === 'credit'
-                ? (parseFloat(this.state.shopForm.creditLimit) || 0.0)
-                : 0.0,
-            legacy_balance: parseFloat(this.state.shopForm.legacyBalance) || 0.0,
-        };
-
-        if (this.state.shopForm.owner_cnic_front) payload.owner_cnic_front = this.state.shopForm.owner_cnic_front;
-        if (this.state.shopForm.owner_cnic_back) payload.owner_cnic_back = this.state.shopForm.owner_cnic_back;
-        if (this.state.shopForm.owner_photo) payload.owner_photo = this.state.shopForm.owner_photo;
-        if (this.state.shopForm.shop_exterior_photo) payload.shop_exterior_photo = this.state.shopForm.shop_exterior_photo;
-
+        this.state.isLoading = true;
+        
         try {
+            const payload = {
+                is_shahtaj_shop: true,
+                company_type: 'company',
+                shahtaj_shop_category: this.state.shopForm.shopCategory || 'credit',
+                name: this.state.shopForm.name,
+                owner_name: this.state.shopForm.owner_name,
+                owner_phone: phone,
+                phone: phone,
+                owner_cnic_number: cnic || false,
+                zone_id: this.state.shopForm.zone_id ? parseInt(this.state.shopForm.zone_id) : false,
+                route_id: this.state.shopForm.route_id ? parseInt(this.state.shopForm.route_id) : false,
+                partner_latitude: lat,
+                partner_longitude: lng,
+                credit_limit: this.state.shopForm.shopCategory === 'credit'
+                    ? (parseFloat(this.state.shopForm.creditLimit) || 0.0)
+                    : 0.0,
+                legacy_balance: parseFloat(this.state.shopForm.legacyBalance) || 0.0,
+            };
+
+            if (this.state.shopForm.owner_cnic_front) payload.owner_cnic_front = this.state.shopForm.owner_cnic_front;
+            if (this.state.shopForm.owner_cnic_back) payload.owner_cnic_back = this.state.shopForm.owner_cnic_back;
+            if (this.state.shopForm.owner_photo) payload.owner_photo = this.state.shopForm.owner_photo;
+            if (this.state.shopForm.shop_exterior_photo) payload.shop_exterior_photo = this.state.shopForm.shop_exterior_photo;
+
             if (this.state.editingShopId) {
                 await this.orm.write("res.partner", [this.state.editingShopId], payload);
                 this.notification.add("Shop updated successfully.", { type: "success" });
@@ -635,6 +643,8 @@ export class TerritoryRoutes extends Component {
             await this.fetchDashboardData();
         } catch (error) {
             this.notification.add("Failed to save shop: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.isLoading = false;
         }
     }
 }
