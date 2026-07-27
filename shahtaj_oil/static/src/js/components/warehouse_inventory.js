@@ -364,36 +364,50 @@ export class WarehouseInventory extends Component {
     }
 
     async saveProduct() {
-        const initialOnHand = parseFloat(this.state.productForm.on_hand || 0);
-        const vals = {
-            name: this.state.productForm.name,
-            type: this.state.productForm.type,
-            list_price: parseFloat(this.state.productForm.list_price || 0),
-            standard_price: parseFloat(this.state.productForm.standard_price || 0),
-            invoice_policy: this.state.productForm.invoice_policy,
-            barcode: this.state.productForm.barcode,
-            weight: parseFloat(this.state.productForm.weight || 0),
-            volume: parseFloat(this.state.productForm.volume || 0),
-            is_storable: this.state.productForm.track_inventory,
-            shahtaj_sale_uom: this.state.productForm.shahtaj_sale_uom,
-            shahtaj_kg_per_unit: parseFloat(this.state.productForm.shahtaj_kg_per_unit || 1),
-            taxes_id: this.state.productForm.tax_id ? [[6, 0, [parseInt(this.state.productForm.tax_id, 10)]]] : [[5, 0, 0]],
-        };
-
-        if (this.state.productForm.image_1920) {
-            vals.image_1920 = this.state.productForm.image_1920;
+        // Prevent empty product creation
+        if (!this.state.productForm.name || this.state.productForm.name.trim() === '') {
+            this.notification.add("Product name is required.", { type: "danger" });
+            return;
         }
 
-        const createContext = { shahtaj_simple_product: true };
-        if (this.state.productForm.track_inventory && initialOnHand > 0) {
-            createContext.shahtaj_initial_on_hand = initialOnHand;
+        this.state.isLoading = true;
+        try {
+            const initialOnHand = parseFloat(this.state.productForm.on_hand || 0);
+            const vals = {
+                name: this.state.productForm.name,
+                type: this.state.productForm.type,
+                list_price: parseFloat(this.state.productForm.list_price || 0),
+                standard_price: parseFloat(this.state.productForm.standard_price || 0),
+                invoice_policy: this.state.productForm.invoice_policy,
+                barcode: this.state.productForm.barcode,
+                weight: parseFloat(this.state.productForm.weight || 0),
+                volume: parseFloat(this.state.productForm.volume || 0),
+                is_storable: this.state.productForm.track_inventory,
+                shahtaj_sale_uom: this.state.productForm.shahtaj_sale_uom,
+                shahtaj_kg_per_unit: parseFloat(this.state.productForm.shahtaj_kg_per_unit || 1),
+                taxes_id: this.state.productForm.tax_id ? [[6, 0, [parseInt(this.state.productForm.tax_id, 10)]]] : [[5, 0, 0]],
+            };
+
+            if (this.state.productForm.image_1920) {
+                vals.image_1920 = this.state.productForm.image_1920;
+            }
+
+            const createContext = { shahtaj_simple_product: true };
+            if (this.state.productForm.track_inventory && initialOnHand > 0) {
+                createContext.shahtaj_initial_on_hand = initialOnHand;
+            }
+
+            await this.orm.create("product.template", [vals], { context: createContext });
+
+            await this.loadInventory();
+            this.state.showProductAddForm = false;
+            this.state.productForm = this.getEmptyProductForm();
+            this.notification.add("Product created successfully.", { type: "success" });
+        } catch (error) {
+            this.notification.add("Failed to create product: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.isLoading = false;
         }
-
-        await this.orm.create("product.template", [vals], { context: createContext });
-
-        await this.loadInventory();
-        this.state.showProductAddForm = false;
-        this.state.productForm = this.getEmptyProductForm();
     }
 
     get activeInventory() {
@@ -435,28 +449,42 @@ export class WarehouseInventory extends Component {
     }
 
     async updateProduct() {
-        const vals = {
-            name: this.state.currentProduct.name,
-            list_price: parseFloat(this.state.currentProduct.list_price || 0),
-            standard_price: parseFloat(this.state.currentProduct.standard_price || 0),
-            barcode: this.state.currentProduct.barcode,
-            weight: parseFloat(this.state.currentProduct.weight || 0),
-            volume: parseFloat(this.state.currentProduct.volume || 0),
-            invoice_policy: this.state.currentProduct.invoice_policy,
-            type: this.state.currentProduct.type,
-            shahtaj_sale_uom: this.state.currentProduct.shahtaj_sale_uom,
-            shahtaj_kg_per_unit: parseFloat(this.state.currentProduct.shahtaj_kg_per_unit || 1),
-            taxes_id: this.state.currentProduct.tax_id ? [[6, 0, [parseInt(this.state.currentProduct.tax_id, 10)]]] : [[5, 0, 0]],
-        };
-
-        if (this.state.currentProduct.image_1920) {
-            vals.image_1920 = this.state.currentProduct.image_1920;
+        // Prevent clearing the name to an empty string during edit
+        if (!this.state.currentProduct.name || this.state.currentProduct.name.trim() === '') {
+            this.notification.add("Product name cannot be empty.", { type: "danger" });
+            return;
         }
 
-        await this.orm.write("product.template", [this.state.currentProduct.id], vals);
-        await this.loadInventory();
-        this.state.showProductDetails = false;
-        this.state.currentProduct = null;
+        this.state.isLoading = true;
+        try {
+            const vals = {
+                name: this.state.currentProduct.name,
+                list_price: parseFloat(this.state.currentProduct.list_price || 0),
+                standard_price: parseFloat(this.state.currentProduct.standard_price || 0),
+                barcode: this.state.currentProduct.barcode,
+                weight: parseFloat(this.state.currentProduct.weight || 0),
+                volume: parseFloat(this.state.currentProduct.volume || 0),
+                invoice_policy: this.state.currentProduct.invoice_policy,
+                type: this.state.currentProduct.type,
+                shahtaj_sale_uom: this.state.currentProduct.shahtaj_sale_uom,
+                shahtaj_kg_per_unit: parseFloat(this.state.currentProduct.shahtaj_kg_per_unit || 1),
+                taxes_id: this.state.currentProduct.tax_id ? [[6, 0, [parseInt(this.state.currentProduct.tax_id, 10)]]] : [[5, 0, 0]],
+            };
+
+            if (this.state.currentProduct.image_1920) {
+                vals.image_1920 = this.state.currentProduct.image_1920;
+            }
+
+            await this.orm.write("product.template", [this.state.currentProduct.id], vals);
+            await this.loadInventory();
+            this.state.showProductDetails = false;
+            this.state.currentProduct = null;
+            this.notification.add("Product updated successfully.", { type: "success" });
+        } catch (error) {
+            this.notification.add("Failed to update product: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.isLoading = false;
+        }
     }
 }
 

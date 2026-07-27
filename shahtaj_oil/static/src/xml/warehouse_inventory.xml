@@ -132,8 +132,14 @@
                         </div>
 
                         <div class="mt-4 d-flex justify-content-end">
-                            <button class="btn btn-outline-secondary me-2 fw-bold" t-on-click="() => this.state.showProductAddForm = false">Cancel</button>
-                            <button class="btn btn-success fw-bold text-white px-4" t-on-click="saveProduct">Save Product</button>
+                            <button class="btn btn-outline-secondary me-2 fw-bold" t-on-click="() => this.state.showProductAddForm = false" t-att-disabled="this.state.isLoading">Cancel</button>
+                            <button class="btn btn-success fw-bold text-white px-4 d-flex align-items-center" t-on-click="saveProduct" t-att-disabled="this.state.isLoading">
+                                <t t-if="this.state.isLoading">
+                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                    Saving...
+                                </t>
+                                <t t-else="">Save Product</t>
+                            </button>
                         </div>
                     </div>
                 </t>
@@ -191,7 +197,13 @@
                         </div>
 
                         <div class="mt-4 text-end">
-                            <button class="btn btn-primary fw-bold px-4" t-on-click="updateProduct">Save Changes</button>
+                            <button class="btn btn-primary fw-bold px-4 d-inline-flex align-items-center" t-on-click="updateProduct" t-att-disabled="this.state.isLoading">
+                                <t t-if="this.state.isLoading">
+                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                    Saving...
+                                </t>
+                                <t t-else="">Save Changes</t>
+                            </button>
                         </div>
                     </div>
                 </t>
