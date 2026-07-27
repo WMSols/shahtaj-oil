@@ -29,9 +29,9 @@ export class FinancialsInvoicing extends Component {
         this.todayStr = formatDate(today);
         // 2. SMART INITIALIZATION
         const target = this.props.requestedSubTab || 'invoices';
-        const topLevelTabs = ['credit', 'pnl', 'money', 'cash'];
+        const topLevelTabs = ['credit', 'pnl', 'money', 'cash',"tax_ledger"];
         const initActive = topLevelTabs.includes(target) ? target : 'invoices';
-        const initInvoice = (target === 'credit' || target === 'pnl' || target === 'money' || target === 'cash' || target === 'invoices')
+        const initInvoice = (target === 'credit' || target === 'pnl' || target === 'money' || target === 'cash' || target === 'tax_ledger' || target === 'invoices')
             ? 'all_orders'
             : target;
         this.state = useState({
@@ -126,6 +126,14 @@ export class FinancialsInvoicing extends Component {
                 reference: '',
                 notes: '' 
             },
+            taxLedger: {
+                date_from: formatDate(firstDay),
+                date_to: formatDate(today),
+                stats: { amount_tax_invoiced: 0, amount_tax_credited: 0, amount_tax_net: 0 },
+                summaries: [],
+                history: [],
+                isLoading: false
+            },
             isRefreshing: false,
             confirmModal: { isOpen: false, title: '', message: '', onConfirm: null },
         });
@@ -135,7 +143,7 @@ export class FinancialsInvoicing extends Component {
             if (nextProps.requestedSubTab) {
                 const req = nextProps.requestedSubTab;
                 
-                if (['credit', 'pnl', 'money', 'cash'].includes(req)) {
+                if (['credit', 'pnl', 'money', 'cash', 'tax_ledger'].includes(req)) {
                     this.state.activeSubTab = req;
                     if (req === 'money') {
                         this.loadMoneyOverview();
@@ -145,6 +153,9 @@ export class FinancialsInvoicing extends Component {
                     }
                     if (req === 'pnl') {
                         this.fetchPnlData();
+                    }
+                    if (req === 'tax_ledger') {
+                        this.fetchTaxLedgerData();
                     }
                 } 
                 // Everything else belongs inside the Invoice Management parent
@@ -164,6 +175,9 @@ export class FinancialsInvoicing extends Component {
             if (this.state.activeSubTab === 'money') {
                 await this.loadMoneyOverview();
             }
+            if (this.state.activeSubTab === 'tax_ledger') {
+                await this.fetchTaxLedgerData();
+            }
         });
     }
     //  NEW HELPER METHOD FOR GLOBAL SUBTAB SWITCHING ---
@@ -175,7 +189,7 @@ export class FinancialsInvoicing extends Component {
         
         // Also update local state instantly for a snappy UI transition
         if (tabName === 'financials') {
-            if (['credit', 'pnl', 'money', 'cash'].includes(subTabName)) {
+            if (['credit', 'pnl', 'money', 'cash', 'tax_ledger'].includes(subTabName)) {
                 this.setSubTab(subTabName);
             } else {
                 this.state.activeSubTab = 'invoices';
@@ -841,9 +855,65 @@ export class FinancialsInvoicing extends Component {
         if (tabName === 'pnl') {
             this.fetchPnlData();
         }
+        if (tabName === 'tax_ledger') {
+            this.fetchTaxLedgerData();
+        }
     }
     setInvoiceSubTab(subTabName) { this.state.invoiceSubTab = subTabName; this.resetDetailViews(); }
+    // --- TAX LEDGER DATA FETCHER ---
+    async fetchTaxLedgerData() {
+        this.state.taxLedger.isLoading = true;
+        try {
+            // 1. Create a temporary backend Tax Ledger record with our chosen dates
+            const ledgerIds = await this.orm.create("shahtaj.tax.ledger", [{
+                date_from: this.state.taxLedger.date_from,
+                date_to: this.state.taxLedger.date_to
+            }]);
+            const ledgerId = ledgerIds[0];
 
+            // 2. Trigger the Python _gather_stats() math
+            await this.orm.call("shahtaj.tax.ledger", "action_refresh", [[ledgerId]]);
+
+            // 3. Read the freshly calculated totals
+            const ledgerData = await this.orm.read("shahtaj.tax.ledger", [ledgerId], [
+                "amount_tax_invoiced", "amount_tax_credited", "amount_tax_net", 
+                "summary_ids", "history_ids"
+            ]);
+
+            if (ledgerData.length > 0) {
+                this.state.taxLedger.stats = ledgerData[0];
+
+                // 4. Read Summaries
+                if (ledgerData[0].summary_ids && ledgerData[0].summary_ids.length > 0) {
+                    this.state.taxLedger.summaries = await this.orm.read("shahtaj.tax.ledger.summary", ledgerData[0].summary_ids, [
+                        "tax_name", "tax_rate", "base_invoiced", "tax_invoiced", 
+                        "base_credited", "tax_credited", "tax_net", "line_count"
+                    ]);
+                } else {
+                    this.state.taxLedger.summaries = [];
+                }
+
+                // 5. Read Detailed History
+                if (ledgerData[0].history_ids && ledgerData[0].history_ids.length > 0) {
+                    const history = await this.orm.read("shahtaj.tax.ledger.history", ledgerData[0].history_ids, [
+                        "date", "document_type", "move_name", "partner_id", "tax_id", "base_amount", "tax_amount"
+                    ]);
+                    this.state.taxLedger.history = history.map(h => ({
+                        ...h,
+                        partner_name: h.partner_id ? h.partner_id[1] : 'Unknown Shop',
+                        tax_name: h.tax_id ? h.tax_id[1] : 'Unknown Tax'
+                    }));
+                } else {
+                    this.state.taxLedger.history = [];
+                }
+            }
+        } catch (error) {
+            console.error("Tax Ledger Fetch Error:", error);
+            this.notification.add("Failed to load Tax Ledger data.", { type: "danger" });
+        } finally {
+            this.state.taxLedger.isLoading = false;
+        }
+    }
     async loadMoneyOverview() {
         this.state.money.isLoading = true;
         try {
