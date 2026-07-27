@@ -256,9 +256,13 @@
                                 <span class="input-group-text bg-white border-end-0">
                                     <i class="fa fa-search text-muted"></i>
                                 </span>
-                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search orders or shops..." t-model="this.state.filters.allOrders.search"/>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search orders or shops..." 
+                                       t-att-value="this.state.filters.allOrders.search" 
+                                       t-on-input="(ev) => this.onSearchInput(ev, 'allOrders')"/>
                             </div>
-                            <select class="form-select form-select-sm w-auto shadow-sm" t-model="this.state.filters.allOrders.status">
+                            <select class="form-select form-select-sm w-auto shadow-sm" 
+                                    t-model="this.state.filters.allOrders.status"
+                                    t-on-change="() => this.onFilterChange('allOrders')">
                                 <option value="all">All Statuses</option>
                                 <option value="Confirmed">Confirmed</option>
                                 <option value="Draft">Draft</option>
@@ -266,41 +270,65 @@
                             </select>
                         </div>
 
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="bg-light text-uppercase small fw-bold text-muted">
-                                    <tr>
-                                        <th class="ps-4 py-3">Order Ref #</th>
-                                        <th>Shop Name</th>
-                                        <th>Order Booker</th>
-                                        <th>Order Date</th>
-                                        <th class="text-end">Total Amount</th>
-                                        <th class="text-center pe-4">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <t t-if="this.filteredAllOrders.length === 0">
+                        <div class="position-relative">
+                            <t t-if="this.state.isLoadingList">
+                                <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </div>
+                            </t>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="bg-light text-uppercase small fw-bold text-muted">
                                         <tr>
-                                            <td colspan="6" class="text-center py-5 text-muted">
-                                                <i class="fa fa-shopping-bag fs-1 mb-3 opacity-50"></i>
-                                                <p class="mb-1 fw-bold fs-5 text-dark">No sales orders found.</p>
-                                            </td>
+                                            <th class="ps-4 py-3">Order Ref #</th>
+                                            <th>Shop Name</th>
+                                            <th>Order Booker</th>
+                                            <th>Order Date</th>
+                                            <th class="text-end">Total Amount</th>
+                                            <th class="text-center pe-4">Status</th>
                                         </tr>
-                                    </t>
-                                    <t t-else="">
-                                        <t t-foreach="this.filteredAllOrders" t-as="ord" t-key="ord.id">
-                                            <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewOrder(ord)">
-                                                <td class="ps-4 fw-bold text-dark"><t t-esc="ord.display_name"/></td>
-                                                <td class="fw-bold"><t t-esc="ord.shop"/><small class="d-block text-muted fw-normal">ID: <t t-esc="ord.shopId"/></small></td>
-                                                <td><span class="badge "><i class="fa fa-user me-1"></i><t t-esc="ord.booker"/></span></td>
-                                                <td class="text-muted"><t t-esc="ord.date"/></td>
-                                                <td class="text-end fw-bold text-dark">Rs. <t t-esc="ord.amount"/></td>
-                                                <td class="text-center pe-4"><span t-attf-class="badge #{ord.status === 'Confirmed' ? 'bg-primary' : ord.status === 'Cancelled' ? 'bg-danger' : 'bg-secondary'} text-white px-2 py-1 shadow-sm"><t t-esc="ord.status"/></span></td>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="this.state.allOrders.length === 0 and !this.state.isLoadingList">
+                                            <tr>
+                                                <td colspan="6" class="text-center py-5 text-muted">
+                                                    <i class="fa fa-shopping-bag fs-1 mb-3 opacity-50"></i>
+                                                    <p class="mb-1 fw-bold fs-5 text-dark">No sales orders found.</p>
+                                                </td>
                                             </tr>
                                         </t>
-                                    </t>
-                                </tbody>
-                            </table>
+                                        <t t-else="">
+                                            <t t-foreach="this.state.allOrders" t-as="ord" t-key="ord.id">
+                                                <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewOrder(ord)">
+                                                    <td class="ps-4 fw-bold text-dark"><t t-esc="ord.display_name"/></td>
+                                                    <td class="fw-bold"><t t-esc="ord.shop"/><small class="d-block text-muted fw-normal">ID: <t t-esc="ord.shopId"/></small></td>
+                                                    <td><span class="badge "><i class="fa fa-user me-1"></i><t t-esc="ord.booker"/></span></td>
+                                                    <td class="text-muted"><t t-esc="ord.date"/></td>
+                                                    <td class="text-end fw-bold text-dark">Rs. <t t-esc="ord.amount"/></td>
+                                                    <td class="text-center pe-4"><span t-attf-class="badge #{ord.status === 'Confirmed' ? 'bg-primary' : ord.status === 'Cancelled' ? 'bg-danger' : 'bg-secondary'} text-white px-2 py-1 shadow-sm"><t t-esc="ord.status"/></span></td>
+                                                </tr>
+                                            </t>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                                <small class="text-muted fw-bold">
+                                    Showing <t t-esc="this.state.pagination.allOrders.total === 0 ? 0 : ((this.state.pagination.allOrders.page - 1) * this.state.pagination.allOrders.limit) + 1"/>
+                                    to 
+                                    <t t-esc="Math.min(this.state.pagination.allOrders.page * this.state.pagination.allOrders.limit, this.state.pagination.allOrders.total)"/>
+                                    of <t t-esc="this.state.pagination.allOrders.total"/>
+                                </small>
+                                <div class="btn-group shadow-sm">
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('allOrders', -1)" t-att-disabled="this.state.pagination.allOrders.page === 1">Prev</button>
+                                    <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark">
+                                        <t t-esc="this.state.pagination.allOrders.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.allOrders.total / this.state.pagination.allOrders.limit))"/>
+                                    </button>
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('allOrders', 1)" t-att-disabled="this.state.pagination.allOrders.page &gt;= Math.ceil(this.state.pagination.allOrders.total / this.state.pagination.allOrders.limit)">Next</button>
+                                </div>
+                            </div>
                         </div>
                     </t>
                     <t t-else="">
@@ -413,45 +441,71 @@
                                 <span class="input-group-text bg-white border-end-0">
                                     <i class="fa fa-search text-muted"></i>
                                 </span>
-                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search unbilled orders..." t-model="this.state.filters.orders.search"/>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search unbilled orders..." 
+                                       t-att-value="this.state.filters.orders.search" 
+                                       t-on-input="(ev) => this.onSearchInput(ev, 'orders')"/>
                             </div>
                         </div>
 
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="bg-light text-uppercase small fw-bold text-muted">
-                                    <tr>
-                                        <th class="ps-4 py-3">Order Ref #</th>
-                                        <th>Shop Name</th>
-                                        <th>Order Booker</th>
-                                        <th>Order Date</th>
-                                        <th class="text-end">Total Amount</th>
-                                        <th class="text-end pe-4">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <t t-if="this.filteredOrders.length === 0">
+                        <div class="position-relative">
+                            <t t-if="this.state.isLoadingList">
+                                <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </div>
+                            </t>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="bg-light text-uppercase small fw-bold text-muted">
                                         <tr>
-                                            <td colspan="6" class="text-center py-5 text-muted">
-                                                <i class="fa fa-file-clock-o fs-1 mb-3 opacity-50"></i>
-                                                <p class="mb-1 fw-bold fs-5 text-dark">No pending orders to invoice.</p>
-                                            </td>
+                                            <th class="ps-4 py-3">Order Ref #</th>
+                                            <th>Shop Name</th>
+                                            <th>Order Booker</th>
+                                            <th>Order Date</th>
+                                            <th class="text-end">Total Amount</th>
+                                            <th class="text-end pe-4">Action</th>
                                         </tr>
-                                    </t>
-                                    <t t-else="">
-                                        <t t-foreach="this.filteredOrders" t-as="ord" t-key="ord.id">
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="this.state.orders.length === 0 and !this.state.isLoadingList">
                                             <tr>
-                                                <td class="ps-4 fw-bold text-primary"><t t-esc="ord.display_name"/></td>
-                                                <td class="fw-bold"><t t-esc="ord.shop"/><small class="d-block text-muted fw-normal">Shop ID: <t t-esc="ord.shopId"/></small></td>
-                                                <td><span class="badge bg-secondary"><i class="fa fa-user me-1"></i><t t-esc="ord.booker"/></span><small class="d-block text-muted mt-1">Booker ID: <t t-esc="ord.bookerId"/></small></td>
-                                                <td class="text-muted"><t t-esc="ord.date"/></td>
-                                                <td class="text-end fw-bold text-dark">Rs. <t t-esc="ord.amount"/></td>
-                                                <td class="text-end pe-4"><button class="btn btn-sm btn-dark fw-bold px-3" t-on-click="() => this.viewOrder(ord)" title="Open this order to verify items and generate a bill">View &amp; Invoice</button></td>
+                                                <td colspan="6" class="text-center py-5 text-muted">
+                                                    <i class="fa fa-file-clock-o fs-1 mb-3 opacity-50"></i>
+                                                    <p class="mb-1 fw-bold fs-5 text-dark">No pending orders to invoice.</p>
+                                                </td>
                                             </tr>
                                         </t>
-                                    </t>
-                                </tbody>
-                            </table>
+                                        <t t-else="">
+                                            <t t-foreach="this.state.orders" t-as="ord" t-key="ord.id">
+                                                <tr>
+                                                    <td class="ps-4 fw-bold text-primary"><t t-esc="ord.display_name"/></td>
+                                                    <td class="fw-bold"><t t-esc="ord.shop"/><small class="d-block text-muted fw-normal">Shop ID: <t t-esc="ord.shopId"/></small></td>
+                                                    <td><span class="badge bg-secondary"><i class="fa fa-user me-1"></i><t t-esc="ord.booker"/></span><small class="d-block text-muted mt-1">Booker ID: <t t-esc="ord.bookerId"/></small></td>
+                                                    <td class="text-muted"><t t-esc="ord.date"/></td>
+                                                    <td class="text-end fw-bold text-dark">Rs. <t t-esc="ord.amount"/></td>
+                                                    <td class="text-end pe-4"><button class="btn btn-sm btn-dark fw-bold px-3" t-on-click="() => this.viewOrder(ord)" title="Open this order to verify items and generate a bill">View &amp; Invoice</button></td>
+                                                </tr>
+                                            </t>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                                <small class="text-muted fw-bold">
+                                    Showing <t t-esc="this.state.pagination.orders.total === 0 ? 0 : ((this.state.pagination.orders.page - 1) * this.state.pagination.orders.limit) + 1"/>
+                                    to 
+                                    <t t-esc="Math.min(this.state.pagination.orders.page * this.state.pagination.orders.limit, this.state.pagination.orders.total)"/>
+                                    of <t t-esc="this.state.pagination.orders.total"/>
+                                </small>
+                                <div class="btn-group shadow-sm">
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('orders', -1)" t-att-disabled="this.state.pagination.orders.page === 1">Prev</button>
+                                    <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark">
+                                        <t t-esc="this.state.pagination.orders.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.orders.total / this.state.pagination.orders.limit))"/>
+                                    </button>
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('orders', 1)" t-att-disabled="this.state.pagination.orders.page &gt;= Math.ceil(this.state.pagination.orders.total / this.state.pagination.orders.limit)">Next</button>
+                                </div>
+                            </div>
                         </div>
                     </t>
                     <t t-else="">
@@ -579,14 +633,19 @@
                 <!-- Customer Invoices Tab -->
                 <t t-if="this.state.invoiceSubTab === 'customer_invoices'">
                     <t t-if="!this.state.selectedInvoice">
+                        <!-- HEADER WITH NEW HANDLER BINDINGS -->
                         <div class="d-flex justify-content-between align-items-center p-3 bg-light border-bottom">
                             <div class="input-group input-group-sm w-25 shadow-sm">
-                                <span class="input-group-text bg-white border-end-0">
-                                    <i class="fa fa-search text-muted"></i>
-                                </span>
-                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search invoices or shops..." t-model="this.state.filters.invoices.search"/>
+                                <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
+                                <!-- Replaced t-model with t-on-input triggering the debouncer -->
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search invoices or shops..." 
+                                       t-att-value="this.state.filters.invoices.search" 
+                                       t-on-input="(ev) => this.onSearchInput(ev, 'invoices')"/>
                             </div>
-                            <select class="form-select form-select-sm w-auto shadow-sm" t-model="this.state.filters.invoices.status">
+                            <!-- Added t-on-change triggering the filter update -->
+                            <select class="form-select form-select-sm w-auto shadow-sm" 
+                                    t-model="this.state.filters.invoices.status" 
+                                    t-on-change="() => this.onFilterChange('invoices')">
                                 <option value="all">All Statuses</option>
                                 <option value="Posted">Posted (Open)</option>
                                 <option value="Partial">Partially Paid</option>
@@ -596,51 +655,71 @@
                             </select>
                         </div>
 
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="bg-light text-uppercase small fw-bold text-muted">
-                                    <tr>
-                                        <th class="ps-4 py-3">Invoice #</th>
-                                        <th>Billed Shop</th>
-                                        <th>Date</th>
-                                        <th class="text-end">Total Amount</th>
-                                        <th class="text-end">Amount Due</th>
-                                        <th class="text-center pe-4">Billing Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <t t-if="this.filteredInvoices.length === 0">
+                        <!-- LIST CONTAINER WITH LOADER AND FOOTER -->
+                        <div class="position-relative">
+                            <!-- Loading Overlay -->
+                            <t t-if="this.state.isLoadingList">
+                                <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </div>
+                            </t>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="bg-light text-uppercase small fw-bold text-muted">
                                         <tr>
-                                            <td colspan="6" class="text-center py-5 text-muted">
-                                                <i class="fa fa-file-text-o fs-1 mb-3 opacity-50"></i>
-                                                <p class="mb-1 fw-bold fs-5 text-dark">No invoices match your search.</p>
-                                            </td>
+                                            <th class="ps-4 py-3">Invoice #</th>
+                                            <th>Billed Shop</th>
+                                            <th>Date</th>
+                                            <th class="text-end">Total Amount</th>
+                                            <th class="text-end">Amount Due</th>
+                                            <th class="text-center pe-4">Billing Status</th>
                                         </tr>
-                                    </t>
-                                    <t t-foreach="this.filteredInvoices" t-as="inv" t-key="inv.id">
-                                        <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewInvoice(inv)" title="Click to view details or register payment">
-                                            <td class="ps-4 fw-bold text-primary">
-                                                <t t-esc="inv.display_name"/>
-                                            </td>
-                                            <td class="fw-bold">
-                                                <t t-esc="inv.shop"/>
-                                            </td>
-                                            <td>
-                                                <t t-esc="inv.date"/>
-                                            </td>
-                                            <td class="text-end fw-bold">Rs. <t t-esc="inv.amount"/>
-                                            </td>
-                                            <td class="text-end fw-bold text-danger">Rs. <t t-esc="inv.residual"/>
-                                            </td>
-                                            <td class="text-center pe-4">
-                                                <span t-attf-class="badge text-white #{inv.status === 'Paid' ? 'bg-success' : inv.status === 'Posted' ? 'bg-info ' : inv.status === 'Partial' ? 'bg-warning text-dark' : inv.status === 'Cancelled' ? 'bg-danger' : 'bg-secondary text-black'} px-2 py-1 shadow-sm">
-                                                    <t t-esc="inv.status"/>
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </t>
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="this.state.invoices.length === 0 and !this.state.isLoadingList">
+                                            <tr>
+                                                <td colspan="6" class="text-center py-5 text-muted">
+                                                    <i class="fa fa-file-text-o fs-1 mb-3 opacity-50"></i>
+                                                    <p class="mb-1 fw-bold fs-5 text-dark">No invoices match your search.</p>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                        <!-- Changed from this.filteredInvoices to this.state.invoices -->
+                                        <t t-foreach="this.state.invoices" t-as="inv" t-key="inv.id">
+                                            <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewInvoice(inv)">
+                                                <td class="ps-4 fw-bold text-primary"><t t-esc="inv.display_name"/></td>
+                                                <td class="fw-bold"><t t-esc="inv.shop"/></td>
+                                                <td><t t-esc="inv.date"/></td>
+                                                <td class="text-end fw-bold">Rs. <t t-esc="inv.amount"/></td>
+                                                <td class="text-end fw-bold text-danger">Rs. <t t-esc="inv.residual"/></td>
+                                                <td class="text-center pe-4">
+                                                    <span t-attf-class="badge text-white #{inv.status === 'Paid' ? 'bg-success' : inv.status === 'Posted' ? 'bg-info ' : inv.status === 'Partial' ? 'bg-warning text-dark' : inv.status === 'Cancelled' ? 'bg-danger' : 'bg-secondary text-black'} px-2 py-1 shadow-sm">
+                                                        <t t-esc="inv.status"/>
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- UNIVERSAL PAGINATION FOOTER -->
+                            <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                                <small class="text-muted fw-bold">
+                                    Showing <t t-esc="this.state.pagination.invoices.total === 0 ? 0 : ((this.state.pagination.invoices.page - 1) * this.state.pagination.invoices.limit) + 1"/>
+                                    to 
+                                    <t t-esc="Math.min(this.state.pagination.invoices.page * this.state.pagination.invoices.limit, this.state.pagination.invoices.total)"/>
+                                    of <t t-esc="this.state.pagination.invoices.total"/>
+                                </small>
+                                <div class="btn-group shadow-sm">
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('invoices', -1)" t-att-disabled="this.state.pagination.invoices.page === 1">Prev</button>
+                                    <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark">
+                                        <t t-esc="this.state.pagination.invoices.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.invoices.total / this.state.pagination.invoices.limit))"/>
+                                    </button>
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('invoices', 1)" t-att-disabled="this.state.pagination.invoices.page &gt;= Math.ceil(this.state.pagination.invoices.total / this.state.pagination.invoices.limit)">Next</button>
+                                </div>
+                            </div>
                         </div>
                     </t>
                     <!-- Detailed Invoice view -->
@@ -1063,9 +1142,13 @@
                                 <span class="input-group-text bg-white border-end-0">
                                     <i class="fa fa-search text-muted"></i>
                                 </span>
-                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search refunds..." t-model="this.state.filters.creditNotes.search"/>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search refunds..." 
+                                       t-att-value="this.state.filters.creditNotes.search"
+                                       t-on-input="(ev) => this.onSearchInput(ev, 'creditNotes')"/>
                             </div>
-                            <select class="form-select form-select-sm w-auto shadow-sm" t-model="this.state.filters.creditNotes.status">
+                            <select class="form-select form-select-sm w-auto shadow-sm" 
+                                    t-model="this.state.filters.creditNotes.status"
+                                    t-on-change="() => this.onFilterChange('creditNotes')">
                                 <option value="all">All Statuses</option>
                                 <option value="Posted">Posted</option>
                                 <option value="Paid/Reconciled">Paid/Reconciled</option>
@@ -1073,48 +1156,66 @@
                                 <option value="Cancelled">Cancelled</option>
                             </select>
                         </div>
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="bg-light text-uppercase small fw-bold text-muted">
-                                    <tr>
-                                        <th class="ps-4 py-3">Refund Ref #</th>
-                                        <th>Customer Shop</th>
-                                        <th>Date</th>
-                                        <th class="text-end">Refund Amount</th>
-                                        <th class="text-center pe-4">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <t t-if="this.filteredCreditNotes.length === 0">
+                        
+                        <div class="position-relative">
+                            <t t-if="this.state.isLoadingList">
+                                <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </div>
+                            </t>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="bg-light text-uppercase small fw-bold text-muted">
                                         <tr>
-                                            <td colspan="5" class="text-center py-5 text-muted">
-                                                <i class="fa fa-reply fs-1 mb-3 opacity-50"></i>
-                                                <p class="mb-1 fw-bold fs-5 text-dark">No Credit Notes found.</p>
-                                            </td>
+                                            <th class="ps-4 py-3">Refund Ref #</th>
+                                            <th>Customer Shop</th>
+                                            <th>Date</th>
+                                            <th class="text-end">Refund Amount</th>
+                                            <th class="text-center pe-4">Status</th>
                                         </tr>
-                                    </t>
-                                    <t t-foreach="this.filteredCreditNotes" t-as="cn" t-key="cn.id">
-                                        <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewInvoice(cn)" title="Click to view credit note details">
-                                            <td class="ps-4 fw-bold text-danger">
-                                                <t t-esc="cn.display_name"/>
-                                            </td>
-                                            <td class="fw-bold">
-                                                <t t-esc="cn.shop"/>
-                                            </td>
-                                            <td>
-                                                <t t-esc="cn.date"/>
-                                            </td>
-                                            <td class="text-end fw-bold">Rs. <t t-esc="cn.amount"/>
-                                            </td>
-                                            <td class="text-center pe-4">
-                                                <span t-attf-class="badge text-white #{cn.status === 'Paid/Reconciled' ? 'bg-success' : cn.status === 'Posted' ? 'bg-info ' : cn.status === 'Cancelled' ? 'bg-danger' : 'bg-secondary text-black'} px-2 py-1 shadow-sm">
-                                                    <t t-esc="cn.status"/>
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </t>
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="this.state.creditNotes.length === 0 and !this.state.isLoadingList">
+                                            <tr>
+                                                <td colspan="5" class="text-center py-5 text-muted">
+                                                    <i class="fa fa-reply fs-1 mb-3 opacity-50"></i>
+                                                    <p class="mb-1 fw-bold fs-5 text-dark">No Credit Notes found.</p>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                        <t t-foreach="this.state.creditNotes" t-as="cn" t-key="cn.id">
+                                            <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewInvoice(cn)">
+                                                <td class="ps-4 fw-bold text-danger"><t t-esc="cn.display_name"/></td>
+                                                <td class="fw-bold"><t t-esc="cn.shop"/></td>
+                                                <td><t t-esc="cn.date"/></td>
+                                                <td class="text-end fw-bold">Rs. <t t-esc="cn.amount"/></td>
+                                                <td class="text-center pe-4">
+                                                    <span t-attf-class="badge text-white #{cn.status === 'Paid/Reconciled' ? 'bg-success' : cn.status === 'Posted' ? 'bg-info ' : cn.status === 'Cancelled' ? 'bg-danger' : 'bg-secondary text-black'} px-2 py-1 shadow-sm">
+                                                        <t t-esc="cn.status"/>
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                                <small class="text-muted fw-bold">
+                                    Showing <t t-esc="this.state.pagination.creditNotes.total === 0 ? 0 : ((this.state.pagination.creditNotes.page - 1) * this.state.pagination.creditNotes.limit) + 1"/>
+                                    to 
+                                    <t t-esc="Math.min(this.state.pagination.creditNotes.page * this.state.pagination.creditNotes.limit, this.state.pagination.creditNotes.total)"/>
+                                    of <t t-esc="this.state.pagination.creditNotes.total"/>
+                                </small>
+                                <div class="btn-group shadow-sm">
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('creditNotes', -1)" t-att-disabled="this.state.pagination.creditNotes.page === 1">Prev</button>
+                                    <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark">
+                                        <t t-esc="this.state.pagination.creditNotes.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.creditNotes.total / this.state.pagination.creditNotes.limit))"/>
+                                    </button>
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('creditNotes', 1)" t-att-disabled="this.state.pagination.creditNotes.page &gt;= Math.ceil(this.state.pagination.creditNotes.total / this.state.pagination.creditNotes.limit)">Next</button>
+                                </div>
+                            </div>
                         </div>
                     </t>
 
@@ -1433,53 +1534,71 @@
                                 <span class="input-group-text bg-white border-end-0">
                                     <i class="fa fa-search text-muted"></i>
                                 </span>
-                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search payments or shops..." t-model="this.state.filters.payments.search"/>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search payments or shops..." 
+                                       t-att-value="this.state.filters.payments.search"
+                                       t-on-input="(ev) => this.onSearchInput(ev, 'payments')"/>
                             </div>
                         </div>
 
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="bg-light text-uppercase small fw-bold text-muted">
-                                    <tr>
-                                        <th class="ps-4 py-3">Receipt #</th>
-                                        <th>Paid By Shop</th>
-                                        <th>Journal / Bank</th>
-                                        <th>Ref / Memo</th>
-                                        <th class="text-end pe-4">Received Amount</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <t t-if="this.filteredPayments.length === 0">
+                        <div class="position-relative">
+                            <t t-if="this.state.isLoadingList">
+                                <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </div>
+                            </t>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="bg-light text-uppercase small fw-bold text-muted">
                                         <tr>
-                                            <td colspan="5" class="text-center py-5 text-muted">
-                                                <i class="fa fa-credit-card fs-1 mb-3 opacity-50"></i>
-                                                <p class="mb-1 fw-bold fs-5 text-dark">No payments match your search.</p>
-                                            </td>
+                                            <th class="ps-4 py-3">Receipt #</th>
+                                            <th>Paid By Shop</th>
+                                            <th>Journal / Bank</th>
+                                            <th>Ref / Memo</th>
+                                            <th class="text-end pe-4">Received Amount</th>
                                         </tr>
-                                    </t>
-                                    <t t-foreach="this.filteredPayments" t-as="pay" t-key="pay.id">
-                                        <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewPayment(pay)" title="Click to view payment receipt details">
-                                            <td class="ps-4 fw-bold text-success">
-                                                <t t-esc="pay.display_name"/>
-                                            </td>
-                                            <td class="fw-bold">
-                                                <t t-esc="pay.shop"/>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-light text-dark border shadow-sm">
-                                                    <i class="fa fa-bank me-1"></i>
-                                                    <t t-esc="pay.method"/>
-                                                </span>
-                                            </td>
-                                            <td class="text-muted">
-                                                <t t-esc="pay.ref"/>
-                                            </td>
-                                            <td class="text-end fw-bold pe-4">Rs. <t t-esc="pay.amount"/>
-                                            </td>
-                                        </tr>
-                                    </t>
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="this.state.payments.length === 0 and !this.state.isLoadingList">
+                                            <tr>
+                                                <td colspan="5" class="text-center py-5 text-muted">
+                                                    <i class="fa fa-credit-card fs-1 mb-3 opacity-50"></i>
+                                                    <p class="mb-1 fw-bold fs-5 text-dark">No payments match your search.</p>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                        <t t-foreach="this.state.payments" t-as="pay" t-key="pay.id">
+                                            <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewPayment(pay)">
+                                                <td class="ps-4 fw-bold text-success"><t t-esc="pay.display_name"/></td>
+                                                <td class="fw-bold"><t t-esc="pay.shop"/></td>
+                                                <td>
+                                                    <span class="badge bg-light text-dark border shadow-sm">
+                                                        <i class="fa fa-bank me-1"></i> <t t-esc="pay.method"/>
+                                                    </span>
+                                                </td>
+                                                <td class="text-muted"><t t-esc="pay.ref"/></td>
+                                                <td class="text-end fw-bold pe-4">Rs. <t t-esc="pay.amount"/></td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                                <small class="text-muted fw-bold">
+                                    Showing <t t-esc="this.state.pagination.payments.total === 0 ? 0 : ((this.state.pagination.payments.page - 1) * this.state.pagination.payments.limit) + 1"/>
+                                    to 
+                                    <t t-esc="Math.min(this.state.pagination.payments.page * this.state.pagination.payments.limit, this.state.pagination.payments.total)"/>
+                                    of <t t-esc="this.state.pagination.payments.total"/>
+                                </small>
+                                <div class="btn-group shadow-sm">
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('payments', -1)" t-att-disabled="this.state.pagination.payments.page === 1">Prev</button>
+                                    <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark">
+                                        <t t-esc="this.state.pagination.payments.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.payments.total / this.state.pagination.payments.limit))"/>
+                                    </button>
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('payments', 1)" t-att-disabled="this.state.pagination.payments.page &gt;= Math.ceil(this.state.pagination.payments.total / this.state.pagination.payments.limit)">Next</button>
+                                </div>
+                            </div>
                         </div>
                     </t>
                     <t t-else="">
@@ -1576,52 +1695,70 @@
                                 <span class="input-group-text bg-white border-end-0">
                                     <i class="fa fa-search text-muted"></i>
                                 </span>
-                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search shop or owner..." t-model="this.state.filters.balances.search"/>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search shop or owner..." 
+                                       t-att-value="this.state.filters.balances.search"
+                                       t-on-input="(ev) => this.onSearchInput(ev, 'balances')"/>
                             </div>
                         </div>
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="bg-light text-uppercase small fw-bold text-muted">
-                                    <tr>
-                                        <th class="ps-4 py-3">Shop Name</th>
-                                        <th>Shop Owner</th>
-                                        <th>Assigned Route</th>
-                                        <th class="text-end" title="Maximum allowed outstanding amount">Credit Limit</th>
-                                        <th class="text-end pe-4" title="Amount currently owed by the shop">Outstanding (Receivable)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <t t-if="this.filteredBalances.length === 0">
+
+                        <div class="position-relative">
+                            <t t-if="this.state.isLoadingList">
+                                <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </div>
+                            </t>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="bg-light text-uppercase small fw-bold text-muted">
                                         <tr>
-                                            <td colspan="5" class="text-center py-5 text-muted">
-                                                <i class="fa fa-building-o fs-1 mb-3 opacity-50"></i>
-                                                <p class="mb-1 fw-bold fs-5 text-dark">No shops match your search.</p>
-                                            </td>
+                                            <th class="ps-4 py-3">Shop Name</th>
+                                            <th>Shop Owner</th>
+                                            <th>Assigned Route</th>
+                                            <th class="text-end" title="Maximum allowed outstanding amount">Credit Limit</th>
+                                            <th class="text-end pe-4" title="Amount currently owed by the shop">Outstanding (Receivable)</th>
                                         </tr>
-                                    </t>
-                                    <t t-foreach="this.filteredBalances" t-as="bal" t-key="bal.id">
-                                        <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewShop(bal)" title="Click to view ledger and adjust credit limits">
-                                            <td class="ps-4 fw-bold text-dark">
-                                                <t t-esc="bal.shop"/>
-                                                <small class="d-block text-muted fw-normal">Shop ID: <t t-esc="bal.shopId"/>
-                                                </small>
-                                            </td>
-                                            <td>
-                                                <t t-esc="bal.owner"/>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-secondary">
-                                                    <t t-esc="bal.route"/>
-                                                </span>
-                                            </td>
-                                            <td class="text-end fw-bold">Rs. <t t-esc="bal.limit"/>
-                                            </td>
-                                            <td class="text-end text-danger fw-bold pe-4">Rs. <t t-esc="bal.outstanding"/>
-                                            </td>
-                                        </tr>
-                                    </t>
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="this.state.balances.length === 0 and !this.state.isLoadingList">
+                                            <tr>
+                                                <td colspan="5" class="text-center py-5 text-muted">
+                                                    <i class="fa fa-building-o fs-1 mb-3 opacity-50"></i>
+                                                    <p class="mb-1 fw-bold fs-5 text-dark">No shops match your search.</p>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                        <t t-foreach="this.state.balances" t-as="bal" t-key="bal.id">
+                                            <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewShop(bal)">
+                                                <td class="ps-4 fw-bold text-dark">
+                                                    <t t-esc="bal.shop"/>
+                                                    <small class="d-block text-muted fw-normal">Shop ID: <t t-esc="bal.shopId"/></small>
+                                                </td>
+                                                <td><t t-esc="bal.owner"/></td>
+                                                <td><span class="badge bg-secondary"><t t-esc="bal.route"/></span></td>
+                                                <td class="text-end fw-bold">Rs. <t t-esc="bal.limit"/></td>
+                                                <td class="text-end text-danger fw-bold pe-4">Rs. <t t-esc="bal.outstanding"/></td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                                <small class="text-muted fw-bold">
+                                    Showing <t t-esc="this.state.pagination.balances.total === 0 ? 0 : ((this.state.pagination.balances.page - 1) * this.state.pagination.balances.limit) + 1"/>
+                                    to 
+                                    <t t-esc="Math.min(this.state.pagination.balances.page * this.state.pagination.balances.limit, this.state.pagination.balances.total)"/>
+                                    of <t t-esc="this.state.pagination.balances.total"/>
+                                </small>
+                                <div class="btn-group shadow-sm">
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('balances', -1)" t-att-disabled="this.state.pagination.balances.page === 1">Prev</button>
+                                    <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark">
+                                        <t t-esc="this.state.pagination.balances.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.balances.total / this.state.pagination.balances.limit))"/>
+                                    </button>
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('balances', 1)" t-att-disabled="this.state.pagination.balances.page &gt;= Math.ceil(this.state.pagination.balances.total / this.state.pagination.balances.limit)">Next</button>
+                                </div>
+                            </div>
                         </div>
                     </t>
                     <t t-else="">

@@ -11,6 +11,7 @@ export class FinancialsInvoicing extends Component {
     static props = {
         requestedSubTab: { type: String, optional: true },
     };
+    
     setup() {
         this.notification = useService("notification");
         this.orm = useService("orm");
@@ -34,6 +35,7 @@ export class FinancialsInvoicing extends Component {
         const initInvoice = (target === 'credit' || target === 'pnl' || target === 'money' || target === 'cash' || target === 'tax_ledger' || target === 'invoices')
             ? 'all_orders'
             : target;
+            const ITEMS_PER_PAGE = 10; // Global constant for pagination
         this.state = useState({
             activeSubTab: initActive,
             invoiceSubTab: initInvoice,
@@ -136,7 +138,28 @@ export class FinancialsInvoicing extends Component {
             },
             isRefreshing: false,
             confirmModal: { isOpen: false, title: '', message: '', onConfirm: null },
+           // --- UPDATED: Backend Pagination & Loading ---
+            itemsPerPage: ITEMS_PER_PAGE, // Global reference
+            isLoadingList: false,
+            searchTimeout: null,
+            pagination: {
+                allOrders: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                orders: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                invoices: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                creditNotes: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                payments: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                balances: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+            },
         });
+        // Universal Debouncer to protect the server from rapid keystrokes
+        this.debounceSearch = (func, wait) => {
+            return (...args) => {
+                clearTimeout(this.state.searchTimeout);
+                this.state.searchTimeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        };
+        // Bind the fetch method to the debouncer
+        this.debouncedFetchActiveList = this.debounceSearch(() => this.fetchActiveList(), 400);
         
      // 3. SMART PROP LISTENER FOR 2-LEVEL TABS
         onWillUpdateProps((nextProps) => {
@@ -178,7 +201,179 @@ export class FinancialsInvoicing extends Component {
             if (this.state.activeSubTab === 'tax_ledger') {
                 await this.fetchTaxLedgerData();
             }
+            await this.fetchActiveList();
         });
+    }
+    // --- UNIVERSAL LIST HANDLERS ---
+    onSearchInput(ev, listKey) {
+        this.state.filters[listKey].search = ev.target.value;
+        this.state.pagination[listKey].page = 1; // Reset to page 1 on new search
+        this.debouncedFetchActiveList();
+    }
+
+    onFilterChange(listKey) {
+        this.state.pagination[listKey].page = 1;
+        this.fetchActiveList(); // Dropdowns don't need debouncing, fetch immediately
+    }
+
+    changePage(listKey, direction) {
+        const pag = this.state.pagination[listKey];
+        const newPage = pag.page + direction;
+        const maxPage = Math.max(1, Math.ceil(pag.total / pag.limit));
+        
+        if (newPage >= 1 && newPage <= maxPage) {
+            pag.page = newPage;
+            this.fetchActiveList();
+        }
+    }
+
+    setInvoiceSubTab(subTabName) { 
+        this.state.invoiceSubTab = subTabName; 
+        this.resetDetailViews(); 
+        
+        // Map the tab name to the pagination state key
+        const stateKeyMap = {
+            'all_orders': 'allOrders', 
+            'orders': 'orders', 
+            'customer_invoices': 'invoices',
+            'credit_notes': 'creditNotes', 
+            'payments': 'payments', 
+            'balances': 'balances'
+        };
+        
+        // Force the paginator back to Page 1 when entering a tab
+        const key = stateKeyMap[subTabName];
+        if (key && this.state.pagination[key]) {
+            this.state.pagination[key].page = 1;
+        }
+
+        // Trigger the backend fetcher
+        this.fetchActiveList(); 
+    }
+
+    async fetchActiveList() {
+        if (this.state.activeSubTab !== 'invoices') return;
+        
+        const tabMap = {
+            'all_orders': { stateKey: 'allOrders', model: 'sale.order', fields: ["name", "partner_id", "date_order", "amount_total", "amount_untaxed", "state", "user_id", "payment_term_id", "pricelist_id", "shahtaj_visit_id", "invoice_status"] },
+            'orders': { stateKey: 'orders', model: 'sale.order', fields: ["name", "partner_id", "date_order", "amount_total", "amount_untaxed", "state", "user_id", "payment_term_id", "pricelist_id", "shahtaj_visit_id", "invoice_status"] },
+            'customer_invoices': { stateKey: 'invoices', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"] },
+            'credit_notes': { stateKey: 'creditNotes', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"] },
+            'payments': { stateKey: 'payments', model: 'account.payment', fields: ["name", "partner_id", "date", "amount", "journal_id", "memo", "state", "shahtaj_payment_channel", "shahtaj_payer_bank_name", "shahtaj_payer_account_number", "shahtaj_instrument_reference", "shahtaj_payment_notes"] },
+            'balances': { stateKey: 'balances', model: 'res.partner', fields: ["name", "owner_name", "route_id", "shahtaj_shop_category", "credit_limit", "outstanding_balance"] }
+        };
+
+        const config = tabMap[this.state.invoiceSubTab];
+        if (!config) return;
+
+        this.state.isLoadingList = true;
+        try {
+            const { stateKey, model, fields } = config;
+            const pag = this.state.pagination[stateKey];
+            const filters = this.state.filters[stateKey];
+            let domain = [];
+            
+            // 1. BASE DOMAINS
+            if (stateKey === 'allOrders') domain.push(["shahtaj_visit_id", "!=", false]);
+            if (stateKey === 'orders') domain.push(["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]);
+            if (stateKey === 'invoices') domain.push(["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true]);
+            if (stateKey === 'creditNotes') domain.push(["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]);
+            if (stateKey === 'payments') domain.push(["partner_id.is_shahtaj_shop", "=", true]);
+            if (stateKey === 'balances') domain.push(["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]);
+
+            // 2. SEARCH DOMAINS
+            if (filters.search) {
+                if (stateKey === 'balances') {
+                    domain.push('|', ['name', 'ilike', filters.search], ['owner_name', 'ilike', filters.search]);
+                } else {
+                    domain.push('|', ['name', 'ilike', filters.search], ['partner_id.name', 'ilike', filters.search]);
+                }
+            }
+
+            // 3. STATUS FILTERS
+            if (filters.status && filters.status !== 'all') {
+                if (stateKey === 'invoices' || stateKey === 'creditNotes') {
+                    if (filters.status === 'Posted') domain.push(['state', '=', 'posted'], ['payment_state', 'in', ['not_paid']]);
+                    if (filters.status === 'Paid' || filters.status === 'Paid/Reconciled') domain.push(['payment_state', 'in', ['paid', 'in_payment', 'reversed']]);
+                    if (filters.status === 'Partial') domain.push(['payment_state', '=', 'partial']);
+                    if (filters.status === 'Draft') domain.push(['state', '=', 'draft']);
+                    if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
+                }
+                if (stateKey === 'allOrders') {
+                    if (filters.status === 'Confirmed') domain.push(['state', 'not in', ['draft', 'cancel']]);
+                    if (filters.status === 'Draft') domain.push(['state', '=', 'draft']);
+                    if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
+                }
+            }
+
+            // 4. FIRE DUAL QUERIES (Total Count + Paged Records)
+            const [total, records] = await Promise.all([
+                this.orm.searchCount(model, domain),
+                this.orm.searchRead(model, domain, fields, { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc" })
+            ]);
+
+            this.state.pagination[stateKey].total = total;
+            
+            // 5. MAP DATA TO UI
+            if (stateKey === 'invoices' || stateKey === 'creditNotes') {
+                this.state[stateKey] = records.map((inv) => {
+                    let status = "Draft";
+                    if (inv.state === "cancel") status = "Cancelled";
+                    else if (inv.state === "posted") {
+                        if (["paid", "in_payment", "reversed"].includes(inv.payment_state)) status = stateKey === 'creditNotes' ? "Paid/Reconciled" : "Paid";
+                        else if (inv.payment_state === "partial") status = "Partial";
+                        else status = "Posted";
+                    }
+                    return {
+                        id: inv.id, display_name: inv.name && inv.name !== "/" ? inv.name : `Draft Document (*${inv.id})`,
+                        shop: inv.partner_id ? inv.partner_id[1] : "Unknown",
+                        date: inv.invoice_date || "Not set", amount: (inv.amount_total || 0).toLocaleString(),
+                        residual: (inv.amount_residual || 0).toLocaleString(), rawResidual: inv.amount_residual !== undefined ? inv.amount_residual : inv.amount_total,
+                        status, journal_id: inv.journal_id ? inv.journal_id[0] : false,
+                    };
+                });
+            }
+            else if (stateKey === 'allOrders' || stateKey === 'orders') {
+                this.state[stateKey] = records.map((o) => ({
+                    id: o.id, display_name: o.name,
+                    shop: o.partner_id ? o.partner_id[1] : "Unknown", shopId: o.partner_id ? o.partner_id[0] : false,
+                    booker: o.user_id ? o.user_id[1] : "Unassigned", bookerId: o.user_id ? o.user_id[0] : false,
+                    date: o.date_order ? o.date_order.split(" ")[0] : "N/A",
+                    amount: (o.amount_total || 0).toLocaleString(), rawAmount: o.amount_total || 0,
+                    untaxedAmount: (o.amount_untaxed || 0).toLocaleString(),
+                    paymentTerms: o.payment_term_id ? o.payment_term_id[1] : "Immediate",
+                    pricelist: o.pricelist_id ? o.pricelist_id[1] : "Default (PKR)",
+                    visit: o.shahtaj_visit_id ? o.shahtaj_visit_id[1] : "N/A",
+                    status: o.state === "cancel" ? "Cancelled" : (o.state === "draft" ? "Draft" : "Confirmed"),
+                    invoice_status: o.invoice_status,
+                }));
+            }
+            else if (stateKey === 'payments') {
+                this.state.payments = records.map((pay) => ({
+                    id: pay.id, display_name: pay.name ? pay.name : `Processing... (#${pay.id})`,
+                    shop: pay.partner_id ? pay.partner_id[1] : "Unknown",
+                    date: pay.date || "N/A", amount: (pay.amount || 0).toLocaleString(),
+                    method: pay.journal_id ? pay.journal_id[1] : "Manual", ref: pay.memo || "N/A",
+                    status: ["paid", "in_process", "posted", "reconciled"].includes(pay.state) ? "Paid" : (pay.state === "cancel" ? "Cancelled" : "Draft"),
+                    channel: pay.shahtaj_payment_channel || "cash", bank: pay.shahtaj_payer_bank_name || "N/A",
+                    account: pay.shahtaj_payer_account_number || "N/A", reference: pay.shahtaj_instrument_reference || "N/A",
+                    notes: pay.shahtaj_payment_notes || "N/A",
+                }));
+            }
+            else if (stateKey === 'balances') {
+                this.state.balances = records.map((shop) => ({
+                    id: shop.id, shopId: shop.id, shop: shop.name, owner: shop.owner_name || "N/A",
+                    route: shop.route_id ? shop.route_id[1] : "Unassigned", category: shop.shahtaj_shop_category === "cash" ? "Cash" : "Credit",
+                    limit: shop.shahtaj_shop_category === "cash" ? "N/A" : (shop.credit_limit || 0).toLocaleString(),
+                    rawLimit: shop.credit_limit || 0, outstanding: (shop.outstanding_balance || 0).toLocaleString(),
+                    rawOutstanding: shop.outstanding_balance || 0,
+                }));
+            }
+        } catch (error) {
+            this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.isLoadingList = false;
+        }
     }
     //  NEW HELPER METHOD FOR GLOBAL SUBTAB SWITCHING ---
     requestTabSwitch(tabName, subTabName) {
@@ -363,205 +558,40 @@ export class FinancialsInvoicing extends Component {
         return this.state.pnl.lines.filter(l => String(l.id) === String(this.state.pnl.selectedProductLineId));
     }
 
-    // --- GLOBAL DATA FETCHER (parallel; lookups optional; P&L only when needed) ---
+   // --- GLOBAL DATA FETCHER (Stripped down for Performance) ---
     async fetchRealData(options = {}) {
         const includeLookups = options.includeLookups !== false;
-        const includePnl = options.includePnl === true
-            || (options.includePnl !== false && this.state.activeSubTab === 'pnl');
+        const includePnl = options.includePnl === true || (options.includePnl !== false && this.state.activeSubTab === 'pnl');
 
-        const safeSearch = async (label, ...args) => {
-            try {
-                return await this.orm.searchRead(...args);
-            } catch (error) {
-                console.error(`${label} Fetch Error:`, error);
-                return null;
-            }
-        };
+        // 1. Fetch only necessary Lookups for dropdowns
+        if (includeLookups) {
+            const productDomain = [["sale_ok", "=", true], ["active", "=", true], ["product_tmpl_id.active", "=", true]];
+            const [taxesData, prodData, journalsData] = await Promise.all([
+                this.orm.searchRead("account.tax", [["type_tax_use", "=", "sale"], ["active", "=", true]], ["id", "name", "amount"]),
+                this.orm.searchRead("product.product", productDomain, ["id", "name", "display_name"]),
+                this.orm.searchRead("account.journal", [["type", "in", ["bank", "cash"]]], ["name", "type"])
+            ]);
+            this.state.availableTaxes = taxesData || [];
+            this.state.allProducts = prodData || [];
+            this.state.products = (prodData || []).map((p) => ({ id: p.id, name: p.display_name || p.name }));
+            this.state.journals = journalsData || [];
+        }
 
-        const productDomain = [
-            ["sale_ok", "=", true],
-            ["active", "=", true],
-            ["product_tmpl_id.active", "=", true],
-        ];
-
-        const [
-            allOrdersData,
-            invoicesData,
-            creditNotesData,
-            paymentsData,
-            shopsData,
-            taxesData,
-            prodData,
-            journalsData,
-        ] = await Promise.all([
-            safeSearch(
-                "All Orders",
-                "sale.order",
-                [["shahtaj_visit_id", "!=", false]],
-                ["name", "partner_id", "date_order", "amount_total", "amount_untaxed", "state", "user_id", "payment_term_id", "pricelist_id", "shahtaj_visit_id", "invoice_status"]
-            ),
-            safeSearch(
-                "Invoices",
-                "account.move",
-                [["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true]],
-                ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"]
-            ),
-            safeSearch(
-                "Credit Notes",
-                "account.move",
-                [["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]],
-                ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"]
-            ),
-            safeSearch(
-                "Payments",
-                "account.payment",
-                [["partner_id.is_shahtaj_shop", "=", true]],
-                [
-                    "name", "partner_id", "date", "amount", "journal_id", "memo", "state",
-                    "shahtaj_payment_channel", "shahtaj_payer_bank_name", "shahtaj_payer_account_number",
-                    "shahtaj_instrument_reference", "shahtaj_payment_notes",
-                ]
-            ),
-            safeSearch(
-                "Shop Balances",
-                "res.partner",
-                [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]],
-                ["name", "owner_name", "route_id", "shahtaj_shop_category", "credit_limit", "outstanding_balance"]
-            ),
-            includeLookups
-                ? safeSearch(
-                    "Taxes",
-                    "account.tax",
-                    [["type_tax_use", "=", "sale"], ["active", "=", true]],
-                    ["id", "name", "amount"]
-                )
-                : Promise.resolve(null),
-            includeLookups
-                ? safeSearch(
-                    "Products",
-                    "product.product",
-                    productDomain,
-                    ["id", "name", "display_name"]
-                )
-                : Promise.resolve(null),
-            includeLookups
-                ? safeSearch(
-                    "Journals",
-                    "account.journal",
-                    [["type", "in", ["bank", "cash"]]],
-                    ["name", "type"]
-                )
-                : Promise.resolve(null),
+        // 2. Fetch lightning-fast counts for the 5 KPI Cards
+        const [totalOrders, toInvoice, openInvoices, creditNotes, approvedShops] = await Promise.all([
+            this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false]]),
+            this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]]),
+            this.orm.searchCount("account.move", [["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true], ["state", "=", "posted"], ["payment_state", "in", ["not_paid", "partial"]]]),
+            this.orm.searchCount("account.move", [["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]]),
+            this.orm.searchCount("res.partner", [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]])
         ]);
 
-        if (allOrdersData) {
-            this.state.allOrders = allOrdersData.map((o) => ({
-                id: o.id,
-                display_name: o.name,
-                shop: o.partner_id ? o.partner_id[1] : "Unknown",
-                shopId: o.partner_id ? o.partner_id[0] : false,
-                booker: o.user_id ? o.user_id[1] : "Unassigned",
-                bookerId: o.user_id ? o.user_id[0] : false,
-                date: o.date_order ? o.date_order.split(" ")[0] : "N/A",
-                amount: (o.amount_total || 0).toLocaleString(),
-                rawAmount: o.amount_total || 0,
-                untaxedAmount: (o.amount_untaxed || 0).toLocaleString(),
-                paymentTerms: o.payment_term_id ? o.payment_term_id[1] : "Immediate",
-                pricelist: o.pricelist_id ? o.pricelist_id[1] : "Default (PKR)",
-                visit: o.shahtaj_visit_id ? o.shahtaj_visit_id[1] : "N/A",
-                status: o.state === "cancel" ? "Cancelled" : (o.state === "draft" ? "Draft" : "Confirmed"),
-                invoice_status: o.invoice_status,
-            }));
-            this.state.orders = this.state.allOrders.filter((o) => o.invoice_status === "to invoice");
-        }
+        this.state.stats = { totalOrders, toInvoice, openInvoices, creditNotes, approvedShops };
 
-        if (invoicesData) {
-            this.state.invoices = invoicesData.map((inv) => {
-                let status = "Draft";
-                if (inv.state === "cancel") status = "Cancelled";
-                else if (inv.state === "posted") {
-                    if (["paid", "in_payment", "reversed"].includes(inv.payment_state)) status = "Paid";
-                    else if (inv.payment_state === "partial") status = "Partial";
-                    else status = "Posted";
-                }
-                return {
-                    id: inv.id,
-                    display_name: (inv.name && inv.name !== "/") ? inv.name : `Draft Invoice (*${inv.id})`,
-                    shop: inv.partner_id ? inv.partner_id[1] : "Unknown",
-                    untaxedAmount: (inv.amount_untaxed || 0).toLocaleString(),
-                    taxAmount: (inv.amount_tax || 0).toLocaleString(),
-                    date: inv.invoice_date || "Not set",
-                    amount: (inv.amount_total || 0).toLocaleString(),
-                    rawAmount: inv.amount_total || 0,
-                    residual: (inv.amount_residual || 0).toLocaleString(),
-                    rawResidual: inv.amount_residual !== undefined ? inv.amount_residual : inv.amount_total,
-                    status,
-                    journal_id: inv.journal_id ? inv.journal_id[0] : false,
-                };
-            });
-        }
-
-        if (creditNotesData) {
-            this.state.creditNotes = creditNotesData.map((cn) => {
-                let status = "Draft";
-                if (cn.state === "cancel") status = "Cancelled";
-                else if (cn.state === "posted") {
-                    if (["paid", "in_payment", "reversed"].includes(cn.payment_state)) status = "Paid/Reconciled";
-                    else if (cn.payment_state === "partial") status = "Partial";
-                    else status = "Posted";
-                }
-                return {
-                    id: cn.id,
-                    display_name: (cn.name && cn.name !== "/") ? cn.name : `Draft Refund (*${cn.id})`,
-                    shop: cn.partner_id ? cn.partner_id[1] : "Unknown",
-                    untaxedAmount: (cn.amount_untaxed || 0).toLocaleString(),
-                    taxAmount: (cn.amount_tax || 0).toLocaleString(),
-                    date: cn.invoice_date || "Not set",
-                    amount: (cn.amount_total || 0).toLocaleString(),
-                    rawAmount: cn.amount_total || 0,
-                    residual: (cn.amount_residual || 0).toLocaleString(),
-                    rawResidual: cn.amount_residual !== undefined ? cn.amount_residual : cn.amount_total,
-                    status,
-                    journal_id: cn.journal_id ? cn.journal_id[0] : false,
-                };
-            });
-        }
-
-        if (paymentsData) {
-            this.state.payments = paymentsData.map((pay) => ({
-                id: pay.id,
-                display_name: pay.name ? pay.name : `Processing... (#${pay.id})`,
-                shop: pay.partner_id ? pay.partner_id[1] : "Unknown",
-                date: pay.date || "N/A",
-                amount: (pay.amount || 0).toLocaleString(),
-                method: pay.journal_id ? pay.journal_id[1] : "Manual",
-                ref: pay.memo || "N/A",
-                status: ["paid", "in_process", "posted", "reconciled"].includes(pay.state)
-                    ? "Paid"
-                    : (pay.state === "cancel" ? "Cancelled" : "Draft"),
-                channel: pay.shahtaj_payment_channel || "cash",
-                bank: pay.shahtaj_payer_bank_name || "N/A",
-                account: pay.shahtaj_payer_account_number || "N/A",
-                reference: pay.shahtaj_instrument_reference || "N/A",
-                notes: pay.shahtaj_payment_notes || "N/A",
-            }));
-        }
-
-        if (shopsData) {
-            this.state.balances = shopsData.map((shop) => ({
-                id: shop.id,
-                shopId: shop.id,
-                shop: shop.name,
-                owner: shop.owner_name || "N/A",
-                route: shop.route_id ? shop.route_id[1] : "Unassigned",
-                category: shop.shahtaj_shop_category === "cash" ? "Cash" : "Credit",
-                limit: shop.shahtaj_shop_category === "cash" ? "N/A" : (shop.credit_limit || 0).toLocaleString(),
-                rawLimit: shop.credit_limit || 0,
-                outstanding: (shop.outstanding_balance || 0).toLocaleString(),
-                rawOutstanding: shop.outstanding_balance || 0,
-            }));
-
-            this.state.credits = shopsData.map((shop) => {
+        // 3. Temporarily fetch Credit Risk data (until we migrate this tab to pagination too)
+        if (this.state.activeSubTab === 'credit' || !this.state.credits.length) {
+            const shopsData = await this.orm.searchRead("res.partner", [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]], ["name", "owner_name", "route_id", "shahtaj_shop_category", "credit_limit", "outstanding_balance"]);
+            this.state.credits = (shopsData || []).map((shop) => {
                 const limit = shop.credit_limit || 0;
                 const utilized = shop.outstanding_balance || 0;
                 let status = "Healthy";
@@ -571,40 +601,12 @@ export class FinancialsInvoicing extends Component {
                     else if (utilized >= limit * 0.85) status = "Critical";
                 }
                 return {
-                    id: shop.id,
-                    shopId: shop.id,
-                    shop: shop.name,
-                    limit: limit.toLocaleString(),
-                    rawLimit: limit,
-                    utilized: utilized.toLocaleString(),
-                    rawUtilized: utilized,
-                    available: Math.max(0, limit - utilized).toLocaleString(),
-                    status,
+                    id: shop.id, shopId: shop.id, shop: shop.name, limit: limit.toLocaleString(),
+                    rawLimit: limit, utilized: utilized.toLocaleString(), rawUtilized: utilized,
+                    available: Math.max(0, limit - utilized).toLocaleString(), status,
                 };
             });
         }
-
-        if (taxesData) {
-            this.state.availableTaxes = taxesData;
-        }
-        if (prodData) {
-            this.state.allProducts = prodData;
-            this.state.products = prodData.map((p) => ({
-                id: p.id,
-                name: p.display_name || p.name,
-            }));
-        }
-        if (journalsData) {
-            this.state.journals = journalsData;
-        }
-
-        this.state.stats = {
-            totalOrders: this.state.allOrders.length,
-            toInvoice: this.state.orders.length,
-            openInvoices: this.state.invoices.filter((i) => i.status === "Posted" || i.status === "Partial").length,
-            creditNotes: this.state.creditNotes.length,
-            approvedShops: this.state.balances.length,
-        };
 
         if (includePnl) {
             await this.fetchPnlData();
@@ -710,7 +712,6 @@ export class FinancialsInvoicing extends Component {
     }
 
     setSubTab(tabName) { this.state.activeSubTab = tabName; this.resetDetailViews(); }
-    setInvoiceSubTab(subTabName) { this.state.invoiceSubTab = subTabName; this.resetDetailViews(); }
     
     resetDetailViews() {
         this.state.selectedInvoice = null;
@@ -859,7 +860,7 @@ export class FinancialsInvoicing extends Component {
             this.fetchTaxLedgerData();
         }
     }
-    setInvoiceSubTab(subTabName) { this.state.invoiceSubTab = subTabName; this.resetDetailViews(); }
+
     // --- TAX LEDGER DATA FETCHER ---
     async fetchTaxLedgerData() {
         this.state.taxLedger.isLoading = true;
