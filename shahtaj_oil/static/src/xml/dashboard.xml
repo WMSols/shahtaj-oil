@@ -47,7 +47,7 @@
                                         <path d="M9 3.236v15"/>
                                     </svg>
                                 </span>
-                                Entity Registrations
+                                Territory &amp; Routes
                             </div>
                             <span class="d-flex align-items-center transition-all" t-att-style="this.state.expandedMenus.territory ? 'transform: rotate(180deg);' : ''">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down">
