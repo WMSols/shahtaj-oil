@@ -10,12 +10,14 @@ export class TerritoryRoutes extends Component {
         requestedSubTab: { type: String, optional: true },
     };
     static components = { ConfirmModal };
+    
     setup() {
         this.orm = useService("orm");
         this.notification = useService("notification");
         this.mapRef = useRef("mapContainer");
         this.mapInstance = null; 
-
+        // Universal items per page shared across Zones, Routes, and Shops
+        const ITEMS_PER_PAGE = 10;
         this.state = useState({
            activeSubTab: this.props.requestedSubTab || 'areas', 
            previousSubTab: 'areas',
@@ -61,7 +63,33 @@ export class TerritoryRoutes extends Component {
 
             areas: [],
             routes: [],
-            shops: []
+            shops: [],
+            // --- NEW: Backend Pagination & Loading ---
+            itemsPerPage: ITEMS_PER_PAGE,
+            isLoadingList: false,
+            searchTimeout: null,
+            tableAreas: [],
+            tableRoutes: [],
+            tableShops: [],
+            pagination: {
+                areas: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                routes: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                shops: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+            },
+            
+        });
+        // Universal Debouncer
+        this.debounceSearch = (func, wait) => {
+            return (...args) => {
+                clearTimeout(this.state.searchTimeout);
+                this.state.searchTimeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        };
+        this.debouncedFetchActiveList = this.debounceSearch(() => this.fetchActiveList(), 400);
+
+        onWillStart(async () => {
+            await this.fetchDashboardData();
+            await this.fetchActiveList(); // Force the paginator to run on initial load
         });
         // ADD THIS NEW BLOCK RIGHT AFTER THE STATE CLOSING BRACKET:
         onWillUpdateProps((nextProps) => {
@@ -104,10 +132,86 @@ export class TerritoryRoutes extends Component {
                 }
             };
         }, () => [this.mapRef.el, this.state.selectedShopDetails]);
+    }
+    // --- UNIVERSAL PAGINATION HANDLERS ---
+    onSearchInput(tabName) {
+        this.state.pagination[tabName].page = 1; 
+        this.debouncedFetchActiveList();
+    }
 
-        onWillStart(async () => {
-            await this.fetchDashboardData();
-        });
+    onFilterChange(tabName) {
+        this.state.pagination[tabName].page = 1;
+        this.fetchActiveList(); 
+    }
+
+    changePage(tabName, direction) {
+        const pag = this.state.pagination[tabName];
+        const newPage = pag.page + direction;
+        const maxPage = Math.max(1, Math.ceil(pag.total / pag.limit));
+        
+        if (newPage >= 1 && newPage <= maxPage) {
+            pag.page = newPage;
+            this.fetchActiveList();
+        }
+    }
+
+    // --- THE BACKEND DATA ENGINE ---
+    async fetchActiveList() {
+        const tab = this.state.activeSubTab;
+        if (!['areas', 'routes', 'shops'].includes(tab)) return;
+
+        this.state.isLoadingList = true;
+        try {
+            const pag = this.state.pagination[tab];
+            let domain = [];
+            let model = '';
+            let fields = [];
+            let targetState = '';
+
+            if (tab === 'areas') {
+                model = 'shahtaj.zone';
+                fields = ["id", "name", "active", "route_count"];
+                targetState = 'tableAreas';
+                domain = [['active', 'in', [true, false]]];
+                if (this.state.areaSearchQuery) domain.push(['name', 'ilike', this.state.areaSearchQuery]);
+            } 
+            else if (tab === 'routes') {
+                model = 'shahtaj.route';
+                fields = ["id", "name", "zone_id", "shop_count", "active"];
+                targetState = 'tableRoutes';
+                domain = [['active', 'in', [true, false]]];
+                if (this.state.routeSearchQuery) domain.push(['name', 'ilike', this.state.routeSearchQuery]);
+            } 
+            else if (tab === 'shops') {
+                model = 'res.partner';
+                fields = ["id", "name", "owner_name", "phone", "route_id", "shop_approval_state", "shahtaj_shop_category", "registered_by_id", "active"];
+                targetState = 'tableShops';
+                domain = [['is_shahtaj_shop', '=', true], ['active', 'in', [true, false]]];
+                
+                if (this.state.shopSearchQuery) {
+                    domain.push('|', ['name', 'ilike', this.state.shopSearchQuery], ['owner_name', 'ilike', this.state.shopSearchQuery]);
+                }
+                if (this.state.shopFilterCategory !== 'all') {
+                    domain.push(['shahtaj_shop_category', '=', this.state.shopFilterCategory]);
+                }
+                if (this.state.shopFilterStatus !== 'all') {
+                    domain.push(['shop_approval_state', '=', this.state.shopFilterStatus]);
+                }
+            }
+
+            const [total, records] = await Promise.all([
+                this.orm.searchCount(model, domain),
+                this.orm.searchRead(model, domain, fields, { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc" })
+            ]);
+
+            this.state.pagination[tab].total = total;
+            this.state[targetState] = records;
+
+        } catch (error) {
+            this.notification.add("Failed to fetch data: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.isLoadingList = false;
+        }
     }
     // NEW Refresh Method
     async refreshData() {
@@ -212,32 +316,18 @@ export class TerritoryRoutes extends Component {
     // --- Data Fetching Logic (areas/routes/shops in parallel) ---
     async fetchDashboardData() {
         const includeArchivedDomain = ['|', ['active', '=', true], ['active', '=', false]];
-
-        const [areas, routes, shops] = await Promise.all([
-            this.orm.searchRead(
-                "shahtaj.zone",
-                includeArchivedDomain,
-                ["id", "name", "active", "route_count"]
-            ),
-            this.orm.searchRead(
-                "shahtaj.route",
-                includeArchivedDomain,
-                ["id", "name", "zone_id", "shop_count", "active"]
-            ),
-            this.orm.searchRead(
-                "res.partner",
-                [["is_shahtaj_shop", "=", true], ...includeArchivedDomain],
-                ["id", "name", "owner_name", "phone", "route_id", "shop_approval_state", "shahtaj_shop_category", "registered_by_id", "active"]
-            ),
+        const [areas, routes, archivedShops] = await Promise.all([
+            this.orm.searchRead("shahtaj.zone", includeArchivedDomain, ["id", "name", "active", "route_count"]),
+            this.orm.searchRead("shahtaj.route", includeArchivedDomain, ["id", "name", "zone_id", "shop_count", "active"]),
+            // ONLY fetch inactive shops to keep the Archive tab working without loading thousands of active shops!
+            this.orm.searchRead("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", false]], ["id", "name", "owner_name", "route_id", "active"])
         ]);
 
         this.state.areas = areas;
         this.state.routes = routes;
-        this.state.shops = shops;
+        this.state.shops = archivedShops;
     }
-
     setSubTab(tabName) {
-        // Save the current tab if we are navigating to the archive
         if (tabName === 'archive' && this.state.activeSubTab !== 'archive') {
             this.state.previousSubTab = this.state.activeSubTab;
         }
@@ -246,6 +336,12 @@ export class TerritoryRoutes extends Component {
         this.cancelForms();
         this.state.selectedShopDetails = null;
         this.closeShopActionMenu();
+
+        // Trigger the paginator when swapping tabs
+        if (['areas', 'routes', 'shops'].includes(tabName)) {
+            this.state.pagination[tabName].page = 1;
+            this.fetchActiveList();
+        }
     }
     cancelForms() {
         this.state.showAreaForm = false;
