@@ -704,7 +704,6 @@ export class TerritoryRoutes extends Component {
         }
 
         this.state.isLoading = true;
-        
         try {
             const payload = {
                 is_shahtaj_shop: true,
@@ -728,8 +727,7 @@ export class TerritoryRoutes extends Component {
             if (this.state.shopForm.owner_cnic_front) payload.owner_cnic_front = this.state.shopForm.owner_cnic_front;
             if (this.state.shopForm.owner_cnic_back) payload.owner_cnic_back = this.state.shopForm.owner_cnic_back;
             if (this.state.shopForm.owner_photo) payload.owner_photo = this.state.shopForm.owner_photo;
-            if (this.state.shopForm.shop_exterior_photo) payload.shop_exterior_photo = this.state.shopForm.shop_exterior_photo;
-
+            // Exterior photo is booker-only (first-visit / on-site register).
             if (this.state.editingShopId) {
                 await this.orm.write("res.partner", [this.state.editingShopId], payload);
                 this.notification.add("Shop updated successfully.", { type: "success" });
