@@ -172,21 +172,21 @@ export class TerritoryRoutes extends Component {
                 model = 'shahtaj.zone';
                 fields = ["id", "name", "active", "route_count"];
                 targetState = 'tableAreas';
-                domain = [['active', 'in', [true, false]]];
+                domain = [['active', '=', true]]; // FIX: Only fetch active
                 if (this.state.areaSearchQuery) domain.push(['name', 'ilike', this.state.areaSearchQuery]);
             } 
             else if (tab === 'routes') {
                 model = 'shahtaj.route';
                 fields = ["id", "name", "zone_id", "shop_count", "active"];
                 targetState = 'tableRoutes';
-                domain = [['active', 'in', [true, false]]];
+                domain = [['active', '=', true]]; // FIX: Only fetch active
                 if (this.state.routeSearchQuery) domain.push(['name', 'ilike', this.state.routeSearchQuery]);
             } 
             else if (tab === 'shops') {
                 model = 'res.partner';
                 fields = ["id", "name", "owner_name", "phone", "route_id", "shop_approval_state", "shahtaj_shop_category", "registered_by_id", "active"];
                 targetState = 'tableShops';
-                domain = [['is_shahtaj_shop', '=', true], ['active', 'in', [true, false]]];
+                domain = [['is_shahtaj_shop', '=', true], ['active', '=', true]]; // FIX: Only fetch active
                 
                 if (this.state.shopSearchQuery) {
                     domain.push('|', ['name', 'ilike', this.state.shopSearchQuery], ['owner_name', 'ilike', this.state.shopSearchQuery]);
@@ -432,6 +432,7 @@ export class TerritoryRoutes extends Component {
         try {
             await this.orm.write(model, [id], { active: makeActive });
             await this.fetchDashboardData();
+            await this.fetchActiveList(); 
             if (this.state.selectedShopDetails && this.state.selectedShopDetails.id === id) {
                 this.closeShopDetails();
             }
@@ -544,6 +545,7 @@ export class TerritoryRoutes extends Component {
             if (this.state.selectedShopDetails && this.state.selectedShopDetails.id === shopId) {
                 await this.viewShopDetails(shopId);
             }
+            await this.fetchActiveList();
             this.notification.add("Shop approved successfully.", { type: "success" });
         } catch (error) {
             this.notification.add("Failed to approve shop: " + (error.data?.message || error.message), { type: "danger" });
@@ -648,6 +650,7 @@ export class TerritoryRoutes extends Component {
 
         this.cancelForms();
         await this.fetchDashboardData(); 
+        await this.fetchActiveList(); // FIX: Refresh table immediately
     }
 
    async saveRoute() {
@@ -670,6 +673,7 @@ export class TerritoryRoutes extends Component {
             }
             this.cancelForms();
             await this.fetchDashboardData();
+            await this.fetchActiveList(); // FIX: Refresh table immediately
         } catch (error) {
             this.notification.add("Failed to save route: " + (error.data?.message || error.message), { type: "danger" });
         }
@@ -737,6 +741,7 @@ export class TerritoryRoutes extends Component {
 
             this.cancelForms();
             await this.fetchDashboardData();
+            await this.fetchActiveList(); // FIX: Refresh table immediately
         } catch (error) {
             this.notification.add("Failed to save shop: " + (error.data?.message || error.message), { type: "danger" });
         } finally {

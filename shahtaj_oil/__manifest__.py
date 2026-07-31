@@ -29,6 +29,7 @@
         'data/shahtaj_product_data.xml',
         'data/shahtaj_api_data.xml',
         'data/shahtaj_cron.xml',
+        'data/shahtaj_expense_data.xml',
 
         # ── 3. CORE VIEWS + ACTIONS (no inherit from other module views) ──
         'views/shahtaj_route_views.xml',
@@ -50,6 +51,7 @@
         'views/shahtaj_accounting_views.xml',
         'views/shahtaj_sale_accounting_views.xml',
         'views/shahtaj_accounting_hub_views.xml',
+        'views/shahtaj_expense_views.xml',
         'views/shahtaj_pnl_dashboard_views.xml',
         'views/shahtaj_tax_ledger_views.xml',
         'views/shahtaj_manufacturer_summary_views.xml',

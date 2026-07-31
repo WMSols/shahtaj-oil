@@ -537,7 +537,6 @@ export class OperationsTracking extends Component {
             line.toDeliver = Math.max(0, line.ordered - line.delivered);
         });
     }
-    // Custom delivery confirmation logic that writes back to Odoo and triggers the native validation
    async confirmDeliveryCustom() {
         try {
             // 1. Write the user's updated quantities back to the hidden Odoo wizard
@@ -555,14 +554,19 @@ export class OperationsTracking extends Component {
             this.closeDeliveryModal();
             
             // 3. Refresh the UI
-           await this.fetchActiveList();
+            await this.fetchActiveList();
             if (this.state.selectedDelivery) {
-                const updatedOrder = this.state.orders.find(o => o.odoo_id === this.state.selectedDelivery.odoo_id);
-                if (updatedOrder) {
-                    // --- CHANGED: Forcefully update the status so the UI immediately reflects the delivery ---
-                    updatedOrder.status = 'Delivered';
-                    await this.viewDelivery(updatedOrder);
+                // FIX: Look in the new paginated arrays instead of the deleted 'orders' array
+                let updatedOrder = this.state.tableDeliveries.find(o => o.odoo_id === this.state.selectedDelivery.odoo_id) || 
+                                   this.state.tableOrders.find(o => o.odoo_id === this.state.selectedDelivery.odoo_id);
+                
+                if (!updatedOrder) {
+                    updatedOrder = this.state.selectedDelivery; // Fallback
                 }
+                
+                // Forcefully update the status so the UI immediately reflects the delivery
+                updatedOrder.status = 'Delivered';
+                await this.viewDelivery(updatedOrder);
             }
             
         } catch(error) {
@@ -604,6 +608,13 @@ export class OperationsTracking extends Component {
     async viewOrder(order) { 
         // 1. Assign to state FIRST to wrap it in Owl's reactive proxy
         this.state.selectedOrder = order; 
+        
+        // FIX: Initialize the contact fields so the "Loading..." check triggers the DB fetch
+        if (!this.state.selectedOrder.phone) {
+            this.state.selectedOrder.phone = "Loading...";
+            this.state.selectedOrder.email = "Loading...";
+            this.state.selectedOrder.address = "Loading...";
+        }
         
         if (this.state.selectedOrder.line_ids && this.state.selectedOrder.line_ids.length > 0 && this.state.selectedOrder.lines.length === 0) {
             const lines = await this.orm.searchRead(
