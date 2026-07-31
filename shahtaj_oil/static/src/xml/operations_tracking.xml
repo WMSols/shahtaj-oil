@@ -749,6 +749,12 @@
                     <t t-esc="this.state.selectedOrder.items"/>
                 </span>
             </div>
+            <div t-if="this.hasFinancialAccess" class="d-flex justify-content-between mb-2 pt-2">
+                <span class="text-muted">Total Taxes:</span>
+                <span class="fw-bold">
+                    <t t-esc="this.state.selectedOrder.tax"/>
+                </span>
+            </div>
             <div t-if="this.hasFinancialAccess" class="d-flex justify-content-between border-top pt-3 mt-2">
                 <span class="text-dark fw-bold text-uppercase">Grand Total:</span>
                 <h4 class="fw-bold text-success mb-0">

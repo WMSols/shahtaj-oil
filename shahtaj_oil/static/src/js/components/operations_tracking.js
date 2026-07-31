@@ -130,7 +130,7 @@ export class OperationsTracking extends Component {
             // 1. DOMAIN MAPPINGS
             if (tab === 'deliveries' || tab === 'orders') {
                 model = 'sale.order'; targetState = tab === 'deliveries' ? 'tableDeliveries' : 'tableOrders';
-                fields = ["name", "partner_id", "user_id", "date_order", "amount_total", "state", "order_line", "invoice_status"];
+                fields = ["name", "partner_id", "user_id", "date_order", "amount_total","amount_tax", "state", "order_line", "invoice_status"];
                 domain.push(['shahtaj_visit_id', '!=', false]);
                 
                 if (tab === 'deliveries') domain.push(['state', 'in', ['sale', 'done']]);
@@ -189,6 +189,7 @@ export class OperationsTracking extends Component {
                         odoo_id: o.id, id: o.name, shop: o.partner_id ? o.partner_id[1] : 'Unknown', partner_id: o.partner_id,
                         booker: o.user_id ? o.user_id[1] : 'Unknown', date: o.date_order || 'Unknown', items: o.order_line.length,
                         total: `Rs. ${o.amount_total.toLocaleString(undefined, {minimumFractionDigits: 2})}`,
+                        tax: `Rs. ${(o.amount_tax || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`,
                         status: status, invoice_status: o.invoice_status,
                         is_fully_delivered: totalOrd > 0 && totalDel >= totalOrd, line_ids: o.order_line, lines: [] 
                     };
@@ -669,7 +670,7 @@ export class OperationsTracking extends Component {
             const orders = await this.orm.searchRead(
                 "sale.order",
                 [["id", "=", log.sale_order_id[0]]],
-                ["name", "partner_id", "user_id", "date_order", "amount_total", "state", "order_line", "invoice_status"]
+                ["name", "partner_id", "user_id", "date_order", "amount_total","amount_tax", "state", "order_line", "invoice_status"]
             );
 
             if (orders.length > 0) {
@@ -686,6 +687,7 @@ export class OperationsTracking extends Component {
                     odoo_id: o.id, id: o.name, shop: o.partner_id ? o.partner_id[1] : 'Unknown', partner_id: o.partner_id,
                     booker: o.user_id ? o.user_id[1] : 'Unknown', date: o.date_order || 'Unknown', items: o.order_line.length,
                     total: `Rs. ${o.amount_total.toLocaleString(undefined, {minimumFractionDigits: 2})}`,
+                    tax: `Rs. ${(o.amount_tax || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`,
                     status: status, invoice_status: o.invoice_status,
                     is_fully_delivered: totalOrd > 0 && totalDel >= totalOrd, line_ids: o.order_line, lines: [] 
                 };

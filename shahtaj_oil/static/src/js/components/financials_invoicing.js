@@ -1152,11 +1152,6 @@ export class FinancialsInvoicing extends Component {
         this.closeRefundModal();
     }
 
-    _refreshSelectedInvoiceState(invoiceId) {
-        let updatedInv = this.state.invoices.find(i => i.id === invoiceId);
-        if (!updatedInv) updatedInv = this.state.creditNotes.find(i => i.id === invoiceId);
-        if (updatedInv) this.state.selectedInvoice = updatedInv;
-    }
 
     async viewOrder(order) { 
         this.state.selectedOrder = order; 
