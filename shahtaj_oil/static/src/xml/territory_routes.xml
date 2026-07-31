@@ -723,11 +723,11 @@
                         </select>
                         <small class="text-muted" t-if="!this.state.shopForm.zone_id">Select a zone first.</small>
                     </div>
-                    <div class="col-md-2 d-none mb-3">
+                    <div class="col-md-2  mb-3">
                         <label class="small fw-bold text-muted">GPS Latitude</label>
                         <input type="number" step="any" class="form-control" t-model="this.state.shopForm.lat" placeholder="e.g. 31.5204"/>
                     </div>
-                    <div class="col-md-2 d-none mb-3">
+                    <div class="col-md-2  mb-3">
                         <label class="small fw-bold text-muted">GPS Longitude</label>
                         <input type="number" step="any" class="form-control" t-model="this.state.shopForm.lng" placeholder="e.g. 74.3587"/>
                     </div>
