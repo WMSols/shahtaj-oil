@@ -72,7 +72,7 @@
                         domain="[('shop_approval_state', '=', 'approved')]"/>
                 <filter string="Pending" name="pending"
                         domain="[('shop_approval_state', '=', 'pending')]"/>
-                <group expand="0" string="Group By">
+                <group  string="Group By">
                     <filter string="Route" name="groupby_route" context="{'group_by': 'route_id'}"/>
                     <filter string="Zone" name="groupby_zone" context="{'group_by': 'zone_id'}"/>
                     <filter string="Visit Tag" name="groupby_visit"
