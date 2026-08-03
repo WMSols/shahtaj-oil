@@ -127,14 +127,19 @@ class ShahtajApiShops(http.Controller):
         """Booker may verify a shop they are scheduled to visit today."""
         ensure_order_booker()
         task = task_for_booker(task_id)
-        shop = request.env['res.partner'].browse(int(shop_id)).exists()
+        # sudo read: booker is authorized via own visit task; partner ACL can lag
+        # when schedules change. Writes still go through record rules below.
+        shop = request.env['res.partner'].sudo().browse(int(shop_id)).exists()
         if not shop or not shop.is_shahtaj_shop:
             raise AccessError(_('Shop not found.'))
-        if task.shop_id != shop:
+        if task.shop_id.id != shop.id:
             raise UserError(_(
                 'This visit task does not belong to shop "%(shop)s".',
                 shop=shop.display_name,
             ))
+        # Re-browse without sudo so field-verification write uses booker rights
+        # (record rule must allow shops linked by visit task).
+        shop = request.env['res.partner'].browse(shop.id)
         return shop, task
 
     @http.route('/api/shahtaj/v1/shops/verify-on-site', **API_ROUTE)
@@ -145,7 +150,7 @@ class ShahtajApiShops(http.Controller):
         Required: shop_id, task_id, latitude, longitude, shop_exterior_photo,
                   owner_cnic_number (unless already on the shop)
         Optional: owner_photo, owner_cnic_front/back, owner_name, owner_phone,
-                  shop_category
+                  shop_category, legacy_balance (if distributor left empty)
         """
         shop_id = kwargs.get('shop_id')
         task_id = kwargs.get('task_id')
@@ -196,8 +201,10 @@ class ShahtajApiShops(http.Controller):
                 kwargs.get('shop_category')
                 or kwargs.get('shahtaj_shop_category')
             )
+        if kwargs.get('legacy_balance') is not None and kwargs.get('legacy_balance') != '':
+            verify_vals['legacy_balance'] = kwargs.get('legacy_balance')
 
-        shop.action_shahtaj_apply_field_verification(
+        shop.sudo().action_shahtaj_apply_field_verification(
             verify_vals, verified_by=request.env.user,
         )
         visit = request.env['shahtaj.visit'].create_from_task_checkin(
