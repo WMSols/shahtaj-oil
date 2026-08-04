@@ -853,7 +853,7 @@
                     <th class="ps-4">Booker</th>
                     <th>Day / Date</th>
                     <th>Route &amp; Zone</th>
-                    <th class="text-center" style="width: 200px;">Task Progress</th>
+                    <th class="text-center" style="width: 200px;">Route Progress</th>
                     <th class="text-center pe-4">Status</th>
                 </tr>
             </thead>

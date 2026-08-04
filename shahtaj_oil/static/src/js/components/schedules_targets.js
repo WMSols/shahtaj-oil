@@ -282,7 +282,7 @@ export class SchedulesTargets extends Component {
                 }
                 byTarget[tid].push({
                     id: line.id,
-                    product_id: line.product_id ? String(line.product_id[0]) : '',
+                    product_id: line.product_id ? line.product_id[0] : '',
                     product_name: line.product_id ? line.product_id[1] : '',
                     measure_type: line.measure_type || 'qty',
                     target_value: line.target_value,
