@@ -282,7 +282,7 @@
                                     <label class="small fw-bold text-muted mb-2">Parent Zone</label>
                                     <div class="d-flex flex-column gap-2">
                                         <select class="form-select shadow-sm" t-model="this.state.selectedRouteDetails.edit_zone_id">
-                                            <t t-foreach="this.state.areas" t-as="a" t-key="a.id">
+                                            <t t-foreach="this.state.areas.filter(a => a.active)" t-as="a" t-key="a.id">
                                                 <option t-att-value="a.id"><t t-esc="a.name"/></option>
                                             </t>
                                         </select>
@@ -804,7 +804,7 @@
                         <label class="small fw-bold">Select Zone</label>
                         <select class="form-select form-control" t-model="this.state.shopForm.zone_id" t-on-change="onZoneChange">
                             <option value="">-- Select Zone --</option>
-                            <t t-foreach="this.state.areas" t-as="a" t-key="a.id">
+                            <t t-foreach="this.state.areas.filter(a => a.active)" t-as="a" t-key="a.id">
                                 <option t-att-value="a.id">
                                     <t t-esc="a.name"/>
                                 </option>

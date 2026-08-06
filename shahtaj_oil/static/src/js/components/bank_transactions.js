@@ -229,6 +229,17 @@ export class BankTransactions extends Component {
                 this.state.pagination.transactions.total = combined.length;
                 const start = (pag.page - 1) * pag.limit;
                 this.state.tableTransactions = combined.slice(start, start + pag.limit);
+            }else if (tab === 'journals') {
+                let domain = [["type", "in", ["bank", "cash"]]];
+                if (filters.search) domain.push(['name', 'ilike', filters.search]);
+                
+                const [total, records] = await Promise.all([
+                    this.orm.searchCount('account.journal', domain),
+                    this.orm.searchRead('account.journal', domain, ["id", "name", "type", "code"], { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc" })
+                ]);
+                
+                this.state.pagination.journals.total = total;
+                this.state.tableJournals = records;
             }
         } catch (error) {
             this.notification.add("Failed to load data: " + (error.data?.message || error.message), { type: "danger" });
