@@ -242,6 +242,7 @@
                                                 </span>
                                             </td>
                                             <td class="align-middle text-end pe-4">
+                                                <button class="btn btn-sm btn-outline-primary me-2" t-on-click="() => this.editRoute(route)" title="Edit Route Details">Edit</button>
                                                 <button class="btn btn-sm btn-outline-dark fw-bold me-2" t-on-click="() => this.viewRouteDetails(route)">Manage Checklist →</button>
                                                 <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.toggleArchive('shahtaj.route', route.id, false)" title="Move to Archive">Archive</button>
                                             </td>
@@ -318,6 +319,9 @@
                                            t-model="this.state.routeChecklistSearchQuery" t-on-input="onChecklistSearchInput" />
                                 </div>
                             </div>
+                            <div class="px-3 py-2 bg-light border-bottom small text-muted">
+                                Checked = on this route. Unchecked = not on this route (shop may still be on other routes). All approved shops are listed.
+                            </div>
                             
                             <div class="position-relative">
                                 <t t-if="this.state.isLoadingList">
@@ -332,7 +336,7 @@
                                                 <th class="ps-4 text-center" style="width: 60px;">Assign</th>
                                                 <th>Shop Name</th>
                                                 <th>Owner</th>
-                                                <th class="text-end pe-4">Current Route</th>
+                                                <th class="text-end pe-4">Zones / Routes</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -343,14 +347,14 @@
                                                 <tr>
                                                     <td class="ps-4 text-center">
                                                         <input class="form-check-input fs-5 cursor-pointer shadow-sm" type="checkbox" 
-                                                               t-att-checked="cshop.route_id and cshop.route_id[0] === this.state.selectedRouteDetails.id"
+                                                               t-att-checked="this.isShopOnSelectedRoute(cshop)"
                                                                t-on-change="(ev) => this.toggleShopRouteAssignment(cshop.id, ev)"/>
                                                     </td>
                                                     <td class="fw-bold text-dark"><t t-esc="cshop.name"/></td>
                                                     <td class="text-muted"><t t-esc="cshop.owner_name || 'N/A'"/></td>
                                                     <td class="text-end pe-4">
-                                                        <span t-attf-class="badge #{cshop.route_id ? 'bg-info text-white' : 'bg-warning text-dark'} shadow-sm">
-                                                            <t t-esc="cshop.route_id ? cshop.route_id[1] : 'Unassigned'"/>
+                                                        <span t-attf-class="badge #{cshop.shahtaj_routes_display ? 'bg-info text-white' : 'bg-warning text-dark'} shadow-sm">
+                                                            <t t-esc="this.formatShopRoutes(cshop)"/>
                                                         </span>
                                                     </td>
                                                 </tr>
@@ -426,14 +430,25 @@
                 <div class="col-md-5">
                     <div class="mb-4">
                         <h6 class="fw-bold text-primary">Location Details</h6>
-                        <p class="mb-1">
-                            <strong>Zone:</strong>
-                            <t t-esc="this.state.selectedShopDetails.zone_id ? this.state.selectedShopDetails.zone_id[1] : 'N/A'"/>
-                        </p>
-                        <p class="mb-1">
-                            <strong>Route:</strong>
-                            <t t-esc="this.state.selectedShopDetails.route_id ? this.state.selectedShopDetails.route_id[1] : 'N/A'"/>
-                        </p>
+                        <div class="mb-3">
+                            <strong class="d-block mb-2">Assigned routes</strong>
+                            <t t-if="this.state.selectedShopDetails.route_lines and this.state.selectedShopDetails.route_lines.length">
+                                <ul class="list-unstyled mb-0">
+                                    <t t-foreach="this.state.selectedShopDetails.route_lines" t-as="line" t-key="line.route_id">
+                                        <li class="mb-2 pb-2 border-bottom">
+                                            <div class="fw-bold text-dark"><t t-esc="line.route_name"/></div>
+                                            <small class="text-muted">Zone: <t t-esc="line.zone_name"/></small>
+                                        </li>
+                                    </t>
+                                </ul>
+                                <small class="text-muted">Read-only — assign or remove from Routes checklist.</small>
+                            </t>
+                            <t t-else="">
+                                <p class="mb-0 text-muted">
+                                    Unassigned — assign from Routes checklist.
+                                </p>
+                            </t>
+                        </div>
                         <p class="mb-0">
                             <strong>Coordinates:</strong>
                             <t t-esc="this.state.selectedShopDetails.partner_latitude"/>
@@ -618,7 +633,6 @@
                     <tr>
                         <th class="border-top-0 ps-4">Shop Details</th>
                         <th class="border-top-0">Contact</th>
-                        <th class="border-top-0">Route </th>
                         <th class="border-top-0 text-center">Visit Status</th>
                         <th class="border-top-0 text-center">Category</th>
                         <th class="border-top-0 text-center">Status</th>
@@ -665,8 +679,10 @@
 )
                             </small>
                         </td>
-                        <td class="align-middle text-primary fw-bold">
-                            <t t-esc="shop.route_id ? shop.route_id[1] : 'Unassigned'"/>
+                        <td class="align-middle text-center">
+                            <span t-attf-class="badge #{shop.shahtaj_visit_tag === 'visited' ? 'bg-success text-white' : 'bg-warning text-dark'} shadow-sm">
+                                <t t-esc="shop.shahtaj_visit_tag === 'visited' ? 'Visited' : 'Not Visited'"/>
+                            </span>
                         </td>
                         <td class="align-middle text-center">
                             <span t-attf-class="badge #{shop.shahtaj_visit_tag === 'visited' ? 'bg-success text-white' : 'bg-warning text-dark'} shadow-sm">
@@ -767,16 +783,19 @@
         <div class="card border-0 shadow-sm mb-4 rounded-3">
             <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
                 <h6 class="fw-bold text-primary mb-0">1. Basic Information</h6>
-                <small class="text-muted d-block mt-1">Provide the general identity and contact information for the shop owner.</small>
+                <small class="text-muted d-block mt-1">
+                    Only <b>Shop Name</b> is required. Owner details and photos are optional.
+                    Assign zones/routes later from the route checklist.
+                </small>
             </div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="small fw-bold">Shop Name</label>
+                        <label class="small fw-bold">Shop Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" t-model="this.state.shopForm.name" placeholder="e.g. Al-Hafeez Supermart"/>
                     </div>
                     <div class="col-md-3 mb-3">
-                        <label class="small fw-bold">Owner Name</label>
+                        <label class="small fw-bold">Owner Name <span class="text-muted fw-normal">(Optional)</span></label>
                         <input type="text" class="form-control" t-model="this.state.shopForm.owner_name" placeholder="e.g. Rizwan Ahmed"/>
                     </div>
                     <div class="col-md-3 mb-3">
@@ -863,7 +882,7 @@
 
         <div class="card border-0 shadow-sm mb-4 rounded-3">
             <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-                <h6 class="fw-bold text-info mb-0">4. KYC &amp; Visual Verification</h6>
+                <h6 class="fw-bold text-info mb-0">3. KYC &amp; Visual Verification</h6>
                 <small class="text-muted d-block mt-1" t-if="this.state.editingShopId">Note: Leave file inputs blank to keep existing photos unchanged.</small>
                 <small class="text-muted d-block mt-1" t-else="">Upload clear, well-lit photos. These will be reviewed during the approval process.</small>
             </div>
@@ -971,7 +990,7 @@
                     </t>
                     <t t-foreach="this.archivedShops" t-as="shop" t-key="shop.id">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span><strong><t t-esc="shop.name"/></strong> - <t t-esc="shop.owner_name"/> (Route: <t t-esc="shop.route_id ? shop.route_id[1] : 'Unassigned'"/>)</span>
+                            <span><strong><t t-esc="shop.name"/></strong> - <t t-esc="shop.owner_name"/> (<t t-esc="this.formatShopRoutes(shop)"/>)</span>
                             <button class="btn btn-sm btn-success fw-bold" t-on-click="() => this.toggleArchive('res.partner', shop.id, true)">Restore</button>
                         </li>
                     </t>
