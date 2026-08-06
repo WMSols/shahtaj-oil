@@ -43,7 +43,9 @@ def task_dict(task):
 def shop_brief(partner):
     if not partner:
         return None
-    # Bookers are in the Shahtaj credit groups; sudo covers receivable read safely.
+    # Always read shop fields via sudo: bookers may lack partner ACL in edge
+    # cases (schedule removed, distributor-created shop) while still owning
+    # the visit task. Callers must already authorize the shop/task context.
     shop = partner.sudo()
     category = shop.shahtaj_shop_category or 'credit'
     credit_limit = float(shop.credit_limit or 0.0)
@@ -52,30 +54,35 @@ def shop_brief(partner):
         credit_remaining = False
     else:
         credit_remaining = max(credit_limit - outstanding, 0.0)
+    setup = shop._shahtaj_first_visit_setup_payload()
     return {
-        'id': partner.id,
-        'shop_id': partner.id,
-        'name': partner.name,
-        'owner_name': partner.owner_name or '',
-        'owner_phone': partner.owner_phone or '',
-        'owner_cnic_number': partner.owner_cnic_number or '',
-        'latitude': partner.partner_latitude,
-        'longitude': partner.partner_longitude,
-        'approval_state': partner.shop_approval_state,
-        'is_operational': partner._shahtaj_is_operational_for_booker(),
-        'is_active': partner.active,
+        'id': shop.id,
+        'shop_id': shop.id,
+        'name': shop.name,
+        'owner_name': shop.owner_name or '',
+        'owner_phone': shop.owner_phone or '',
+        'owner_cnic_number': shop.owner_cnic_number or '',
+        'latitude': shop.partner_latitude,
+        'longitude': shop.partner_longitude,
+        'approval_state': shop.shop_approval_state,
+        'is_operational': shop._shahtaj_is_operational_for_booker(),
+        'is_active': shop.active,
         'shop_category': category,
         'credit_limit': credit_limit,
         'outstanding_balance': outstanding,
         'credit_remaining': credit_remaining,
-        'photos': shop_photo_flags(partner),
+        'photos': shop_photo_flags(shop),
+        'field_verified': setup['field_verified'],
+        'visit_tag': setup['visit_tag'],
+        'needs_shop_setup': setup['needs_shop_setup'],
+        'missing_fields': setup['missing_fields'],
     }
 
 
 def shop_detail(partner, include_photos=False):
     data = shop_brief(partner)
-    if include_photos:
-        data['photo_data'] = shop_photo_data(partner)
+    if include_photos and partner:
+        data['photo_data'] = shop_photo_data(partner.sudo())
     return data
 
 
@@ -191,22 +198,52 @@ def schedule_dict(schedule):
     }
 
 
+def target_line_dict(line):
+    parent_type = line.target_id.target_type if line.target_id else False
+    data = {
+        'id': line.id,
+        'product': _m2o(line.product_id) if line.product_id else None,
+        'achieved_value': line.achieved_value,
+        'remaining_value': line.remaining_value,
+        'progress_percent': line.progress_percent,
+    }
+    if parent_type == 'product_bundle':
+        data['measure_type'] = line.measure_type
+        data['target_value'] = line.target_value
+        if line.measure_type == 'weight':
+            data['target_weight_uom'] = line.target_weight_uom
+            data['weight_unit_label'] = dict(
+                line._fields['target_weight_uom'].selection,
+            ).get(line.target_weight_uom, '')
+    return data
+
+
 def target_dict(target):
+    type_labels = dict(target._fields['target_type'].selection or [])
     data = {
         'id': target.id,
         'name': target.name,
         'target_type': target.target_type,
+        'target_type_label': type_labels.get(target.target_type, target.target_type or ''),
         'date_start': str(target.date_start),
         'date_end': str(target.date_end),
         'target_value': target.target_value,
         'achieved_value': target.achieved_value,
         'remaining_value': target.remaining_value,
         'progress_percent': target.progress_percent,
-        'product': _m2o(target.product_id) if target.product_id else None,
+        'lines': [target_line_dict(line) for line in target.line_ids],
+        'is_expandable': True,
+        'headline_progress_percent': target.progress_percent,
     }
-    if target.target_type == 'product_weight':
+    if target.target_type == 'collective_weight':
         data['target_weight_uom'] = target.target_weight_uom
         data['weight_unit_label'] = dict(
             target._fields['target_weight_uom'].selection,
         ).get(target.target_weight_uom, '')
+    if target.target_type == 'product_bundle':
+        # Headline is average of line %; 100 = all lines complete on average.
+        data['target_value'] = 100.0
+        data['combined_progress_mode'] = 'average_line_percent'
+    elif target.target_type in ('collective_qty', 'collective_weight'):
+        data['combined_progress_mode'] = 'shared_goal_sum'
     return data

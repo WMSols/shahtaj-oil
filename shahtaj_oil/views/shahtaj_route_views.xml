@@ -9,6 +9,7 @@
                 <field name="name"/>
                 <field name="zone_id"/>
                 <field name="shop_count"/>
+                <field name="unassigned_shop_count" optional="show"/>
                 <field name="active"/>
             </list>
         </field>
@@ -25,9 +26,11 @@
                 </header>
                 <sheet>
                     <div class="alert alert-info" role="alert">
-                        <strong>Setup order:</strong>
-                        1) Pick a zone → 2) Add shops below.
-                        Assign order bookers to this route under <b>Weekly Schedules</b>.
+                        <b>Checked</b> = shop is on this route.
+                        <b>Unchecked</b> = Unassigned (can be assigned here).
+                        Only Unassigned shops and shops already on this route are shown.
+                        Click <b>Save</b> after changing checks. Visit tasks follow assigned shops;
+                        weekly schedules stay on the route.
                     </div>
                     <div class="oe_title">
                         <label for="name" string="Route Name"/>
@@ -41,40 +44,32 @@
                         </group>
                         <group string="Status">
                             <field name="shop_count"/>
+                            <field name="unassigned_shop_count"/>
                             <field name="active"/>
                         </group>
                     </group>
-                    <notebook>
-                        <page string="Shops on this route" name="shops">
-                            <field name="shop_ids"
-                                   context="{
-                                       'shahtaj_shop_form': True,
-                                       'default_is_shahtaj_shop': True,
-                                       'default_shop_approval_state': 'approved',
-                                       'default_company_type': 'company',
-                                       'default_route_id': id,
-                                       'default_zone_id': zone_id,
-                                       'form_view_ref': 'shahtaj_oil.view_shahtaj_shop_form'
-                                   }">
-                                <list editable="bottom">
-                                    <field name="name"/>
-                                    <field name="owner_name"/>
-                                    <field name="owner_phone"/>
-                                    <field name="registered_by_name" string="Registered By" optional="show"/>
-                                    <field name="route_id" column_invisible="1"/>
-                                    <field name="zone_id" column_invisible="1"/>
-                                    <field name="shop_approval_state" widget="badge"
-                                           decoration-success="shop_approval_state == 'approved'"
-                                           decoration-warning="shop_approval_state == 'pending'"/>
-                                    <field name="partner_latitude"/>
-                                    <field name="partner_longitude"/>
-                                </list>
-                            </field>
-                            <p class="text-muted">
-                                Click <b>Add a line</b> to pick an existing shop, or <b>Create</b> to register a new one.
-                            </p>
-                        </page>
-                    </notebook>
+                    <group string="Shops checklist" invisible="not id">
+                        <field name="assign_shop_ids"
+                               widget="many2many_checkboxes"
+                               nolabel="1"
+                               class="o_shahtaj_route_shop_checklist"
+                               context="{'shahtaj_route_checklist': True}"
+                               domain="[
+                                   ('is_shahtaj_shop', '=', True),
+                                   ('active', '=', True),
+                                   ('shop_approval_state', '=', 'approved'),
+                                   '|',
+                                   ('route_id', '=', False),
+                                   ('route_id', '=', id),
+                               ]"
+                               options="{'no_create': True}"/>
+                    </group>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="id">
+                        Save this route first, then assign shops with the checklist.
+                    </div>
+                    <!-- Keep One2many loaded for counts/sync; hide from UI -->
+                    <field name="shop_ids" invisible="1"/>
                 </sheet>
                 <footer>
                     <button string="Save" special="save" class="btn-primary" data-hotkey="s"/>
@@ -93,8 +88,7 @@
                 Create a sales route
             </p>
             <p>
-                Each route belongs to one zone and lists the shops visited on that route.
-                Order bookers are assigned per weekday under Weekly Schedules.
+                Open a route and check shops to assign them. Unchecked shops stay Unassigned.
             </p>
         </field>
     </record>

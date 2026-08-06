@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_shahtaj_assign_shops_route_wizard_form" model="ir.ui.view">
+        <field name="name">shahtaj.assign.shops.route.wizard.form</field>
+        <field name="model">shahtaj.assign.shops.route.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Pick shops for route">
+                <div class="alert alert-info" role="alert">
+                    <b>Checked</b> = on this route.
+                    <b>Unchecked</b> = Unassigned (removed from this route).
+                    Only Unassigned shops and shops already on this route are listed.
+                    Shop name-only shops appear here once Approved.
+                    Long names are shortened in this list so checkboxes stay visible.
+                </div>
+                <group>
+                    <group>
+                        <field name="route_id" options="{'no_create': True}"
+                               readonly="context.get('active_model') == 'shahtaj.route'"/>
+                        <field name="zone_id"/>
+                        <field name="candidate_shop_ids" invisible="1"/>
+                    </group>
+                </group>
+                <group string="Shops (check to assign / uncheck to remove)">
+                    <field name="shop_ids" nolabel="1"
+                           widget="many2many_checkboxes"
+                           class="o_shahtaj_route_shop_checklist"
+                           context="{'shahtaj_route_checklist': True}"
+                           domain="[('id', 'in', candidate_shop_ids)]"
+                           options="{'no_create': True}"/>
+                </group>
+                <footer>
+                    <button name="action_assign" type="object"
+                            string="Save shop assignment"
+                            class="btn-primary"/>
+                    <button string="Cancel" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_shahtaj_assign_shops_route_wizard" model="ir.actions.act_window">
+        <field name="name">Pick shops for route</field>
+        <field name="res_model">shahtaj.assign.shops.route.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+</odoo>

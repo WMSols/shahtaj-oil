@@ -10,12 +10,14 @@ export class TerritoryRoutes extends Component {
         requestedSubTab: { type: String, optional: true },
     };
     static components = { ConfirmModal };
+    
     setup() {
         this.orm = useService("orm");
         this.notification = useService("notification");
         this.mapRef = useRef("mapContainer");
         this.mapInstance = null; 
-
+        // Universal items per page shared across Zones, Routes, and Shops
+        const ITEMS_PER_PAGE = 10;
         this.state = useState({
            activeSubTab: this.props.requestedSubTab || 'areas', 
            previousSubTab: 'areas',
@@ -41,7 +43,10 @@ export class TerritoryRoutes extends Component {
             shopSearchQuery: '',
             shopFilterCategory: 'all',
             shopFilterStatus: 'all',
-
+            shopFilterBooker: 'all', 
+            shopFilterRoute: 'all',
+            routeFilterZone: 'all',  
+            bookers: [],
             // Custom Modal State
             confirmModal: { isOpen: false, title: '', message: '', onConfirm: null },
             isLoading: false,
@@ -61,7 +66,38 @@ export class TerritoryRoutes extends Component {
 
             areas: [],
             routes: [],
-            shops: []
+            shops: [],
+            // --- NEW: Backend Pagination & Loading ---
+            itemsPerPage: ITEMS_PER_PAGE,
+            isLoadingList: false,
+            searchTimeout: null,
+            tableAreas: [],
+            tableRoutes: [],
+            tableShops: [],
+            selectedRouteDetails: null,
+            routeChecklistSearchQuery: '',
+            tableRouteChecklist: [],
+            pagination: {
+                areas: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                routes: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                shops: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                routeChecklist: { page: 1, limit: ITEMS_PER_PAGE, total: 0 }, // Checklist pagination
+            },
+            
+        });
+        // Universal Debouncer
+        this.debounceSearch = (func, wait) => {
+            return (...args) => {
+                clearTimeout(this.state.searchTimeout);
+                this.state.searchTimeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        };
+        this.debouncedFetchActiveList = this.debounceSearch(() => this.fetchActiveList(), 400);
+        this.debouncedFetchRouteChecklist = this.debounceSearch(() => this.fetchRouteChecklist(), 400)
+
+        onWillStart(async () => {
+            await this.fetchDashboardData();
+            await this.fetchActiveList(); // Force the paginator to run on initial load
         });
         // ADD THIS NEW BLOCK RIGHT AFTER THE STATE CLOSING BRACKET:
         onWillUpdateProps((nextProps) => {
@@ -104,16 +140,104 @@ export class TerritoryRoutes extends Component {
                 }
             };
         }, () => [this.mapRef.el, this.state.selectedShopDetails]);
+    }
+    // --- UNIVERSAL PAGINATION HANDLERS ---
+    onSearchInput(tabName) {
+        this.state.pagination[tabName].page = 1; 
+        this.debouncedFetchActiveList();
+    }
 
-        onWillStart(async () => {
-            await this.fetchDashboardData();
-        });
+    onFilterChange(tabName) {
+        this.state.pagination[tabName].page = 1;
+        this.fetchActiveList(); 
+    }
+
+    changePage(tabName, direction) {
+        const pag = this.state.pagination[tabName];
+        const newPage = pag.page + direction;
+        const maxPage = Math.max(1, Math.ceil(pag.total / pag.limit));
+        
+        if (newPage >= 1 && newPage <= maxPage) {
+            pag.page = newPage;
+            this.fetchActiveList();
+        }
+    }
+
+    // --- THE BACKEND DATA ENGINE ---
+    async fetchActiveList() {
+        const tab = this.state.activeSubTab;
+        if (!['areas', 'routes', 'shops'].includes(tab)) return;
+
+        this.state.isLoadingList = true;
+        try {
+            const pag = this.state.pagination[tab];
+            let domain = [];
+            let model = '';
+            let fields = [];
+            let targetState = '';
+
+            if (tab === 'areas') {
+                model = 'shahtaj.zone';
+                fields = ["id", "name", "active", "route_count"];
+                targetState = 'tableAreas';
+                domain = [['active', '=', true]]; // FIX: Only fetch active
+                if (this.state.areaSearchQuery) domain.push(['name', 'ilike', this.state.areaSearchQuery]);
+            } 
+            else if (tab === 'routes') {
+                model = 'shahtaj.route';
+                fields = ["id", "name", "zone_id", "shop_count", "unassigned_shop_count", "active"];
+                targetState = 'tableRoutes';
+                domain = [['active', '=', true]];
+                if (this.state.routeSearchQuery) domain.push(['name', 'ilike', this.state.routeSearchQuery]);
+                if (this.state.routeFilterZone !== 'all') domain.push(['zone_id', '=', parseInt(this.state.routeFilterZone)]);
+            } 
+            else if (tab === 'shops') {
+                model = 'res.partner';
+                fields = ["id", "name", "owner_name", "phone", "route_id", "shop_approval_state", "shahtaj_shop_category", "registered_by_id", "active", "shahtaj_visit_tag"];
+                targetState = 'tableShops';
+                domain = [['is_shahtaj_shop', '=', true], ['active', '=', true]]; 
+                
+                if (this.state.shopSearchQuery) {
+                    domain.push('|', ['name', 'ilike', this.state.shopSearchQuery], ['owner_name', 'ilike', this.state.shopSearchQuery]);
+                }
+                if (this.state.shopFilterCategory !== 'all') {
+                    domain.push(['shahtaj_shop_category', '=', this.state.shopFilterCategory]);
+                }
+                if (this.state.shopFilterStatus !== 'all') {
+                    domain.push(['shop_approval_state', '=', this.state.shopFilterStatus]);
+                }
+                if (this.state.shopFilterBooker !== 'all') {
+                    domain.push(['registered_by_id', '=', parseInt(this.state.shopFilterBooker)]);
+                }
+                if (this.state.shopFilterRoute !== 'all') {
+                    if (this.state.shopFilterRoute === 'unassigned') {
+                        domain.push(['route_id', '=', false]);
+                    } else {
+                        domain.push(['route_id', '=', parseInt(this.state.shopFilterRoute)]);
+                    }
+                }
+            }
+
+            const [total, records] = await Promise.all([
+                this.orm.searchCount(model, domain),
+                this.orm.searchRead(model, domain, fields, { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc" })
+            ]);
+
+            this.state.pagination[tab].total = total;
+            this.state[targetState] = records;
+
+        } catch (error) {
+            this.notification.add("Failed to fetch data: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.isLoadingList = false;
+        }
     }
     // NEW Refresh Method
     async refreshData() {
         this.state.isLoading = true;
         try {
             await this.fetchDashboardData();
+            await this.fetchActiveList();
         } finally {
             this.state.isLoading = false;
         }
@@ -161,15 +285,6 @@ export class TerritoryRoutes extends Component {
         return hasFinancialAccess();
     }
 
-    // NEW Refresh Method
-    async refreshData() {
-        this.state.isLoading = true;
-        try {
-            await this.fetchDashboardData();
-        } finally {
-            this.state.isLoading = false;
-        }
-    }
     // Custom Modal Controller
     showConfirm(title, message, onConfirmCallback) {
      this.state.confirmModal = {
@@ -212,32 +327,35 @@ export class TerritoryRoutes extends Component {
     // --- Data Fetching Logic (areas/routes/shops in parallel) ---
     async fetchDashboardData() {
         const includeArchivedDomain = ['|', ['active', '=', true], ['active', '=', false]];
-
-        const [areas, routes, shops] = await Promise.all([
-            this.orm.searchRead(
-                "shahtaj.zone",
-                includeArchivedDomain,
-                ["id", "name", "active", "route_count"]
-            ),
-            this.orm.searchRead(
-                "shahtaj.route",
-                includeArchivedDomain,
-                ["id", "name", "zone_id", "shop_count", "active"]
-            ),
-            this.orm.searchRead(
-                "res.partner",
-                [["is_shahtaj_shop", "=", true], ...includeArchivedDomain],
-                ["id", "name", "owner_name", "phone", "route_id", "shop_approval_state", "shahtaj_shop_category", "registered_by_id", "active"]
-            ),
+        const [areas, routes, archivedShops, bookerGroups] = await Promise.all([
+            this.orm.searchRead("shahtaj.zone", includeArchivedDomain, ["id", "name", "active", "route_count"]),
+            this.orm.searchRead("shahtaj.route", includeArchivedDomain, ["id", "name", "zone_id", "shop_count", "active"]),
+            // ONLY fetch inactive shops to keep the Archive tab working without loading thousands of active shops!
+            this.orm.searchRead("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", false]], ["id", "name", "owner_name", "route_id", "active"]),
+            
+            // FIX: Replaced this.orm.readGroup with this.orm.call
+            this.orm.call(
+                "res.partner", 
+                "read_group", 
+                [
+                    [["is_shahtaj_shop", "=", true], ["registered_by_id", "!=", false]], // domain
+                    ["registered_by_id"], // fields
+                    ["registered_by_id"]  // groupby
+                ]
+            )
         ]);
 
         this.state.areas = areas;
         this.state.routes = routes;
-        this.state.shops = shops;
+        this.state.shops = archivedShops;
+        
+        // Map the results to format the bookers list
+        this.state.bookers = bookerGroups.map(g => ({ 
+            id: g.registered_by_id[0], 
+            name: g.registered_by_id[1] 
+        }));
     }
-
     setSubTab(tabName) {
-        // Save the current tab if we are navigating to the archive
         if (tabName === 'archive' && this.state.activeSubTab !== 'archive') {
             this.state.previousSubTab = this.state.activeSubTab;
         }
@@ -246,6 +364,112 @@ export class TerritoryRoutes extends Component {
         this.cancelForms();
         this.state.selectedShopDetails = null;
         this.closeShopActionMenu();
+
+        // Trigger the paginator when swapping tabs
+        if (['areas', 'routes', 'shops'].includes(tabName)) {
+            this.state.pagination[tabName].page = 1;
+            this.fetchActiveList();
+        }
+    }
+    // --- ROUTE DETAIL & CHECKLIST LOGIC ---
+    async viewRouteDetails(route) {
+        this.state.selectedRouteDetails = { 
+            ...route, 
+            edit_zone_id: route.zone_id ? route.zone_id[0] : '' 
+        };
+        this.state.pagination.routeChecklist.page = 1;
+        this.state.routeChecklistSearchQuery = '';
+        await this.fetchRouteChecklist();
+    }
+    
+    closeRouteDetails() {
+        this.state.selectedRouteDetails = null;
+    }
+
+    async saveRouteZone() {
+        try {
+            await this.orm.write("shahtaj.route", [this.state.selectedRouteDetails.id], {
+                zone_id: parseInt(this.state.selectedRouteDetails.edit_zone_id)
+            });
+            this.notification.add("Route zone updated.", { type: "success" });
+            await this.fetchActiveList(); // Refresh lists
+            
+            // Update local state for immediate UI reflection
+            const selectedZone = this.state.areas.find(a => a.id === parseInt(this.state.selectedRouteDetails.edit_zone_id));
+            if (selectedZone) {
+                this.state.selectedRouteDetails.zone_id = [selectedZone.id, selectedZone.name];
+            }
+        } catch (error) {
+            this.notification.add("Failed to update route: " + (error.data?.message || error.message), { type: "danger" });
+        }
+    }
+
+    async fetchRouteChecklist() {
+        if (!this.state.selectedRouteDetails) return;
+        this.state.isLoadingList = true;
+        try {
+            const pag = this.state.pagination.routeChecklist;
+            let domain = [
+                ['is_shahtaj_shop', '=', true],
+                ['active', '=', true],
+                ['shop_approval_state', '=', 'approved'],
+                '|', ['route_id', '=', false], ['route_id', '=', this.state.selectedRouteDetails.id]
+            ];
+            
+            if (this.state.routeChecklistSearchQuery) {
+                domain.push('|', ['name', 'ilike', this.state.routeChecklistSearchQuery], ['owner_name', 'ilike', this.state.routeChecklistSearchQuery]);
+            }
+            
+            const [total, records] = await Promise.all([
+                this.orm.searchCount('res.partner', domain),
+                this.orm.searchRead('res.partner', domain, ["id", "name", "owner_name", "route_id"], { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "name asc" })
+            ]);
+            
+            this.state.pagination.routeChecklist.total = total;
+            this.state.tableRouteChecklist = records;
+            
+            // Live-refresh the route counts
+            const routeData = await this.orm.read('shahtaj.route', [this.state.selectedRouteDetails.id], ['shop_count', 'unassigned_shop_count']);
+            if (routeData.length) {
+                this.state.selectedRouteDetails.shop_count = routeData[0].shop_count;
+                this.state.selectedRouteDetails.unassigned_shop_count = routeData[0].unassigned_shop_count;
+            }
+        } catch (error) {
+            this.notification.add("Failed to fetch checklist: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.isLoadingList = false;
+        }
+    }
+
+    async toggleShopRouteAssignment(shopId, ev) {
+        const isAssigned = ev.target.checked;
+        try {
+            const payload = isAssigned 
+                ? { route_id: this.state.selectedRouteDetails.id, zone_id: this.state.selectedRouteDetails.zone_id[0] }
+                : { route_id: false };
+                
+            await this.orm.write('res.partner', [shopId], payload);
+            await this.fetchRouteChecklist();
+            await this.fetchActiveList(); // Update main tab numbers quietly
+        } catch (error) {
+            this.notification.add("Failed to update shop assignment: " + (error.data?.message || error.message), { type: "danger" });
+            ev.target.checked = !isAssigned; // Revert checkbox on fail
+        }
+    }
+
+    // Checklist specific pagination handlers
+    onChecklistSearchInput() {
+        this.state.pagination.routeChecklist.page = 1;
+        this.debouncedFetchRouteChecklist();
+    }
+    changeChecklistPage(direction) {
+        const pag = this.state.pagination.routeChecklist;
+        const newPage = pag.page + direction;
+        const maxPage = Math.max(1, Math.ceil(pag.total / pag.limit));
+        if (newPage >= 1 && newPage <= maxPage) {
+            pag.page = newPage;
+            this.fetchRouteChecklist();
+        }
     }
     cancelForms() {
         this.state.showAreaForm = false;
@@ -336,6 +560,7 @@ export class TerritoryRoutes extends Component {
         try {
             await this.orm.write(model, [id], { active: makeActive });
             await this.fetchDashboardData();
+            await this.fetchActiveList(); 
             if (this.state.selectedShopDetails && this.state.selectedShopDetails.id === id) {
                 this.closeShopDetails();
             }
@@ -448,6 +673,7 @@ export class TerritoryRoutes extends Component {
             if (this.state.selectedShopDetails && this.state.selectedShopDetails.id === shopId) {
                 await this.viewShopDetails(shopId);
             }
+            await this.fetchActiveList();
             this.notification.add("Shop approved successfully.", { type: "success" });
         } catch (error) {
             this.notification.add("Failed to approve shop: " + (error.data?.message || error.message), { type: "danger" });
@@ -464,6 +690,7 @@ export class TerritoryRoutes extends Component {
             if (this.state.selectedShopDetails && this.state.selectedShopDetails.id === shopId) {
                 await this.viewShopDetails(shopId);
             }
+            await this.fetchActiveList();
             this.notification.add("Shop application rejected.", { type: "info" });
         } catch (error) {
             this.notification.add("Failed to reject shop: " + (error.data?.message || error.message), { type: "danger" });
@@ -552,6 +779,7 @@ export class TerritoryRoutes extends Component {
 
         this.cancelForms();
         await this.fetchDashboardData(); 
+        await this.fetchActiveList(); // FIX: Refresh table immediately
     }
 
    async saveRoute() {
@@ -574,32 +802,19 @@ export class TerritoryRoutes extends Component {
             }
             this.cancelForms();
             await this.fetchDashboardData();
+            await this.fetchActiveList(); // FIX: Refresh table immediately
         } catch (error) {
             this.notification.add("Failed to save route: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
 
     async saveShop() {
-        const lat = parseFloat(this.state.shopForm.lat);
-        const lng = parseFloat(this.state.shopForm.lng);
         const phone = this.state.shopForm.owner_phone;
         const cnic = this.state.shopForm.owner_cnic_number;
 
-        // 1. General Required Fields Validation
-        if (!this.state.shopForm.name || !this.state.shopForm.owner_name || isNaN(lat) || isNaN(lng)) {
-            this.notification.add("Please fill all required fields including valid GPS coordinates.", { type: "warning" });
-            return;
-        }
-
-        // 2. Strict Pakistan Contact Number Validation (11 digits, starts with 0)
-        if (phone && !/^0\d{10}$/.test(phone)) {
-            this.notification.add("Contact Number must be exactly 11 numeric digits starting with 0 (e.g., 03001234567).", { type: "danger" });
-            return;
-        }
-
-        // 3. Strict Pakistan CNIC Validation (13 digits, no dashes)
-        if (cnic && !/^\d{13}$/.test(cnic)) {
-            this.notification.add("CNIC must be exactly 13 numeric digits without dashes (e.g., 3520212345678).", { type: "danger" });
+        // 1. General Required Fields Validation (Removed GPS requirement)
+        if (!this.state.shopForm.name ) {
+            this.notification.add("Missing required fields.Shop name is required.", { type: "warning" });
             return;
         }
 
@@ -611,24 +826,30 @@ export class TerritoryRoutes extends Component {
                 company_type: 'company',
                 shahtaj_shop_category: this.state.shopForm.shopCategory || 'credit',
                 name: this.state.shopForm.name,
-                owner_name: this.state.shopForm.owner_name,
+                owner_name: this.state.shopForm.owner_name ,
                 owner_phone: phone,
                 phone: phone,
-                owner_cnic_number: cnic || false,
+                owner_cnic_number: cnic ,
                 zone_id: this.state.shopForm.zone_id ? parseInt(this.state.shopForm.zone_id) : false,
                 route_id: this.state.shopForm.route_id ? parseInt(this.state.shopForm.route_id) : false,
-                partner_latitude: lat,
-                partner_longitude: lng,
                 credit_limit: this.state.shopForm.shopCategory === 'credit'
                     ? (parseFloat(this.state.shopForm.creditLimit) || 0.0)
                     : 0.0,
                 legacy_balance: parseFloat(this.state.shopForm.legacyBalance) || 0.0,
             };
 
+            // Only attach coordinates if they are actually provided
+            if (this.state.shopForm.lat && !isNaN(parseFloat(this.state.shopForm.lat))) {
+                payload.partner_latitude = parseFloat(this.state.shopForm.lat);
+            }
+            if (this.state.shopForm.lng && !isNaN(parseFloat(this.state.shopForm.lng))) {
+                payload.partner_longitude = parseFloat(this.state.shopForm.lng);
+            }
+
             if (this.state.shopForm.owner_cnic_front) payload.owner_cnic_front = this.state.shopForm.owner_cnic_front;
             if (this.state.shopForm.owner_cnic_back) payload.owner_cnic_back = this.state.shopForm.owner_cnic_back;
             if (this.state.shopForm.owner_photo) payload.owner_photo = this.state.shopForm.owner_photo;
-            if (this.state.shopForm.shop_exterior_photo) payload.shop_exterior_photo = this.state.shopForm.shop_exterior_photo;
+            // Removed shop_exterior_photo payload assignment to ensure it remains read-only
 
             if (this.state.editingShopId) {
                 await this.orm.write("res.partner", [this.state.editingShopId], payload);
@@ -641,6 +862,7 @@ export class TerritoryRoutes extends Component {
 
             this.cancelForms();
             await this.fetchDashboardData();
+            await this.fetchActiveList();
         } catch (error) {
             this.notification.add("Failed to save shop: " + (error.data?.message || error.message), { type: "danger" });
         } finally {

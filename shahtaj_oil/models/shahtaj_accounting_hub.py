@@ -27,6 +27,11 @@ class ShahtajAccountingHub(models.TransientModel):
         string='Credit Notes',
         compute='_compute_counts',
     )
+    expense_invoice_count = fields.Integer(
+        string='Expense Invoices',
+        compute='_compute_counts',
+        help='Draft + posted operating expense invoices.',
+    )
     shop_count = fields.Integer(
         string='Approved Shops',
         compute='_compute_counts',
@@ -60,6 +65,9 @@ class ShahtajAccountingHub(models.TransientModel):
                 ('move_type', '=', 'out_refund'),
                 ('partner_id.is_shahtaj_shop', '=', True),
                 ('state', '=', 'posted'),
+            ])
+            hub.expense_invoice_count = self.env['shahtaj.expense'].sudo().search_count([
+                ('state', 'in', ('draft', 'posted')),
             ])
             hub.shop_count = Partner.search_count([
                 ('is_shahtaj_shop', '=', True),
@@ -126,3 +134,16 @@ class ShahtajAccountingHub(models.TransientModel):
 
     def action_open_pnl_dashboard(self):
         return self.env['shahtaj.pnl.dashboard'].action_open_pnl_dashboard()
+
+    def action_open_tax_ledger(self):
+        return self.env['shahtaj.tax.ledger'].action_open_tax_ledger()
+
+    def action_open_expenses(self):
+        return self.env['ir.actions.act_window']._for_xml_id(
+            'shahtaj_oil.action_shahtaj_expense',
+        )
+
+    def action_open_expense_categories(self):
+        return self.env['ir.actions.act_window']._for_xml_id(
+            'shahtaj_oil.action_shahtaj_expense_category',
+        )

@@ -21,6 +21,7 @@ VISIT_OUTCOMES = [
     ('order', 'Order Placed'),
     ('no_order', 'No Order'),
     ('incomplete', 'Incomplete'),
+    ('undone', 'Undone by Distributor'),
 ]
 
 # Fields a booker may change on their own during a visit (security in write()).
@@ -145,10 +146,21 @@ class ShahtajVisit(models.Model):
     )
     notes = fields.Text()
 
-    _visit_task_unique = models.Constraint(
-        'unique(visit_task_id)',
-        'This visit task already has a shop visit record.',
-    )
+    # One open (non-cancelled) visit per task — cancelled/undone visits stay for audit.
+    @api.constrains('visit_task_id', 'state')
+    def _check_one_open_visit_per_task(self):
+        for visit in self:
+            if visit.state == 'cancelled' or not visit.visit_task_id:
+                continue
+            conflict = self.search([
+                ('visit_task_id', '=', visit.visit_task_id.id),
+                ('state', '!=', 'cancelled'),
+                ('id', '!=', visit.id),
+            ], limit=1)
+            if conflict:
+                raise ValidationError(_(
+                    'This visit task already has a shop visit record.'
+                ))
 
     @api.depends('shop_name', 'shop_id', 'started_at', 'order_booker_id')
     def _compute_name(self):
@@ -317,9 +329,7 @@ class ShahtajVisit(models.Model):
         active = self._get_active_visit_for_user()
         if active:
             return active.action_open_booker_form()
-        return self.env['ir.actions.act_window']._for_xml_id(
-            'shahtaj_oil.action_shahtaj_visit_task_today',
-        )
+        return self.env['shahtaj.visit.task'].action_shahtaj_open_my_tasks_today()
 
     @api.model
     def _validate_check_in_coordinates(
@@ -329,7 +339,8 @@ class ShahtajVisit(models.Model):
         if not shop.partner_latitude or not shop.partner_longitude:
             raise UserError(_(
                 'Shop "%(shop)s" has no GPS coordinates. '
-                'Ask your distributor to set shop latitude and longitude.',
+                'Complete first-visit verification (shops/verify-on-site) '
+                'or ask the distributor to set latitude and longitude.',
                 shop=shop.name,
             ))
         if latitude is None or longitude is None:
@@ -376,21 +387,34 @@ class ShahtajVisit(models.Model):
         task.ensure_one()
         if task.order_booker_id != self.env.user and not self.env.su:
             raise UserError(_('You can only check in to your own visit tasks.'))
-        if task.shop_id.shop_approval_state != 'approved':
+        # sudo for shop flag reads: booker is authorized by owning the visit task;
+        # partner record rules can lag when schedules change mid-day.
+        shop = task.shop_id.sudo()
+        if shop.shop_approval_state != 'approved':
             raise UserError(_(
                 'Shop "%(shop)s" is not approved yet. '
                 'You cannot visit until the distributor approves it.',
-                shop=task.shop_id.name,
+                shop=shop.name,
+            ))
+        if not shop.shahtaj_field_verified:
+            raise UserError(_(
+                'Shop "%(shop)s" is tagged Not Visited. '
+                'Complete first-visit setup (exterior photo + GPS) via '
+                'shops/verify-on-site before normal check-in.',
+                shop=shop.name,
             ))
         if not task._shahtaj_is_operational_for_booker():
             raise UserError(_(
                 'Shop "%(shop)s" is no longer active on an operational route/zone. '
                 'Ask your distributor to review the territory setup.',
-                shop=task.shop_id.name,
+                shop=shop.name,
             ))
         if task.state in ('completed', 'cancelled', 'skipped'):
             raise UserError(_('This visit task is already closed.'))
-        existing = self.search([('visit_task_id', '=', task.id)], limit=1)
+        existing = self.search([
+            ('visit_task_id', '=', task.id),
+            ('state', '!=', 'cancelled'),
+        ], limit=1)
         if existing:
             if existing.state == 'in_progress':
                 return existing
@@ -402,16 +426,16 @@ class ShahtajVisit(models.Model):
             raise UserError(_(
                 'You have an active visit at "%(shop)s". '
                 'Finish that visit before checking in here.',
-                shop=active.shop_id.name,
+                shop=active.sudo().shop_id.name,
             ))
-        distance = self._validate_check_in_coordinates(task.shop_id, latitude, longitude)
+        distance = self._validate_check_in_coordinates(shop, latitude, longitude)
         now = fields.Datetime.now()
         visit = self.create({
             'visit_task_id': task.id,
             'order_booker_id': task.order_booker_id.id,
-            'shop_id': task.shop_id.id,
+            'shop_id': shop.id,
             'route_id': task.route_id.id,
-            **self._snapshot_visit_labels(task.shop_id, task.route_id),
+            **self._snapshot_visit_labels(shop, task.route_id),
             'started_at': now,
             'check_in_latitude': latitude,
             'check_in_longitude': longitude,
@@ -423,6 +447,12 @@ class ShahtajVisit(models.Model):
             'state': 'in_progress',
             'visit_id': visit.id,
         })
+        self.env['shahtaj.activity.log'].log_business(
+            operation='visit.check_in',
+            name='Check in to shop',
+            related_record=visit,
+            message=_('Checked in at %(shop)s', shop=shop.display_name),
+        )
         return visit
 
     def action_open_sale_order(self):
@@ -569,10 +599,21 @@ class ShahtajVisit(models.Model):
             'order_line': order_lines,
         })
         order.sudo().action_confirm()
+        # Confirm path refreshes targets; call again so place-order always
+        # leaves stored progress current for API/UI reads in this request.
+        order.sudo()._shahtaj_recompute_visit_targets()
         self.with_context(shahtaj_system_visit_write=True).write({
             'sale_order_id': order.id,
         })
         self._finish_visit('order')
+        self.env['shahtaj.activity.log'].log_business(
+            operation='visit.place_order',
+            name='Place order from visit',
+            related_record=self,
+            message=_('Order %(order)s for %(shop)s',
+                      order=order.display_name,
+                      shop=self.shop_id.display_name),
+        )
         # Bookers see completed visit; distributors can open the sales order form.
         if self._is_booker_only_user():
             return {
@@ -598,7 +639,140 @@ class ShahtajVisit(models.Model):
     def action_end_without_order(self):
         for visit in self:
             visit._finish_visit('no_order')
+            self.env['shahtaj.activity.log'].log_business(
+                operation='visit.end_without_order',
+                name='End visit without order',
+                related_record=visit,
+                message=_('Ended without order at %(shop)s',
+                          shop=visit.shop_id.display_name),
+            )
         return True
+
+    def action_shahtaj_undo_completed_visit(self):
+        """Distributor: undo a completed visit so the booker can redo it.
+
+        Allowed only right after visit completion (no invoice, no delivery).
+        Cancels the linked sale order when present, marks the visit cancelled,
+        resets the visit task to pending, and notifies the order booker.
+        """
+        if not (
+            self.env.user.has_group('shahtaj_oil.group_shahtaj_distributor')
+            or self.env.user.has_group('base.group_system')
+        ):
+            raise UserError(_('Only distributors can undo a completed shop visit.'))
+
+        for visit in self:
+            visit._shahtaj_undo_completed_visit()
+        return True
+
+    def _shahtaj_undo_completed_visit(self):
+        self.ensure_one()
+        if self.state != 'completed':
+            raise UserError(_(
+                'Only a completed visit can be undone. '
+                'In-progress visits should be finished or left for the booker.'
+            ))
+        if self.outcome == 'undone' or self.state == 'cancelled':
+            raise UserError(_('This visit was already undone.'))
+
+        order = self.sale_order_id.sudo() if self.sale_order_id else self.env['sale.order']
+        if order:
+            invoices = order.invoice_ids.filtered(lambda m: m.state != 'cancel')
+            if invoices:
+                raise UserError(_(
+                    'Cannot undo visit "%(visit)s": sales order %(order)s already has '
+                    'invoice(s) %(invoices)s. Reverse or cancel those invoices first '
+                    'is not supported from this shortcut — undo is only allowed before invoicing.',
+                    visit=self.display_name,
+                    order=order.display_name,
+                    invoices=', '.join(invoices.mapped('name')),
+                ))
+            if order.invoice_status == 'invoiced':
+                raise UserError(_(
+                    'Cannot undo visit "%(visit)s": order %(order)s is already invoiced.',
+                    visit=self.display_name,
+                    order=order.display_name,
+                ))
+            delivered = order.order_line.filtered(
+                lambda l: not l.display_type and l.qty_delivered > 0
+            )
+            if delivered:
+                raise UserError(_(
+                    'Cannot undo visit "%(visit)s": order %(order)s already has deliveries. '
+                    'Undo is only allowed before stock is delivered.',
+                    visit=self.display_name,
+                    order=order.display_name,
+                ))
+            if order.state in ('sale', 'done'):
+                order.with_context(disable_cancel_warning=True).action_cancel()
+            elif order.state == 'draft':
+                order.action_cancel()
+
+        note = _(
+            'Undone by %(user)s on %(when)s. Order booker must check in again.',
+            user=self.env.user.display_name,
+            when=fields.Datetime.to_string(fields.Datetime.now()),
+        )
+        existing = (self.notes or '').strip()
+        notes = f'{existing}\n{note}' if existing else note
+
+        task = self.visit_task_id
+        self.with_context(shahtaj_system_visit_write=True).write({
+            'state': 'cancelled',
+            'outcome': 'undone',
+            'notes': notes,
+        })
+        if task:
+            task.with_context(shahtaj_system_visit_write=True).write({
+                'state': 'pending',
+                'visit_id': False,
+            })
+            self._shahtaj_notify_booker_redo(task)
+
+        self.env['shahtaj.activity.log'].log_business(
+            operation='visit.undo',
+            name='Visit undone by distributor',
+            related_record=self,
+            message=_(
+                'Undid visit at %(shop)s for %(booker)s',
+                shop=self.shop_id.display_name,
+                booker=self.order_booker_id.display_name,
+            ),
+        )
+        return True
+
+    def _shahtaj_notify_booker_redo(self, task):
+        """Create a to-do activity so the order booker knows to redo the visit."""
+        self.ensure_one()
+        booker = self.order_booker_id
+        if not booker:
+            return
+        try:
+            activity_type = self.env.ref(
+                'mail.mail_activity_data_todo',
+                raise_if_not_found=False,
+            )
+            model = self.env['ir.model']._get('shahtaj.visit.task')
+            if not activity_type or not model:
+                return
+            self.env['mail.activity'].sudo().create({
+                'activity_type_id': activity_type.id,
+                'res_model_id': model.id,
+                'res_id': task.id,
+                'user_id': booker.id,
+                'summary': _('Redo shop visit: %s', self.shop_id.display_name),
+                'note': _(
+                    '<p>Distributor <b>%(user)s</b> undid your completed visit at '
+                    '<b>%(shop)s</b>.</p>'
+                    '<p>Please check in again and complete the visit.</p>',
+                    user=self.env.user.display_name,
+                    shop=self.shop_id.display_name,
+                ),
+                'date_deadline': fields.Date.context_today(self),
+            })
+        except Exception:
+            # Notification must never block the undo itself.
+            pass
 
 
 class ShahtajVisitLine(models.Model):

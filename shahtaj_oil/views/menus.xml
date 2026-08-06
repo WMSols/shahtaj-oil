@@ -53,6 +53,13 @@
               sequence="30"
               groups="shahtaj_oil.group_shahtaj_native_distributor_ui"/>
 
+    <menuitem id="menu_shahtaj_shops_unassigned"
+              name="3b. Unassigned Shops"
+              parent="menu_shahtaj_root"
+              action="action_shahtaj_shop_unassigned"
+              sequence="31"
+              groups="shahtaj_oil.group_shahtaj_native_distributor_ui"/>
+
     <menuitem id="menu_shahtaj_weekly_schedule"
               name="4. Weekly Schedules"
               parent="menu_shahtaj_root"
@@ -121,6 +128,34 @@
               parent="menu_shahtaj_accounting"
               action="action_shahtaj_customer_payments"
               sequence="30"
+              groups="shahtaj_oil.group_shahtaj_native_distributor_ui"/>
+
+    <menuitem id="menu_shahtaj_customer_invoices_native"
+              name="Customer Invoices"
+              parent="menu_shahtaj_accounting"
+              action="action_shahtaj_customer_invoices"
+              sequence="32"
+              groups="shahtaj_oil.group_shahtaj_native_distributor_ui"/>
+
+    <menuitem id="menu_shahtaj_expenses"
+              name="Expense Invoices"
+              parent="menu_shahtaj_accounting"
+              action="action_shahtaj_expense"
+              sequence="33"
+              groups="shahtaj_oil.group_shahtaj_native_distributor_ui"/>
+
+    <menuitem id="menu_shahtaj_tax_ledger"
+              name="Tax Ledger"
+              parent="menu_shahtaj_accounting"
+              action="action_shahtaj_tax_ledger"
+              sequence="35"
+              groups="shahtaj_oil.group_shahtaj_native_distributor_ui"/>
+
+    <menuitem id="menu_shahtaj_expense_categories"
+              name="Expense Categories"
+              parent="menu_shahtaj_accounting"
+              action="action_shahtaj_expense_category"
+              sequence="45"
               groups="shahtaj_oil.group_shahtaj_native_distributor_ui"/>
 
     <menuitem id="menu_shahtaj_pnl_dashboard"
@@ -193,7 +228,7 @@
     <menuitem id="menu_shahtaj_visit_task_today"
               name="My Tasks Today"
               parent="menu_shahtaj_root"
-              action="action_shahtaj_visit_task_today"
+              action="action_shahtaj_my_tasks_today_menu"
               sequence="20"
               groups="shahtaj_oil.group_shahtaj_order_booker"/>
 
@@ -231,5 +266,19 @@
               action="action_shahtaj_active_visit"
               sequence="25"
               groups="shahtaj_oil.group_shahtaj_order_booker"/>
+
+    <menuitem id="menu_shahtaj_activity_logs"
+              name="Activity Logs"
+              parent="menu_shahtaj_root"
+              action="action_shahtaj_activity_logs_html"
+              sequence="90"
+              groups="base.group_system"/>
+
+    <menuitem id="menu_shahtaj_activity_logs_list"
+              name="Activity Logs (List)"
+              parent="menu_shahtaj_root"
+              action="action_shahtaj_activity_logs"
+              sequence="91"
+              groups="base.group_system"/>
 
 </odoo>
