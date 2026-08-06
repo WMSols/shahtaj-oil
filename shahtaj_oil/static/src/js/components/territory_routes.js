@@ -55,7 +55,6 @@ export class TerritoryRoutes extends Component {
             routeForm: { name: '', zone_id: '', is_active: true }, 
             shopForm: { 
                 name: '', owner_name: '', owner_phone: '', owner_cnic_number: '', address: '',
-                zone_id: '', route_id: '', lat: '', lng: '', 
                 shopCategory: 'credit',
                 creditLimit: '', legacyBalance: '', outstandingBalance: '',
                 owner_cnic_front: null, owner_cnic_back: null, 
@@ -193,7 +192,7 @@ export class TerritoryRoutes extends Component {
             } 
             else if (tab === 'shops') {
                 model = 'res.partner';
-                fields = ["id", "name", "owner_name", "phone", "route_id", "shop_approval_state", "shahtaj_shop_category", "registered_by_id", "active", "shahtaj_visit_tag"];
+                fields = ["id", "name", "owner_name", "phone", "route_ids", "shahtaj_route_tag", "shop_approval_state", "shahtaj_shop_category", "registered_by_id", "active", "shahtaj_visit_tag"];
                 targetState = 'tableShops';
                 domain = [['is_shahtaj_shop', '=', true], ['active', '=', true]]; 
                 
@@ -211,9 +210,9 @@ export class TerritoryRoutes extends Component {
                 }
                 if (this.state.shopFilterRoute !== 'all') {
                     if (this.state.shopFilterRoute === 'unassigned') {
-                        domain.push(['route_id', '=', false]);
+                        domain.push(['route_ids', '=', false]);
                     } else {
-                        domain.push(['route_id', '=', parseInt(this.state.shopFilterRoute)]);
+                        domain.push(['route_ids', 'in', [parseInt(this.state.shopFilterRoute)]]);
                     }
                 }
             }
@@ -331,7 +330,7 @@ export class TerritoryRoutes extends Component {
             this.orm.searchRead("shahtaj.zone", includeArchivedDomain, ["id", "name", "active", "route_count"]),
             this.orm.searchRead("shahtaj.route", includeArchivedDomain, ["id", "name", "zone_id", "shop_count", "active"]),
             // ONLY fetch inactive shops to keep the Archive tab working without loading thousands of active shops!
-            this.orm.searchRead("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", false]], ["id", "name", "owner_name", "route_id", "active"]),
+            this.orm.searchRead("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", false]], ["id", "name", "owner_name", "shahtaj_routes_display", "shahtaj_route_tag", "active"]),
             
             // FIX: Replaced this.orm.readGroup with this.orm.call
             this.orm.call(
@@ -363,6 +362,7 @@ export class TerritoryRoutes extends Component {
         this.state.activeSubTab = tabName;
         this.cancelForms();
         this.state.selectedShopDetails = null;
+        this.closeRouteDetails();
         this.closeShopActionMenu();
 
         // Trigger the paginator when swapping tabs
@@ -387,18 +387,24 @@ export class TerritoryRoutes extends Component {
     }
 
     async saveRouteZone() {
+        const zoneId = parseInt(this.state.selectedRouteDetails.edit_zone_id, 10);
+        const zone = this.state.areas.find((a) => a.id === zoneId);
+        if (!zone || !zone.active) {
+            this.notification.add(
+                "Select an active zone. Archived zones cannot be used.",
+                { type: "warning" },
+            );
+            return;
+        }
         try {
             await this.orm.write("shahtaj.route", [this.state.selectedRouteDetails.id], {
-                zone_id: parseInt(this.state.selectedRouteDetails.edit_zone_id)
+                zone_id: zoneId
             });
             this.notification.add("Route zone updated.", { type: "success" });
             await this.fetchActiveList(); // Refresh lists
             
             // Update local state for immediate UI reflection
-            const selectedZone = this.state.areas.find(a => a.id === parseInt(this.state.selectedRouteDetails.edit_zone_id));
-            if (selectedZone) {
-                this.state.selectedRouteDetails.zone_id = [selectedZone.id, selectedZone.name];
-            }
+            this.state.selectedRouteDetails.zone_id = [zone.id, zone.name];
         } catch (error) {
             this.notification.add("Failed to update route: " + (error.data?.message || error.message), { type: "danger" });
         }
@@ -409,11 +415,11 @@ export class TerritoryRoutes extends Component {
         this.state.isLoadingList = true;
         try {
             const pag = this.state.pagination.routeChecklist;
+            // All approved shops — checked = on this route (multi-route allowed).
             let domain = [
                 ['is_shahtaj_shop', '=', true],
                 ['active', '=', true],
                 ['shop_approval_state', '=', 'approved'],
-                '|', ['route_id', '=', false], ['route_id', '=', this.state.selectedRouteDetails.id]
             ];
             
             if (this.state.routeChecklistSearchQuery) {
@@ -422,7 +428,12 @@ export class TerritoryRoutes extends Component {
             
             const [total, records] = await Promise.all([
                 this.orm.searchCount('res.partner', domain),
-                this.orm.searchRead('res.partner', domain, ["id", "name", "owner_name", "route_id"], { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "name asc" })
+                this.orm.searchRead(
+                    'res.partner',
+                    domain,
+                    ["id", "name", "owner_name", "route_ids", "shahtaj_routes_display", "shahtaj_route_tag"],
+                    { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "name asc" },
+                ),
             ]);
             
             this.state.pagination.routeChecklist.total = total;
@@ -441,12 +452,61 @@ export class TerritoryRoutes extends Component {
         }
     }
 
+    isShopOnSelectedRoute(shop) {
+        const routeId = this.state.selectedRouteDetails && this.state.selectedRouteDetails.id;
+        if (!routeId || !shop) {
+            return false;
+        }
+        return (shop.route_ids || []).includes(routeId);
+    }
+
+    formatShopRoutes(shop) {
+        if (!shop) {
+            return 'Unassigned';
+        }
+        if (shop.shahtaj_routes_display) {
+            return shop.shahtaj_routes_display;
+        }
+        if (shop.shahtaj_route_tag === 'unassigned') {
+            return 'Unassigned';
+        }
+        return 'Unassigned';
+    }
+
+    async _loadShopRouteLines(routeIds) {
+        if (!routeIds || !routeIds.length) {
+            return [];
+        }
+        const routes = await this.orm.read(
+            'shahtaj.route',
+            routeIds,
+            ['id', 'name', 'zone_id'],
+        );
+        return routes
+            .slice()
+            .sort((a, b) => {
+                const az = (a.zone_id && a.zone_id[1]) || '';
+                const bz = (b.zone_id && b.zone_id[1]) || '';
+                if (az !== bz) {
+                    return az.localeCompare(bz);
+                }
+                return (a.name || '').localeCompare(b.name || '');
+            })
+            .map((route) => ({
+                route_id: route.id,
+                route_name: route.name || '—',
+                zone_name: (route.zone_id && route.zone_id[1]) || '—',
+            }));
+    }
+
     async toggleShopRouteAssignment(shopId, ev) {
         const isAssigned = ev.target.checked;
+        const routeId = this.state.selectedRouteDetails.id;
         try {
-            const payload = isAssigned 
-                ? { route_id: this.state.selectedRouteDetails.id, zone_id: this.state.selectedRouteDetails.zone_id[0] }
-                : { route_id: false };
+            // Add/remove this route only — do not clear other route links.
+            const payload = isAssigned
+                ? { route_ids: [[4, routeId]] }
+                : { route_ids: [[3, routeId]] };
                 
             await this.orm.write('res.partner', [shopId], payload);
             await this.fetchRouteChecklist();
@@ -489,7 +549,6 @@ export class TerritoryRoutes extends Component {
         this.state.routeForm = { name: '', zone_id: '', is_active: true };
         this.state.shopForm = { 
             name: '', owner_name: '', owner_phone: '', owner_cnic_number: '', address: '',
-            zone_id: '', route_id: '', lat: '', lng: '', 
             shopCategory: 'credit',
             creditLimit: '', legacyBalance: '', outstandingBalance: '',
             owner_cnic_front: null, owner_cnic_back: null, 
@@ -538,17 +597,17 @@ export class TerritoryRoutes extends Component {
 
     buildRestoreMessage(model, impact) {
         if (model === 'shahtaj.route') {
-            return `Restoring this route will also restore ${impact.archived_shop_count || 0} archived shop(s), reactivate ${impact.inactive_schedule_count || 0} weekly schedule(s), and regenerate visit tasks for assigned order bookers. Continue?`;
+            return `Restoring this route will reactivate ${impact.inactive_schedule_count || 0} weekly schedule(s) and regenerate visit tasks for bookers on this route. Shops are not cascade-archived with the route. Continue?`;
         }
         return "Restore this item?";
     }
 
     buildArchiveMessage(model, impact) {
         if (model === 'shahtaj.zone') {
-            return `This will archive the zone and also archive ${impact.active_route_count || 0} active route(s), ${impact.active_shop_count || 0} active shop(s), and deactivate ${impact.active_schedule_count || 0} weekly schedule(s). Pending visit tasks for these shops will be cancelled. Continue?`;
+            return `This will archive the zone and ${impact.active_route_count || 0} active route(s), and deactivate ${impact.active_schedule_count || 0} weekly schedule(s). Shops stay active; pending visit tasks on those routes will be cancelled. Continue?`;
         }
         if (model === 'shahtaj.route') {
-            return `This will archive the route and also archive ${impact.active_shop_count || 0} active shop(s) and deactivate ${impact.active_schedule_count || 0} weekly schedule(s). Pending visit tasks for these shops will be cancelled. Continue?`;
+            return `This will archive the route and deactivate ${impact.active_schedule_count || 0} weekly schedule(s). ${impact.active_shop_count || 0} linked shop(s) stay active and keep any other routes; pending tasks on this route will be cancelled. Continue?`;
         }
         if (model === 'res.partner') {
             return `This will archive the shop and cancel ${impact.pending_task_count || 0} pending visit task(s). Continue?`;
@@ -635,14 +694,16 @@ export class TerritoryRoutes extends Component {
             [
                 "id", "name", "owner_name", "phone", "owner_cnic_number", "partner_latitude", "partner_longitude",
                 "shahtaj_shop_category", "credit_limit", "legacy_balance", "outstanding_balance",
-                "route_id", "zone_id", "registered_by_id",
+                "route_ids", "shahtaj_routes_display", "shahtaj_route_tag", "registered_by_id",
                 "owner_cnic_front", "owner_cnic_back", "owner_photo", "shop_exterior_photo",
                 "shop_approval_state"
             ]
         );
         if (details.length > 0) {
-            this.state.selectedShopDetails = details[0];
-            this.state.shopCategoryEdit = details[0].shahtaj_shop_category || 'credit';
+            const shop = details[0];
+            shop.route_lines = await this._loadShopRouteLines(shop.route_ids || []);
+            this.state.selectedShopDetails = shop;
+            this.state.shopCategoryEdit = shop.shahtaj_shop_category || 'credit';
         }
     }
 
@@ -735,8 +796,8 @@ export class TerritoryRoutes extends Component {
 
     async editShop(shop) {
         const details = await this.orm.read("res.partner", [shop.id], [
-            "name", "owner_name", "phone", "owner_cnic_number", "zone_id", "route_id",
-            "partner_latitude", "partner_longitude", "shahtaj_shop_category", "credit_limit", "legacy_balance"
+            "name", "owner_name", "phone", "owner_cnic_number",
+            "shahtaj_shop_category", "credit_limit", "legacy_balance"
         ]);
 
         if (details.length > 0) {
@@ -746,10 +807,6 @@ export class TerritoryRoutes extends Component {
                 owner_name: d.owner_name || '',
                 owner_phone: d.phone || '',
                 owner_cnic_number: d.owner_cnic_number || '',
-                zone_id: d.zone_id ? d.zone_id[0] : '',
-                route_id: d.route_id ? d.route_id[0] : '',
-                lat: d.partner_latitude || '',
-                lng: d.partner_longitude || '',
                 shopCategory: d.shahtaj_shop_category || 'credit',
                 creditLimit: d.credit_limit || '',
                 legacyBalance: d.legacy_balance || '',
@@ -787,10 +844,19 @@ export class TerritoryRoutes extends Component {
             this.notification.add("Route Name and Parent Zone are required.", { type: "warning" });
             return;
         }
+        const zoneId = parseInt(this.state.routeForm.zone_id, 10);
+        const zone = this.state.areas.find((a) => a.id === zoneId);
+        if (!zone || !zone.active) {
+            this.notification.add(
+                "Select an active zone. Archived zones cannot be used for routes.",
+                { type: "warning" },
+            );
+            return;
+        }
 
         const payload = {
             name: this.state.routeForm.name,
-            zone_id: parseInt(this.state.routeForm.zone_id),
+            zone_id: zoneId,
             active: this.state.routeForm.is_active
         };
 
@@ -812,9 +878,8 @@ export class TerritoryRoutes extends Component {
         const phone = this.state.shopForm.owner_phone;
         const cnic = this.state.shopForm.owner_cnic_number;
 
-        // 1. General Required Fields Validation (Removed GPS requirement)
-        if (!this.state.shopForm.name ) {
-            this.notification.add("Missing required fields.Shop name is required.", { type: "warning" });
+        if (!(this.state.shopForm.name || '').trim()) {
+            this.notification.add("Shop name is required.", { type: "warning" });
             return;
         }
 
@@ -826,30 +891,19 @@ export class TerritoryRoutes extends Component {
                 company_type: 'company',
                 shahtaj_shop_category: this.state.shopForm.shopCategory || 'credit',
                 name: this.state.shopForm.name,
-                owner_name: this.state.shopForm.owner_name ,
-                owner_phone: phone,
-                phone: phone,
-                owner_cnic_number: cnic ,
-                zone_id: this.state.shopForm.zone_id ? parseInt(this.state.shopForm.zone_id) : false,
-                route_id: this.state.shopForm.route_id ? parseInt(this.state.shopForm.route_id) : false,
+                owner_name: this.state.shopForm.owner_name || false,
+                owner_phone: phone || false,
+                phone: phone || false,
+                owner_cnic_number: cnic || false,
                 credit_limit: this.state.shopForm.shopCategory === 'credit'
                     ? (parseFloat(this.state.shopForm.creditLimit) || 0.0)
                     : 0.0,
                 legacy_balance: parseFloat(this.state.shopForm.legacyBalance) || 0.0,
             };
 
-            // Only attach coordinates if they are actually provided
-            if (this.state.shopForm.lat && !isNaN(parseFloat(this.state.shopForm.lat))) {
-                payload.partner_latitude = parseFloat(this.state.shopForm.lat);
-            }
-            if (this.state.shopForm.lng && !isNaN(parseFloat(this.state.shopForm.lng))) {
-                payload.partner_longitude = parseFloat(this.state.shopForm.lng);
-            }
-
             if (this.state.shopForm.owner_cnic_front) payload.owner_cnic_front = this.state.shopForm.owner_cnic_front;
             if (this.state.shopForm.owner_cnic_back) payload.owner_cnic_back = this.state.shopForm.owner_cnic_back;
             if (this.state.shopForm.owner_photo) payload.owner_photo = this.state.shopForm.owner_photo;
-            // Removed shop_exterior_photo payload assignment to ensure it remains read-only
 
             if (this.state.editingShopId) {
                 await this.orm.write("res.partner", [this.state.editingShopId], payload);
