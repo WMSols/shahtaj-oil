@@ -154,9 +154,11 @@
                             <div class="d-flex gap-2">
                                 <select class="form-select form-select-sm shadow-sm" style="width: 150px;" t-model="this.state.routeFilterZone" t-on-change="() => this.onFilterChange('routes')">
                                 <option value="all">All Zones</option>
-                                <t t-foreach="this.state.areas" t-as="area" t-key="area.id">
-                                    <option t-att-value="area.id"><t t-esc="area.name"/></option>
-                                </t>
+                                <t t-foreach="this.state.areas.filter(a => a.active)" t-as="a" t-key="a.id">
+                                        <option t-att-value="a.id">
+                                            <t t-esc="a.name"/>
+                                        </option>
+                                    </t>
                             </select>
                             </div>
                             
