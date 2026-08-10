@@ -685,11 +685,6 @@
                             </span>
                         </td>
                         <td class="align-middle text-center">
-                            <span t-attf-class="badge #{shop.shahtaj_visit_tag === 'visited' ? 'bg-success text-white' : 'bg-warning text-dark'} shadow-sm">
-                                <t t-esc="shop.shahtaj_visit_tag === 'visited' ? 'Visited' : 'Not Visited'"/>
-                            </span>
-                        </td>
-                        <td class="align-middle text-center">
                             <span t-attf-class="badge text-white #{shop.shahtaj_shop_category === 'cash' ? 'bg-info' : 'bg-primary'}">
                                 <t t-esc="shop.shahtaj_shop_category === 'cash' ? 'Cash' : 'Credit'"/>
                             </span>
@@ -806,49 +801,6 @@
                         <label class="small fw-bold">Owner ID Card No. <span class="text-muted">(Optional)</span>
                         </label>
                         <input type="text" class="form-control" t-model="this.state.shopForm.owner_cnic_number" placeholder="e.g. 35202-1234567-1"/>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card border-0 shadow-sm mb-4 rounded-3">
-            <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-                <h6 class="fw-bold text-success mb-0">2. Geographical Mapping</h6>
-                <small class="text-muted d-block mt-1">Assign the shop to a route and provide exact GPS coordinates for the map view. You can find these by right-clicking a location in Google Maps.</small>
-                <small class="text-warning fw-bold d-block mt-1">(Optional : Can be added later by editing the shop details)</small>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label class="small fw-bold">Select Zone</label>
-                        <select class="form-select form-control" t-model="this.state.shopForm.zone_id" t-on-change="onZoneChange">
-                            <option value="">-- Select Zone --</option>
-                            <t t-foreach="this.state.areas.filter(a => a.active)" t-as="a" t-key="a.id">
-                                <option t-att-value="a.id">
-                                    <t t-esc="a.name"/>
-                                </option>
-                            </t>
-                        </select>
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label class="small fw-bold">Assign to Route</label>
-                        <select class="form-select form-control" t-model="this.state.shopForm.route_id" title="You must select a Zone first to see available routes">
-                            <option value="">-- Select Route --</option>
-                            <t t-foreach="this.filteredRoutes" t-as="r" t-key="r.id">
-                                <option t-att-value="r.id">
-                                    <t t-esc="r.name"/>
-                                </option>
-                            </t>
-                        </select>
-                        <small class="text-muted" t-if="!this.state.shopForm.zone_id">Select a zone first.</small>
-                    </div>
-                    <div class="col-md-2  mb-3">
-                        <label class="small fw-bold text-muted">GPS Latitude</label>
-                        <input type="number" step="any" class="form-control" t-model="this.state.shopForm.lat" placeholder="e.g. 31.5204"/>
-                    </div>
-                    <div class="col-md-2  mb-3">
-                        <label class="small fw-bold text-muted">GPS Longitude</label>
-                        <input type="number" step="any" class="form-control" t-model="this.state.shopForm.lng" placeholder="e.g. 74.3587"/>
                     </div>
                 </div>
             </div>
