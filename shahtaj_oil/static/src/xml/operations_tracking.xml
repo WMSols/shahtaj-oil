@@ -1152,7 +1152,7 @@
                     <span class="text-dark fw-bold">Goal Value:</span>
                     <span class="fw-bold fs-5">
                         <t t-esc="this.state.selectedTarget.targetValue"/>
-                        <small class="text-muted ms-1">
+                        <small class="text-muted ms-1" t-if="this.state.selectedTarget.type === 'collective_weight'">
                             <t t-esc="this.state.selectedTarget.weightUom"/>
                         </small>
                     </span>
@@ -1161,7 +1161,7 @@
                     <span class="text-dark fw-bold">Achieved So Far:</span>
                     <span class="text-success fw-bold fs-5">
                         <t t-esc="this.state.selectedTarget.achievedValue"/>
-                        <small class="text-muted ms-1">
+                        <small class="text-muted ms-1" t-if="this.state.selectedTarget.type === 'collective_weight'">
                             <t t-esc="this.state.selectedTarget.weightUom"/>
                         </small>
                     </span>
@@ -1170,7 +1170,7 @@
                     <span class="text-dark fw-bold">Remaining:</span>
                     <span class="text-warning fw-bold fs-5">
                         <t t-esc="this.state.selectedTarget.remainingValue"/>
-                        <small class="text-muted ms-1">
+                        <small class="text-muted ms-1" t-if="this.state.selectedTarget.type === 'collective_weight'">
                             <t t-esc="this.state.selectedTarget.weightUom"/>
                         </small>
                     </span>
