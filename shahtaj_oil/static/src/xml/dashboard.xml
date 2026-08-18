@@ -248,6 +248,7 @@
                 </div>
 
                 <div class="flex-grow-1 p-2 p-md-3 overflow-y-auto position-relative" style="min-height: 0; background-color: #f8fafc;">
+                    
 
                     <!-- THE LOGO LOADING OVERLAY -->
                     <t t-if="this.state.isSwitchingTab">
@@ -273,7 +274,11 @@
 
                     <!-- MASTER DASHBOARD OVERVIEW -->
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'overview'" class="h-100 p-2">
+                     <div class="alert alert-warning border-0 shadow-sm rounded-3 px-4 py-3 mb-3 d-flex align-items-center" role="alert">
+                        <div class="fw-bold fs-5 text-dark">Note: This page is under development</div>
+                    </div>
                         <div class="d-flex justify-content-between align-items-center mb-4">
+                            
                             <div>
                                 <h2 class="fw-bold text-dark mb-0">System Overview</h2>
                                 <small class="text-muted">High-level KPIs and statistics across all distributor modules.</small>

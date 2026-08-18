@@ -145,7 +145,7 @@ export class WarehouseInventory extends Component {
 
             if (tab === 'inventory' || tab === 'management') {
                 model = 'product.template';
-                fields = ["id", "name", "categ_id", "qty_available", "uom_name", "type", "list_price", "standard_price", "barcode", "weight", "volume", "invoice_policy", "image_1920", "shahtaj_qty_bookable", "virtual_available", "shahtaj_sale_uom", "shahtaj_kg_per_unit", "taxes_id", "active"];
+                fields = ["id", "name", "categ_id", "qty_available", "uom_name", "type", "is_storable", "list_price", "standard_price", "barcode", "weight", "volume", "invoice_policy", "image_1920", "shahtaj_qty_bookable", "virtual_available", "shahtaj_sale_uom", "shahtaj_kg_per_unit", "taxes_id", "active"];
                 domain = [['sale_ok', '=', true], ['default_code', '!=', 'SHAHTAJ-LEGACY'], ['active', '=', true]];
                 
                 if (filters.search) domain.push(['name', 'ilike', filters.search]);
@@ -479,6 +479,7 @@ export class WarehouseInventory extends Component {
         this.state.currentProduct = {
             ...product,
             tax_id: currentTaxId,
+            on_hand_qty: product.qty_available || 0,
         };
         this.state.showProductDetails = true;
         this.state.showProductAddForm = false;
@@ -493,6 +494,7 @@ export class WarehouseInventory extends Component {
 
         this.state.isLoading = true;
         try {
+            const targetOnHand = parseFloat(this.state.currentProduct.on_hand_qty || 0);
             const vals = {
                 name: this.state.currentProduct.name,
                 list_price: parseFloat(this.state.currentProduct.list_price || 0),
@@ -502,6 +504,7 @@ export class WarehouseInventory extends Component {
                 volume: parseFloat(this.state.currentProduct.volume || 0),
                 invoice_policy: this.state.currentProduct.invoice_policy,
                 type: this.state.currentProduct.type,
+                is_storable: !!this.state.currentProduct.is_storable,
                 shahtaj_sale_uom: this.state.currentProduct.shahtaj_sale_uom,
                 shahtaj_kg_per_unit: parseFloat(this.state.currentProduct.shahtaj_kg_per_unit || 1),
                 taxes_id: this.state.currentProduct.tax_id ? [[6, 0, [parseInt(this.state.currentProduct.tax_id, 10)]]] : [[5, 0, 0]],
@@ -512,6 +515,12 @@ export class WarehouseInventory extends Component {
             }
 
             await this.orm.write("product.template", [this.state.currentProduct.id], vals);
+            if (this.state.currentProduct.is_storable) {
+                const currentOnHand = parseFloat(this.state.currentProduct.qty_available || 0);
+                if (targetOnHand !== currentOnHand) {
+                    await this.orm.call("product.template", "action_shahtaj_set_on_hand_qty", [[this.state.currentProduct.id], targetOnHand]);
+                }
+            }
             await this.refreshData();
             this.state.showProductDetails = false;
             this.state.currentProduct = null;

@@ -133,15 +133,33 @@
                         </div>
 
                         <div class="row g-3">
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label class="small fw-bold">Product Name</label>
                                 <input type="text" class="form-control" t-model="this.state.currentProduct.name"/>
                             </div>
-                            <div class="col-md-3">
-    <label class="small fw-bold">Cost Price (Rs.)</label>
-    <input type="number" class="form-control" t-model="this.state.currentProduct.standard_price" title="Your purchase or manufacturing cost"/>
-</div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
+                                <label class="small fw-bold d-block mb-2">Inventory Tracking</label>
+                                <div class="form-check form-switch pt-1" title="Turn this on to actively count physical units in your warehouse">
+                                    <input class="form-check-input cursor-pointer" type="checkbox" id="editTrackInv" t-model="this.state.currentProduct.is_storable"/>
+                                    <label class="form-check-label small fw-bold cursor-pointer ms-1" for="editTrackInv">Track Inventory</label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="small fw-bold">On-Hand Qty</label>
+                                <div class="input-group">
+                                    <input type="number" step="any" min="0" class="form-control fw-bold text-dark" t-model="this.state.currentProduct.on_hand_qty" t-att-disabled="!this.state.currentProduct.is_storable" title="Set the exact warehouse stock for this product"/>
+                                    <span class="input-group-text bg-light text-muted small"><t t-esc="this.state.currentProduct.uom_name || 'Units'"/></span>
+                                </div>
+                                <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                                    <t t-if="this.state.currentProduct.is_storable">You can set the exact stock here.</t>
+                                    <t t-else="">Enable inventory tracking to edit stock.</t>
+                                </small>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="small fw-bold">Cost Price (Rs.)</label>
+                                <input type="number" class="form-control" t-model="this.state.currentProduct.standard_price" title="Your purchase or manufacturing cost"/>
+                            </div>
+                            <div class="col-md-2">
                                 <label class="small fw-bold">Sales Price (Rs.)</label>
                                 <input type="number" class="form-control" t-model="this.state.currentProduct.list_price"/>
                             </div>
