@@ -14,7 +14,7 @@
                 </button>
                 </t>
             </div>
-            <t t-if="this.state.activeSubTab !== 'pnl' and this.state.activeSubTab !== 'money' and this.state.activeSubTab !== 'cash' and this.state.activeSubTab !== 'tax_ledger' and this.state.activeSubTab !== 'expenses'">
+            <t t-if="this.state.activeSubTab !== 'pnl' and this.state.activeSubTab !== 'money' and this.state.activeSubTab !== 'cash' and this.state.activeSubTab !== 'tax_ledger' and this.state.activeSubTab !== 'expenses' and this.state.activeSubTab !== 'po_management'">
                 <div class="row g-3 px-4 pb-4 bg-light border-bottom">
                     <div class="col-md-2 col-6">
                         <div class="card bg-white border-0 shadow-sm p-3 h-100 rounded-4">
@@ -1700,6 +1700,479 @@
                         </t>
                     </t>
                 </t>
+
+            <t t-if="this.state.activeSubTab === 'po_management'">
+                <div class="px-4 pt-3 bg-white border-bottom shadow-sm" style="overflow-x: auto; overflow-y: hidden;">
+                    <ul class="nav nav-tabs border-0 flex-nowrap text-nowrap mb-0">
+                        <li class="nav-item me-4">
+                            <button t-on-click="() => this.setPoSubTab('purchase_orders')" t-attf-class="nav-link bg-transparent border-0 fw-bold pb-2 fs-6 #{this.state.poSubTab === 'purchase_orders' ? 'text-primary border-bottom border-primary border-3 rounded-0' : 'text-muted'}">
+                                <i class="fa fa-shopping-basket me-1"></i> Purchase Orders
+                            </button>
+                        </li>
+                        <li class="nav-item me-4">
+                            <button t-on-click="() => this.setPoSubTab('receipts')" t-attf-class="nav-link bg-transparent border-0 fw-bold pb-2 fs-6 #{this.state.poSubTab === 'receipts' ? 'text-primary border-bottom border-primary border-3 rounded-0' : 'text-muted'}">
+                                <i class="fa fa-truck me-1"></i> Incoming Receipts
+                            </button>
+                        </li>
+                        <li class="nav-item me-4">
+                            <button t-on-click="() => this.setPoSubTab('vendor_bills')" t-attf-class="nav-link bg-transparent border-0 fw-bold pb-2 fs-6 #{this.state.poSubTab === 'vendor_bills' ? 'text-primary border-bottom border-primary border-3 rounded-0' : 'text-muted'}">
+                                <i class="fa fa-file-text-o me-1"></i> Vendor Bills
+                            </button>
+                        </li>
+                        <li class="nav-item me-4">
+                            <button t-on-click="() => this.setPoSubTab('vendors')" t-attf-class="nav-link bg-transparent border-0 fw-bold pb-2 fs-6 #{this.state.poSubTab === 'vendors' ? 'text-primary border-bottom border-primary border-3 rounded-0' : 'text-muted'}">
+                                <i class="fa fa-industry me-1"></i> Vendors
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
+                <t t-if="this.state.poSubTab === 'purchase_orders'">
+                    <t t-if="this.state.showPurchaseOrderForm">
+                        <div class="p-4 bg-light border-bottom">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>
+                                    <h4 class="fw-bold mb-0">Create Purchase Order</h4>
+                                    <small class="text-muted">Create a PO for a vendor and add product lines.</small>
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.state.showPurchaseOrderForm = false">Close</button>
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-4">
+                                    <label class="small fw-bold">Vendor</label>
+                                    <select class="form-select" t-model="this.state.purchaseOrderForm.partner_id">
+                                        <option value="">-- Select Vendor --</option>
+                                        <t t-foreach="this.state.poLookups.vendors" t-as="vendor" t-key="vendor.id">
+                                            <option t-att-value="vendor.id"><t t-esc="vendor.name"/></option>
+                                        </t>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="small fw-bold">Order Date</label>
+                                    <input type="date" class="form-control" t-model="this.state.purchaseOrderForm.date_order"/>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="small fw-bold">Expected Delivery</label>
+                                    <input type="date" class="form-control" t-model="this.state.purchaseOrderForm.date_planned"/>
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button class="btn btn-outline-dark fw-bold me-2" t-on-click="openVendorForm">New Vendor</button>
+                                    <button class="btn btn-success fw-bold text-white" t-on-click="savePurchaseOrder">Save Purchase Order</button>
+                                </div>
+                            </div>
+                            <div class="table-responsive bg-white rounded-3 border shadow-sm">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                        <tr>
+                                            <th class="ps-3">Product</th>
+                                            <th class="text-center">Qty</th>
+                                            <th class="text-end">Unit Cost</th>
+                                            <th class="text-end pe-3">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="this.state.purchaseOrderForm.lines" t-as="line" t-key="line.id">
+                                            <tr>
+                                                <td class="ps-3">
+                                                    <select class="form-select form-select-sm" t-model="line.product_id" t-on-change="() => this.onPurchaseProductChange(line)">
+                                                        <option value="">-- Select Product --</option>
+                                                        <t t-foreach="this.state.poLookups.products" t-as="product" t-key="product.id">
+                                                            <option t-att-value="product.id"><t t-esc="product.name"/></option>
+                                                        </t>
+                                                    </select>
+                                                </td>
+                                                <td class="text-center">
+                                                    <input type="number" min="1" step="any" class="form-control form-control-sm text-center" t-model="line.qty"/>
+                                                </td>
+                                                <td class="text-end">
+                                                    <input type="number" min="0" step="any" class="form-control form-control-sm text-end" t-model="line.price_unit"/>
+                                                </td>
+                                                <td class="text-end pe-3">
+                                                    <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.removePurchaseOrderLine(line.id)">Remove</button>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                        <tr>
+                                            <td colspan="4" class="ps-3 py-3">
+                                                <button class="btn btn-sm btn-outline-primary fw-bold" t-on-click="addPurchaseOrderLine">
+                                                    <i class="fa fa-plus me-1"></i> Add Product Line
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </t>
+
+                    <t t-if="!this.state.selectedPurchaseOrder">
+                        <div class="d-flex justify-content-between align-items-center p-3 bg-light border-bottom flex-wrap gap-2">
+                            <div class="input-group input-group-sm shadow-sm" style="width: 280px;">
+                                <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search POs or vendors..." t-att-value="this.state.filters.purchaseOrders.search" t-on-input="(ev) => this.onSearchInput(ev, 'purchaseOrders')"/>
+                            </div>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <select class="form-select form-select-sm shadow-sm" style="width: 180px;" t-model="this.state.filters.purchaseOrders.status" t-on-change="() => this.onFilterChange('purchaseOrders')">
+                                    <option value="all">All PO Statuses</option>
+                                    <option value="Draft">Draft</option>
+                                    <option value="Confirmed">Confirmed</option>
+                                    <option value="To Bill">To Bill</option>
+                                    <option value="Cancelled">Cancelled</option>
+                                </select>
+                                <button class="btn btn-sm btn-dark fw-bold text-white shadow-sm" t-on-click="openPurchaseOrderForm">New PO</button>
+                            </div>
+                        </div>
+                        <div class="position-relative">
+                            <t t-if="this.state.isLoadingList">
+                                <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </div>
+                            </t>
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                        <tr>
+                                            <th class="ps-4">Reference</th>
+                                            <th>Vendor</th>
+                                            <th>Order / Expected</th>
+                                            <th class="text-end">Total</th>
+                                            <th class="text-center">Status</th>
+                                            <th class="text-end pe-4">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="this.state.purchaseOrders.length === 0 and !this.state.isLoadingList">
+                                            <tr><td colspan="6" class="text-center py-5 text-muted fw-bold">No purchase orders found.</td></tr>
+                                        </t>
+                                        <t t-foreach="this.state.purchaseOrders" t-as="po" t-key="po.id">
+                                            <tr>
+                                                <td class="ps-4 fw-bold text-dark"><t t-esc="po.display_name"/></td>
+                                                <td><t t-esc="po.vendor"/></td>
+                                                <td><div class="fw-bold small"><t t-esc="po.date"/></div><div class="text-muted small">Expected: <t t-esc="po.expectedDate"/></div></td>
+                                                <td class="text-end fw-bold text-success">Rs. <t t-esc="po.amount"/></td>
+                                                <td class="text-center"><span class="badge bg-light border text-dark"><t t-esc="po.status"/></span></td>
+                                                <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewPurchaseOrder(po)">View Details</button></td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div class="p-4 bg-light">
+                            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                                <button class="btn btn-sm btn-light border shadow-sm fw-bold" t-on-click="() => this.state.selectedPurchaseOrder = null">Back to Purchase Orders</button>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button t-if="this.state.selectedPurchaseOrder.status === 'Draft'" class="btn btn-primary fw-bold text-white shadow-sm" t-on-click="() => this.actionConfirmPurchaseOrder(this.state.selectedPurchaseOrder)">Confirm Order</button>
+                                    <button t-if="this.state.selectedPurchaseOrder.status === 'Confirmed'" class="btn btn-outline-dark fw-bold shadow-sm" t-on-click="() => this.actionOpenReceiptFromPurchaseOrder(this.state.selectedPurchaseOrder)">Receive Products</button>
+                                    <button t-if="this.state.selectedPurchaseOrder.status === 'Confirmed' and this.state.selectedPurchaseOrder.invoice_status === 'to invoice'" class="btn btn-success fw-bold text-white shadow-sm" t-on-click="() => this.actionCreateVendorBill(this.state.selectedPurchaseOrder)">Create Bill</button>
+                                </div>
+                            </div>
+                            <div class="card border-0 shadow-sm rounded-4">
+                                <div class="p-4 border-bottom">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h4 class="fw-bold mb-1"><t t-esc="this.state.selectedPurchaseOrder.display_name"/></h4>
+                                            <div class="text-muted"><t t-esc="this.state.selectedPurchaseOrder.vendor"/></div>
+                                        </div>
+                                        <span class="badge bg-light border text-dark px-3 py-2"><t t-esc="this.state.selectedPurchaseOrder.status"/></span>
+                                    </div>
+                                    <div class="row g-3 mt-2">
+                                        <div class="col-md-4"><small class="text-muted d-block">Order Date</small><span class="fw-bold"><t t-esc="this.state.selectedPurchaseOrder.date"/></span></div>
+                                        <div class="col-md-4"><small class="text-muted d-block">Expected Delivery</small><span class="fw-bold"><t t-esc="this.state.selectedPurchaseOrder.expectedDate"/></span></div>
+                                        <div class="col-md-4"><small class="text-muted d-block">Total</small><span class="fw-bold text-success">Rs. <t t-esc="this.state.selectedPurchaseOrder.amount"/></span></div>
+                                    </div>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0 align-middle">
+                                        <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                            <tr>
+                                                <th class="ps-4">Product</th>
+                                                <th class="text-center">Ordered</th>
+                                                <th class="text-center">Received</th>
+                                                <th class="text-center">Billed</th>
+                                                <th class="text-end pe-4">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <t t-if="this.state.selectedPurchaseOrderLines.length === 0 and !this.state.isLoadingLines">
+                                                <tr><td colspan="5" class="text-center py-5 text-muted">No purchase lines found.</td></tr>
+                                            </t>
+                                            <t t-foreach="this.state.selectedPurchaseOrderLines" t-as="line" t-key="line.id">
+                                                <tr>
+                                                    <td class="ps-4 fw-bold"><t t-esc="line.product"/></td>
+                                                    <td class="text-center"><t t-esc="line.qty"/></td>
+                                                    <td class="text-center text-primary fw-bold"><t t-esc="line.received"/></td>
+                                                    <td class="text-center text-success fw-bold"><t t-esc="line.billed"/></td>
+                                                    <td class="text-end pe-4 fw-bold">Rs. <t t-esc="line.subtotal"/></td>
+                                                </tr>
+                                            </t>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </t>
+
+                <t t-if="this.state.poSubTab === 'receipts'">
+                    <t t-if="!this.state.selectedReceipt">
+                        <div class="d-flex justify-content-between align-items-center p-3 bg-light border-bottom flex-wrap gap-2">
+                            <div class="input-group input-group-sm shadow-sm" style="width: 280px;">
+                                <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search receipts..." t-att-value="this.state.filters.receipts.search" t-on-input="(ev) => this.onSearchInput(ev, 'receipts')"/>
+                            </div>
+                            <select class="form-select form-select-sm shadow-sm" style="width: 180px;" t-model="this.state.filters.receipts.status" t-on-change="() => this.onFilterChange('receipts')">
+                                <option value="all">All Receipt Statuses</option>
+                                <option value="Ready">Ready / Waiting</option>
+                                <option value="Done">Done</option>
+                                <option value="Cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                    <tr>
+                                        <th class="ps-4">Receipt</th>
+                                        <th>Vendor</th>
+                                        <th>Origin PO</th>
+                                        <th>Scheduled Date</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-end pe-4">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-if="this.state.receipts.length === 0 and !this.state.isLoadingList">
+                                        <tr><td colspan="6" class="text-center py-5 text-muted fw-bold">No receipts found.</td></tr>
+                                    </t>
+                                    <t t-foreach="this.state.receipts" t-as="receipt" t-key="receipt.id">
+                                        <tr>
+                                            <td class="ps-4 fw-bold"><t t-esc="receipt.display_name"/></td>
+                                            <td><t t-esc="receipt.vendor"/></td>
+                                            <td><t t-esc="receipt.origin"/></td>
+                                            <td><t t-esc="receipt.scheduledDate"/></td>
+                                            <td class="text-center"><span class="badge bg-light border text-dark"><t t-esc="receipt.status"/></span></td>
+                                            <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewReceipt(receipt)">View Details</button></td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div class="p-4 bg-light">
+                            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                                <button class="btn btn-sm btn-light border shadow-sm fw-bold" t-on-click="() => this.state.selectedReceipt = null">Back to Receipts</button>
+                                <button t-if="this.state.selectedReceipt.status === 'Ready'" class="btn btn-success fw-bold text-white shadow-sm" t-on-click="() => this.actionValidateReceipt(this.state.selectedReceipt)">Validate Receipt</button>
+                            </div>
+                            <div class="card border-0 shadow-sm rounded-4 p-4">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div>
+                                        <h4 class="fw-bold mb-1"><t t-esc="this.state.selectedReceipt.display_name"/></h4>
+                                        <div class="text-muted"><t t-esc="this.state.selectedReceipt.vendor"/></div>
+                                    </div>
+                                    <span class="badge bg-light border text-dark px-3 py-2"><t t-esc="this.state.selectedReceipt.status"/></span>
+                                </div>
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-6"><small class="text-muted d-block">Origin PO</small><span class="fw-bold"><t t-esc="this.state.selectedReceipt.origin"/></span></div>
+                                    <div class="col-md-6"><small class="text-muted d-block">Scheduled Date</small><span class="fw-bold"><t t-esc="this.state.selectedReceipt.scheduledDate"/></span></div>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0 align-middle">
+                                        <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                            <tr>
+                                                <th class="ps-4">Product</th>
+                                                <th class="text-center">Ordered</th>
+                                                <th class="text-center">Done</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <t t-if="this.state.selectedReceiptLines.length === 0 and !this.state.isLoadingLines">
+                                                <tr><td colspan="3" class="text-center py-5 text-muted">No receipt lines found.</td></tr>
+                                            </t>
+                                            <t t-foreach="this.state.selectedReceiptLines" t-as="line" t-key="line.id">
+                                                <tr>
+                                                    <td class="ps-4 fw-bold"><t t-esc="line.product"/></td>
+                                                    <td class="text-center"><t t-esc="line.ordered"/></td>
+                                                    <td class="text-center text-success fw-bold"><t t-esc="line.done"/></td>
+                                                </tr>
+                                            </t>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </t>
+
+                <t t-if="this.state.poSubTab === 'vendor_bills'">
+                    <t t-if="!this.state.selectedVendorBill">
+                        <div class="d-flex justify-content-between align-items-center p-3 bg-light border-bottom flex-wrap gap-2">
+                            <div class="input-group input-group-sm shadow-sm" style="width: 280px;">
+                                <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search bills or vendors..." t-att-value="this.state.filters.vendorBills.search" t-on-input="(ev) => this.onSearchInput(ev, 'vendorBills')"/>
+                            </div>
+                            <select class="form-select form-select-sm shadow-sm" style="width: 180px;" t-model="this.state.filters.vendorBills.status" t-on-change="() => this.onFilterChange('vendorBills')">
+                                <option value="all">All Bill Statuses</option>
+                                <option value="Draft">Draft</option>
+                                <option value="Posted">Posted</option>
+                                <option value="Paid">Paid</option>
+                                <option value="Cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                    <tr>
+                                        <th class="ps-4">Bill</th>
+                                        <th>Vendor</th>
+                                        <th>Origin</th>
+                                        <th>Date</th>
+                                        <th class="text-end">Amount</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-end pe-4">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-if="this.state.vendorBills.length === 0 and !this.state.isLoadingList">
+                                        <tr><td colspan="7" class="text-center py-5 text-muted fw-bold">No vendor bills found.</td></tr>
+                                    </t>
+                                    <t t-foreach="this.state.vendorBills" t-as="bill" t-key="bill.id">
+                                        <tr>
+                                            <td class="ps-4 fw-bold"><t t-esc="bill.display_name"/></td>
+                                            <td><t t-esc="bill.vendor"/></td>
+                                            <td><t t-esc="bill.origin"/></td>
+                                            <td><t t-esc="bill.date"/></td>
+                                            <td class="text-end fw-bold text-success">Rs. <t t-esc="bill.amount"/></td>
+                                            <td class="text-center"><span class="badge bg-light border text-dark"><t t-esc="bill.status"/></span></td>
+                                            <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewVendorBill(bill)">View Details</button></td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div class="p-4 bg-light">
+                            <button class="btn btn-sm btn-light border shadow-sm fw-bold mb-4" t-on-click="() => this.state.selectedVendorBill = null">Back to Vendor Bills</button>
+                            <div class="card border-0 shadow-sm rounded-4 p-4">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div>
+                                        <h4 class="fw-bold mb-1"><t t-esc="this.state.selectedVendorBill.display_name"/></h4>
+                                        <div class="text-muted"><t t-esc="this.state.selectedVendorBill.vendor"/></div>
+                                    </div>
+                                    <span class="badge bg-light border text-dark px-3 py-2"><t t-esc="this.state.selectedVendorBill.status"/></span>
+                                </div>
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-4"><small class="text-muted d-block">Date</small><span class="fw-bold"><t t-esc="this.state.selectedVendorBill.date"/></span></div>
+                                    <div class="col-md-4"><small class="text-muted d-block">Origin</small><span class="fw-bold"><t t-esc="this.state.selectedVendorBill.origin"/></span></div>
+                                    <div class="col-md-4"><small class="text-muted d-block">Total</small><span class="fw-bold text-success">Rs. <t t-esc="this.state.selectedVendorBill.amount"/></span></div>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0 align-middle">
+                                        <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                            <tr>
+                                                <th class="ps-4">Product</th>
+                                                <th class="text-center">Qty</th>
+                                                <th class="text-end">Unit Price</th>
+                                                <th class="text-end pe-4">Subtotal</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <t t-if="this.state.selectedVendorBillLines.length === 0 and !this.state.isLoadingLines">
+                                                <tr><td colspan="4" class="text-center py-5 text-muted">No bill lines found.</td></tr>
+                                            </t>
+                                            <t t-foreach="this.state.selectedVendorBillLines" t-as="line" t-key="line.id">
+                                                <tr>
+                                                    <td class="ps-4 fw-bold"><t t-esc="line.product"/></td>
+                                                    <td class="text-center"><t t-esc="line.qty"/></td>
+                                                    <td class="text-end">Rs. <t t-esc="line.price"/></td>
+                                                    <td class="text-end pe-4 fw-bold">Rs. <t t-esc="line.subtotal"/></td>
+                                                </tr>
+                                            </t>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </t>
+
+                <t t-if="this.state.poSubTab === 'vendors'">
+                    <t t-if="this.state.showVendorForm">
+                        <div class="p-4 bg-light border-bottom">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>
+                                    <h4 class="fw-bold mb-0">Create Vendor</h4>
+                                    <small class="text-muted">Add a manufacturer or supplier for purchase orders.</small>
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.state.showVendorForm = false">Close</button>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-md-4"><label class="small fw-bold">Vendor Name</label><input type="text" class="form-control" t-model="this.state.vendorForm.name"/></div>
+                                <div class="col-md-2"><label class="small fw-bold">Phone</label><input type="text" class="form-control" t-model="this.state.vendorForm.phone"/></div>
+                                <div class="col-md-3"><label class="small fw-bold">Email</label><input type="email" class="form-control" t-model="this.state.vendorForm.email"/></div>
+                                <div class="col-md-3"><label class="small fw-bold">Street</label><input type="text" class="form-control" t-model="this.state.vendorForm.street"/></div>
+                                <div class="col-md-3"><label class="small fw-bold">City</label><input type="text" class="form-control" t-model="this.state.vendorForm.city"/></div>
+                                <div class="col-md-9 d-flex align-items-end justify-content-end"><button class="btn btn-success fw-bold text-white" t-on-click="saveVendor">Save Vendor</button></div>
+                            </div>
+                        </div>
+                    </t>
+                    <t t-if="!this.state.selectedVendor">
+                        <div class="d-flex justify-content-between align-items-center p-3 bg-light border-bottom flex-wrap gap-2">
+                            <div class="input-group input-group-sm shadow-sm" style="width: 280px;">
+                                <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search vendors..." t-att-value="this.state.filters.vendors.search" t-on-input="(ev) => this.onSearchInput(ev, 'vendors')"/>
+                            </div>
+                            <button class="btn btn-sm btn-dark fw-bold text-white shadow-sm" t-on-click="openVendorForm">New Vendor</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                    <tr>
+                                        <th class="ps-4">Vendor</th>
+                                        <th>Phone</th>
+                                        <th>Email</th>
+                                        <th>Address</th>
+                                        <th class="text-end pe-4">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-if="this.state.vendors.length === 0 and !this.state.isLoadingList">
+                                        <tr><td colspan="5" class="text-center py-5 text-muted fw-bold">No vendors found.</td></tr>
+                                    </t>
+                                    <t t-foreach="this.state.vendors" t-as="vendor" t-key="vendor.id">
+                                        <tr>
+                                            <td class="ps-4 fw-bold text-dark"><t t-esc="vendor.name"/></td>
+                                            <td><t t-esc="vendor.phone"/></td>
+                                            <td><t t-esc="vendor.email"/></td>
+                                            <td><t t-esc="vendor.address"/></td>
+                                            <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewVendor(vendor)">View Details</button></td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div class="p-4 bg-light">
+                            <div class="d-flex justify-content-between align-items-center mb-4">
+                                <button class="btn btn-sm btn-light border shadow-sm fw-bold" t-on-click="() => this.state.selectedVendor = null">Back to Vendors</button>
+                                <button class="btn btn-sm btn-outline-primary fw-bold" t-on-click="() => this.openVendorForm(this.state.selectedVendor)">Edit Vendor</button>
+                            </div>
+                            <div class="card border-0 shadow-sm rounded-4 p-4">
+                                <h4 class="fw-bold mb-3"><t t-esc="this.state.selectedVendor.name"/></h4>
+                                <div class="row g-3">
+                                    <div class="col-md-4"><small class="text-muted d-block">Phone</small><span class="fw-bold"><t t-esc="this.state.selectedVendor.phone"/></span></div>
+                                    <div class="col-md-4"><small class="text-muted d-block">Email</small><span class="fw-bold"><t t-esc="this.state.selectedVendor.email"/></span></div>
+                                    <div class="col-md-4"><small class="text-muted d-block">Address</small><span class="fw-bold"><t t-esc="this.state.selectedVendor.address"/></span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </t>
+            </t>
 
             <!-- 4. Credit Risk Control Tab (Merged with Shop Balances) -->
             <t t-if="this.state.activeSubTab === 'credit'">
