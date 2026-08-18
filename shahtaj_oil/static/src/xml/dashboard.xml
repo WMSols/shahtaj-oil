@@ -35,9 +35,23 @@
                     <h6 class="mb-0 fw-bold text-dark mt-2">Distributor Portal</h6>
                 </div>
 
-                <div class="list-group list-group-flush p-3 fw-bold flex-grow-1">
-
+                <div class="list-group list-group-flush p-3 fw-bold flex-grow-1">                
+                    <!-- NEW: Dashboard Overview Button -->
                     <div class="mb-2">
+                        <button t-on-click="() => this.switchTab('overview')" class="list-group-item list-group-item-action border-0 rounded text-start d-flex align-items-center transition-all w-100" t-att-style="this.state.activeTab === 'overview' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
+                            <span class="me-3 d-flex align-items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-layout-dashboard">
+                                    <rect width="7" height="9" x="3" y="3" rx="1"/>
+                                    <rect width="7" height="5" x="14" y="3" rx="1"/>
+                                    <rect width="7" height="9" x="14" y="12" rx="1"/>
+                                    <rect width="7" height="5" x="3" y="16" rx="1"/>
+                                </svg>
+                            </span>
+                            Dashboard Overview
+                        </button>
+                    </div>
+                    <div class="mb-2">
+                        
                         <button t-on-click="() => this.toggleMenu('territory', 'areas')" class="list-group-item list-group-item-action border-0 rounded text-start d-flex align-items-center justify-content-between transition-all w-100" t-att-style="this.state.activeTab === 'territory' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
                             <div class="d-flex align-items-center">
                                 <span class="me-3 d-flex align-items-center">
@@ -234,6 +248,7 @@
                 </div>
 
                 <div class="flex-grow-1 p-2 p-md-3 overflow-y-auto position-relative" style="min-height: 0; background-color: #f8fafc;">
+                    
 
                     <!-- THE LOGO LOADING OVERLAY -->
                     <t t-if="this.state.isSwitchingTab">
@@ -257,7 +272,180 @@
                         </div>
                     </t>
 
+                    <!-- MASTER DASHBOARD OVERVIEW -->
+                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'overview'" class="h-100 p-2">
+                     <div class="alert alert-warning border-0 shadow-sm rounded-3 px-4 py-3 mb-3 d-flex align-items-center" role="alert">
+                        <div class="fw-bold fs-5 text-dark">Note: This page is under development</div>
+                    </div>
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            
+                            <div>
+                                <h2 class="fw-bold text-dark mb-0">System Overview</h2>
+                                <small class="text-muted">High-level KPIs and statistics across all distributor modules.</small>
+                            </div>
+                            <button class="btn btn-outline-secondary fw-bold shadow-sm d-inline-flex align-items-center" t-on-click="fetchMasterKPIs" t-att-disabled="this.state.isLoadingKpis" title="Refresh KPIs">
+                                <span t-if="this.state.isLoadingKpis" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                <i t-else="" class="fa fa-refresh me-2"></i>
+                                Refresh
+                            </button>
+                        </div>
+                        
+                        <!-- TERRITORY & RETAIL NETWORK KPIs -->
+                        <h5 class="fw-bold text-secondary mb-3 border-bottom pb-2">Territory &amp; Retail Network</h5>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-3">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-primary cursor-pointer" t-on-click="() => this.switchTab('territory', 'areas')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Total Zones</div>
+                                    <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.totalZones"/></h3>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-info cursor-pointer" t-on-click="() => this.switchTab('territory', 'routes')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Active Routes</div>
+                                    <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.totalRoutes"/></h3>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-success cursor-pointer" t-on-click="() => this.switchTab('territory', 'shops')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Registered Shops</div>
+                                    <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.totalShops"/></h3>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-warning cursor-pointer transition-all hover-shadow" t-on-click="() => this.switchTab('territory', 'shops')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Pending Approvals</div>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.pendingShops"/></h3>
+                                        <span t-if="this.state.kpis.pendingShops > 0" class="badge bg-danger rounded-pill shadow-sm">Needs Review</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- OPERATIONS (TODAY) -->
+                        <h5 class="fw-bold text-secondary mb-3 border-bottom pb-2">Operations — Today</h5>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-primary cursor-pointer" t-on-click="() => this.switchTab('operations', 'checkins')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Today's Check-ins</div>
+                                    <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.todayCheckins"/></h3>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-success cursor-pointer" t-on-click="() => this.switchTab('operations', 'orders')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Today's Orders</div>
+                                    <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.todayOrders"/></h3>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-warning cursor-pointer" t-on-click="() => this.switchTab('operations', 'deliveries')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Pending Deliveries</div>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.pendingDeliveries"/></h3>
+                                        <span t-if="this.state.kpis.pendingDeliveries > 0" class="badge bg-warning text-dark rounded-pill shadow-sm">Awaiting</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
+                        <!-- STAFF -->
+                        <h5 class="fw-bold text-secondary mb-3 border-bottom pb-2">Staff &amp; Order Bookers</h5>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-info cursor-pointer" t-on-click="() => this.switchTab('staff')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Total Bookers</div>
+                                    <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.totalBookers"/></h3>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-success cursor-pointer" t-on-click="() => this.switchTab('staff')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Online Now</div>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.onlineBookers"/></h3>
+                                        <span t-if="this.state.kpis.onlineBookers > 0" class="badge bg-success rounded-pill shadow-sm">Live</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- WAREHOUSE -->
+                        <h5 class="fw-bold text-secondary mb-3 border-bottom pb-2">Warehouse &amp; Stock</h5>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-primary cursor-pointer" t-on-click="() => this.switchTab('warehouse', 'management')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Sellable Products</div>
+                                    <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.totalProducts"/></h3>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-danger cursor-pointer" t-on-click="() => this.switchTab('warehouse', 'management')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Out of Stock</div>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.outOfStockProducts"/></h3>
+                                        <span t-if="this.state.kpis.outOfStockProducts > 0" class="badge bg-danger rounded-pill shadow-sm">Low Stock</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SCHEDULES & TARGETS -->
+                        <h5 class="fw-bold text-secondary mb-3 border-bottom pb-2">Schedules &amp; Targets</h5>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-info cursor-pointer" t-on-click="() => this.switchTab('schedules', 'schedules')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Active Schedules</div>
+                                    <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.activeSchedules"/></h3>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-warning cursor-pointer" t-on-click="() => this.switchTab('schedules', 'targets')">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Active Targets</div>
+                                    <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.activeTargets"/></h3>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FINANCIALS (gated) -->
+                        <t t-if="this.hasFinancialAccess">
+                            <h5 class="fw-bold text-secondary mb-3 border-bottom pb-2">Financials</h5>
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-4 col-lg">
+                                    <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-primary cursor-pointer" t-on-click="() => this.switchTab('financials', 'all_orders')">
+                                        <div class="text-muted small fw-bold text-uppercase mb-1">Total Orders</div>
+                                        <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.totalOrders"/></h3>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 col-lg">
+                                    <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-warning cursor-pointer" t-on-click="() => this.switchTab('financials', 'orders')">
+                                        <div class="text-muted small fw-bold text-uppercase mb-1">To Invoice</div>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.toInvoice"/></h3>
+                                            <span t-if="this.state.kpis.toInvoice > 0" class="badge bg-warning text-dark rounded-pill shadow-sm">Action</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 col-lg">
+                                    <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-danger cursor-pointer" t-on-click="() => this.switchTab('financials', 'customer_invoices')">
+                                        <div class="text-muted small fw-bold text-uppercase mb-1">Open Invoices</div>
+                                        <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.openInvoices"/></h3>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 col-lg">
+                                    <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-secondary cursor-pointer" t-on-click="() => this.switchTab('financials', 'credit_notes')">
+                                        <div class="text-muted small fw-bold text-uppercase mb-1">Credit Notes</div>
+                                        <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.creditNotes"/></h3>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 col-lg">
+                                    <div class="card border-0 shadow-sm rounded-3 h-100 p-3 bg-white border-start border-4 border-success cursor-pointer" t-on-click="() => this.switchTab('territory', 'shops')">
+                                        <div class="text-muted small fw-bold text-uppercase mb-1">Approved Shops</div>
+                                        <h3 class="fw-bold text-dark mb-0"><t t-esc="this.state.kpis.approvedShops"/></h3>
+                                    </div>
+                                </div>
+                            </div>
+                        </t>
+
+                    </div>
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'territory'" class="h-100">
                         <TerritoryRoutes requestedSubTab="this.state.activeSubTab" />
                     </div>

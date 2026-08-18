@@ -43,6 +43,7 @@ export class TerritoryRoutes extends Component {
             shopSearchQuery: '',
             shopFilterCategory: 'all',
             shopFilterStatus: 'all',
+            shopFilterVerified: 'all',
             shopFilterBooker: 'all', 
             shopFilterRoute: 'all',
             routeFilterZone: 'all',  
@@ -55,7 +56,7 @@ export class TerritoryRoutes extends Component {
             routeForm: { name: '', zone_id: '', is_active: true }, 
             shopForm: { 
                 name: '', owner_name: '', owner_phone: '', owner_cnic_number: '', address: '',
-                shopCategory: 'credit',
+                shopCategory: 'cash',
                 creditLimit: '', legacyBalance: '', outstandingBalance: '',
                 owner_cnic_front: null, owner_cnic_back: null, 
                 owner_photo: null, shop_exterior_photo: null,
@@ -224,6 +225,13 @@ export class TerritoryRoutes extends Component {
                 if (this.state.shopFilterStatus !== 'all') {
                     domain.push(['shop_approval_state', '=', this.state.shopFilterStatus]);
                 }
+                if (this.state.shopFilterVerified !== 'all') {
+                    if (this.state.shopFilterVerified === 'verified') {
+                        domain.push(['shahtaj_visit_tag', '=', 'visited']);
+                    } else {
+                        domain.push(['shahtaj_visit_tag', '!=', 'visited']);
+                    }
+                }
                 if (this.state.shopFilterBooker !== 'all') {
                     domain.push(['registered_by_id', '=', parseInt(this.state.shopFilterBooker)]);
                 }
@@ -294,8 +302,11 @@ export class TerritoryRoutes extends Component {
             const searchMatch = shop.name.toLowerCase().includes(query) || (shop.owner_name || '').toLowerCase().includes(query);
             const categoryMatch = this.state.shopFilterCategory !== 'all' ? shop.shahtaj_shop_category === this.state.shopFilterCategory : true;
             const statusMatch = this.state.shopFilterStatus !== 'all' ? shop.shop_approval_state === this.state.shopFilterStatus : true;
+            const verifiedMatch = this.state.shopFilterVerified !== 'all'
+                ? (this.state.shopFilterVerified === 'verified' ? shop.shahtaj_visit_tag === 'visited' : shop.shahtaj_visit_tag !== 'visited')
+                : true;
 
-            return searchMatch && categoryMatch && statusMatch;
+            return searchMatch && categoryMatch && statusMatch && verifiedMatch;
         });
     }
 
@@ -337,8 +348,11 @@ export class TerritoryRoutes extends Component {
             const searchMatch = shop.name.toLowerCase().includes(query) || (shop.owner_name || '').toLowerCase().includes(query);
             const categoryMatch = this.state.shopFilterCategory !== 'all' ? shop.shahtaj_shop_category === this.state.shopFilterCategory : true;
             const statusMatch = this.state.shopFilterStatus !== 'all' ? shop.shop_approval_state === this.state.shopFilterStatus : true;
+            const verifiedMatch = this.state.shopFilterVerified !== 'all'
+                ? (this.state.shopFilterVerified === 'verified' ? shop.shahtaj_visit_tag === 'visited' : shop.shahtaj_visit_tag !== 'visited')
+                : true;
 
-            return searchMatch && categoryMatch && statusMatch;
+            return searchMatch && categoryMatch && statusMatch && verifiedMatch;
         });
     }
 
@@ -943,7 +957,7 @@ export class TerritoryRoutes extends Component {
         this.state.routeForm = { name: '', zone_id: '', is_active: true };
         this.state.shopForm = { 
             name: '', owner_name: '', owner_phone: '', owner_cnic_number: '', address: '',
-            shopCategory: 'credit',
+            shopCategory: 'cash',
             creditLimit: '', legacyBalance: '', outstandingBalance: '',
             owner_cnic_front: null, owner_cnic_back: null, 
             owner_photo: null, shop_exterior_photo: null,
@@ -1329,7 +1343,7 @@ export class TerritoryRoutes extends Component {
             const payload = {
                 is_shahtaj_shop: true,
                 company_type: 'company',
-                shahtaj_shop_category: this.state.shopForm.shopCategory || 'credit',
+                shahtaj_shop_category: this.state.shopForm.shopCategory || 'cash',
                 name: this.state.shopForm.name,
                 owner_name: this.state.shopForm.owner_name || false,
                 owner_phone: phone || false,
