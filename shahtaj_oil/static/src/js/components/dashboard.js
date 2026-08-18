@@ -1,6 +1,7 @@
 /** @odoo-module **/
 
-import { Component, useState } from "@odoo/owl";
+import { Component, useState, onWillStart } from "@odoo/owl";
+import { useService } from "@web/core/utils/hooks";
 import { registry } from "@web/core/registry";
 import { hasFinancialAccess } from "../shahtaj_access";
 import { StaffManagement } from "./staff_management";
@@ -17,11 +18,45 @@ export class ShahtajDashboard extends Component {
     static components = { StaffManagement, OperationsTracking, TerritoryRoutes, WarehouseInventory, FinancialsInvoicing, PortalSettings, SchedulesTargets, BankTransactions, ConfirmModal }; 
 
     setup() {
+        this.orm = useService("orm");
+        const today = new Date();
+        const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+        const formatDate = (d) => {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+        this.todayStr = formatDate(today);
+        this.tomorrowStr = formatDate(tomorrow);
+
         this.state = useState({
-            activeTab: 'territory', 
-            activeSubTab: 'areas', 
+            activeTab: 'overview', // Default to the new Master Overview
+            activeSubTab: '', 
             isSidebarOpen: false, 
             isSwitchingTab: false,
+            isLoadingKpis: false,
+            // Master KPI State
+            kpis: {
+                totalZones: 0,
+                totalRoutes: 0,
+                totalShops: 0,
+                pendingShops: 0,
+                totalBookers: 0,
+                onlineBookers: 0,
+                todayCheckins: 0,
+                todayOrders: 0,
+                pendingDeliveries: 0,
+                totalProducts: 0,
+                outOfStockProducts: 0,
+                activeSchedules: 0,
+                activeTargets: 0,
+                totalOrders: 0,
+                toInvoice: 0,
+                openInvoices: 0,
+                creditNotes: 0,
+                approvedShops: 0,
+            },
             // Tracks which accordion menus are currently expanded
             expandedMenus: {
                 territory: true, // Open by default
@@ -35,10 +70,87 @@ export class ShahtajDashboard extends Component {
         window.addEventListener('shahtaj-dashboard-switch', (ev) => {
             this.switchTab(ev.detail.tab, ev.detail.subTab);
         });
+        onWillStart(async () => {
+            await this.fetchMasterKPIs();
+        });
+        
     }
+    
+    async fetchMasterKPIs() {
+        this.state.isLoadingKpis = true;
+        const todayStart = `${this.todayStr} 00:00:00`;
+        const tomorrowStart = `${this.tomorrowStr} 00:00:00`;
+        const productBaseDomain = [
+            ["sale_ok", "=", true],
+            ["default_code", "!=", "SHAHTAJ-LEGACY"],
+            ["active", "=", true],
+        ];
 
-    // NEW: Async switchTab with loading delay
-   
+        try {
+            const coreCountsPromise = Promise.all([
+                this.orm.searchCount("shahtaj.zone", [["active", "=", true]]),
+                this.orm.searchCount("shahtaj.route", [["active", "=", true]]),
+                this.orm.searchCount("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", true]]),
+                this.orm.searchCount("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", true], ["shop_approval_state", "=", "pending"]]),
+                this.orm.searchCount("res.users", [["shahtaj_is_order_booker", "=", true], ["active", "=", true]]),
+                this.orm.searchCount("res.users", [["shahtaj_is_order_booker", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
+                this.orm.searchCount("shahtaj.visit", [["started_at", ">=", todayStart], ["started_at", "<", tomorrowStart]]),
+                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["date_order", ">=", todayStart], ["date_order", "<", tomorrowStart]]),
+                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["state", "=", "sale"]]),
+                this.orm.searchCount("product.template", productBaseDomain),
+                this.orm.searchCount("product.template", [...productBaseDomain, ["qty_available", "<=", 0]]),
+                this.orm.searchCount("shahtaj.weekly.schedule", [["active", "=", true]]),
+                this.orm.searchCount("shahtaj.visit.target", [["active", "=", true]]),
+            ]);
+
+            const financialCountsPromise = this.hasFinancialAccess
+                ? Promise.all([
+                    this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false]]),
+                    this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]]),
+                    this.orm.searchCount("account.move", [["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true], ["state", "=", "posted"], ["payment_state", "in", ["not_paid", "partial"]]]),
+                    this.orm.searchCount("account.move", [["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]]),
+                    this.orm.searchCount("res.partner", [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]]),
+                ])
+                : Promise.resolve([0, 0, 0, 0, 0]);
+
+            const [coreCounts, financialCounts] = await Promise.all([coreCountsPromise, financialCountsPromise]);
+
+            const [
+                zones, routes, shops, pendingShops,
+                totalBookers, onlineBookers,
+                todayCheckins, todayOrders, pendingDeliveries,
+                totalProducts, outOfStockProducts,
+                activeSchedules, activeTargets,
+            ] = coreCounts;
+
+            const [totalOrders, toInvoice, openInvoices, creditNotes, approvedShops] = financialCounts;
+
+            Object.assign(this.state.kpis, {
+                totalZones: zones,
+                totalRoutes: routes,
+                totalShops: shops,
+                pendingShops: pendingShops,
+                totalBookers,
+                onlineBookers,
+                todayCheckins,
+                todayOrders,
+                pendingDeliveries,
+                totalProducts,
+                outOfStockProducts,
+                activeSchedules,
+                activeTargets,
+                totalOrders,
+                toInvoice,
+                openInvoices,
+                creditNotes,
+                approvedShops,
+            });
+        } catch (error) {
+            console.error("Failed to fetch Master KPIs", error);
+        } finally {
+            this.state.isLoadingKpis = false;
+        }
+    }
     get hasFinancialAccess() {
         return hasFinancialAccess();
     }
@@ -104,6 +216,10 @@ export class ShahtajDashboard extends Component {
 
             // 3. Yield once more so Owl can begin mounting the new component
             await new Promise(resolve => setTimeout(resolve, 10));
+
+            if (tabName === 'overview') {
+                await this.fetchMasterKPIs();
+            }
         } finally {
             // 4. Remove the loading screen
             this.state.isSwitchingTab = false;

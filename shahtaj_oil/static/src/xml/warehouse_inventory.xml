@@ -326,7 +326,7 @@
                             <th class="border-top-0 ps-4 py-3">Product Name</th>
                             <th class="border-top-0 py-3 text-end" title="Total physical units located in the warehouse">On-Hand Qty</th>
                             <th class="border-top-0 py-3 text-end" title="Units bookers can still sell: On-Hand minus open visit carts and undelivered confirmed sales orders">Available to Book</th>
-                            <th class="border-top-0 py-3 text-end" title="Predicted future stock based on incoming/outgoing orders">Forecast</th>
+                            <!-- <th class="border-top-0 py-3 text-end" title="Predicted future stock based on incoming/outgoing orders">Forecast</th> -->
                             <th t-if="this.hasFinancialAccess" class="border-top-0 py-3 text-end pe-4">Unit Price</th>
                         </tr>
                     </thead>
@@ -358,12 +358,12 @@
                                         <t t-esc="item.uom_name"/>
                                     </span>
                                 </td>
-                                <td class="text-end text-success fw-bold">
+                                <!-- <td class="text-end text-success fw-bold">
                                     <t t-esc="item.virtual_available || 0"/>
                                     <span class="text-muted small ms-1">
                                         <t t-esc="item.uom_name"/>
                                     </span>
-                                </td>
+                                </td> -->
                                 <td t-if="this.hasFinancialAccess" class="text-end pe-4 text-muted fw-bold">
                                         Rs. <t t-esc="item.list_price"/>
                                 </td>
