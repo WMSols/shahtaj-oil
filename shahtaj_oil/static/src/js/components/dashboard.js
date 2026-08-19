@@ -59,7 +59,7 @@ export class ShahtajDashboard extends Component {
             },
             // Tracks which accordion menus are currently expanded
             expandedMenus: {
-                territory: true, // Open by default
+                territory: false,
                 warehouse: false,
                 operations: false,
                 financials: false,

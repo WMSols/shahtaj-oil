@@ -1760,6 +1760,22 @@
                                     <button class="btn btn-success fw-bold text-white" t-on-click="savePurchaseOrder">Save Purchase Order</button>
                                 </div>
                             </div>
+                            <t t-if="this.state.showVendorForm">
+                                <div class="card border-0 shadow-sm rounded-3 p-3 mb-3 bg-white">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h6 class="fw-bold mb-0">New Vendor</h6>
+                                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.state.showVendorForm = false">Close</button>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-md-4"><label class="small fw-bold">Vendor Name</label><input type="text" class="form-control" t-model="this.state.vendorForm.name"/></div>
+                                        <div class="col-md-2"><label class="small fw-bold">Phone</label><input type="text" class="form-control" t-model="this.state.vendorForm.phone"/></div>
+                                        <div class="col-md-3"><label class="small fw-bold">Email</label><input type="email" class="form-control" t-model="this.state.vendorForm.email"/></div>
+                                        <div class="col-md-3"><label class="small fw-bold">Street</label><input type="text" class="form-control" t-model="this.state.vendorForm.street"/></div>
+                                        <div class="col-md-3"><label class="small fw-bold">City</label><input type="text" class="form-control" t-model="this.state.vendorForm.city"/></div>
+                                        <div class="col-md-9 d-flex align-items-end justify-content-end"><button class="btn btn-success fw-bold text-white" t-on-click="saveVendor">Save Vendor</button></div>
+                                    </div>
+                                </div>
+                            </t>
                             <div class="table-responsive bg-white rounded-3 border shadow-sm">
                                 <table class="table table-hover mb-0 align-middle">
                                     <thead class="bg-light text-uppercase small fw-bold text-muted">
@@ -1767,6 +1783,7 @@
                                             <th class="ps-3">Product</th>
                                             <th class="text-center">Qty</th>
                                             <th class="text-end">Unit Cost</th>
+                                            <th>Tax</th>
                                             <th class="text-end pe-3">Action</th>
                                         </tr>
                                     </thead>
@@ -1787,13 +1804,21 @@
                                                 <td class="text-end">
                                                     <input type="number" min="0" step="any" class="form-control form-control-sm text-end" t-model="line.price_unit"/>
                                                 </td>
+                                                <td>
+                                                    <select class="form-select form-select-sm" t-model="line.tax_id">
+                                                        <option value="">No Tax</option>
+                                                        <t t-foreach="this.state.availablePurchaseTaxes" t-as="tax" t-key="tax.id">
+                                                            <option t-att-value="tax.id"><t t-esc="tax.name"/></option>
+                                                        </t>
+                                                    </select>
+                                                </td>
                                                 <td class="text-end pe-3">
                                                     <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.removePurchaseOrderLine(line.id)">Remove</button>
                                                 </td>
                                             </tr>
                                         </t>
                                         <tr>
-                                            <td colspan="4" class="ps-3 py-3">
+                                            <td colspan="5" class="ps-3 py-3">
                                                 <button class="btn btn-sm btn-outline-primary fw-bold" t-on-click="addPurchaseOrderLine">
                                                     <i class="fa fa-plus me-1"></i> Add Product Line
                                                 </button>
@@ -1850,7 +1875,7 @@
                                                 <td><t t-esc="po.vendor"/></td>
                                                 <td><div class="fw-bold small"><t t-esc="po.date"/></div><div class="text-muted small">Expected: <t t-esc="po.expectedDate"/></div></td>
                                                 <td class="text-end fw-bold text-success">Rs. <t t-esc="po.amount"/></td>
-                                                <td class="text-center"><span class="badge bg-light border text-dark"><t t-esc="po.status"/></span></td>
+                                                <td class="text-center"><span t-attf-class="badge px-2 py-1 shadow-sm #{this.statusBadgeClass(po.status)}"><t t-esc="po.status"/></span></td>
                                                 <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewPurchaseOrder(po)">View Details</button></td>
                                             </tr>
                                         </t>
@@ -1864,24 +1889,38 @@
                             <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                                 <button class="btn btn-sm btn-light border shadow-sm fw-bold" t-on-click="() => this.state.selectedPurchaseOrder = null">Back to Purchase Orders</button>
                                 <div class="d-flex gap-2 flex-wrap">
-                                    <button t-if="this.state.selectedPurchaseOrder.status === 'Draft'" class="btn btn-primary fw-bold text-white shadow-sm" t-on-click="() => this.actionConfirmPurchaseOrder(this.state.selectedPurchaseOrder)">Confirm Order</button>
-                                    <button t-if="this.state.selectedPurchaseOrder.status === 'Confirmed'" class="btn btn-outline-dark fw-bold shadow-sm" t-on-click="() => this.actionOpenReceiptFromPurchaseOrder(this.state.selectedPurchaseOrder)">Receive Products</button>
-                                    <button t-if="this.state.selectedPurchaseOrder.status === 'Confirmed' and this.state.selectedPurchaseOrder.invoice_status === 'to invoice'" class="btn btn-success fw-bold text-white shadow-sm" t-on-click="() => this.actionCreateVendorBill(this.state.selectedPurchaseOrder)">Create Bill</button>
+                                    <t t-if="this.state.isEditingPO">
+                                        <button class="btn btn-sm btn-success fw-bold text-white shadow-sm" t-on-click="savePurchaseOrderEdits" t-att-disabled="this.state.isSavingPO">
+                                            <span t-if="this.state.isSavingPO" class="spinner-border spinner-border-sm me-1"/>
+                                            Save Changes
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="cancelEditPurchaseOrder" t-att-disabled="this.state.isSavingPO">Discard</button>
+                                    </t>
+                                    <t t-else="">
+                                        <button t-if="this.state.selectedPurchaseOrder.status === 'Draft'" class="btn btn-outline-primary fw-bold" t-on-click="toggleEditPurchaseOrder">
+                                            <i class="fa fa-pencil me-1"></i> Edit Lines
+                                        </button>
+                                        <button t-if="this.state.selectedPurchaseOrder.status === 'Draft'" class="btn btn-primary fw-bold text-white shadow-sm" t-on-click="() => this.actionConfirmPurchaseOrder(this.state.selectedPurchaseOrder)">Confirm Order</button>
+                                        <button t-if="this.state.selectedPurchaseOrder.status === 'Confirmed'" class="btn btn-outline-dark fw-bold shadow-sm" t-on-click="() => this.actionOpenReceiptFromPurchaseOrder(this.state.selectedPurchaseOrder)">Receive Products</button>
+                                        <button t-if="this.state.selectedPurchaseOrder.status === 'Confirmed' and this.state.selectedPurchaseOrder.invoice_status === 'to invoice'" class="btn btn-success fw-bold text-white shadow-sm" t-on-click="() => this.actionCreateVendorBill(this.state.selectedPurchaseOrder)">Create Bill</button>
+                                    </t>
                                 </div>
                             </div>
-                            <div class="card border-0 shadow-sm rounded-4">
+                            <div t-attf-class="card border-0 shadow-sm rounded-4 border-start border-4 #{this.statusBorderClass(this.state.selectedPurchaseOrder.status)}">
                                 <div class="p-4 border-bottom">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div>
                                             <h4 class="fw-bold mb-1"><t t-esc="this.state.selectedPurchaseOrder.display_name"/></h4>
                                             <div class="text-muted"><t t-esc="this.state.selectedPurchaseOrder.vendor"/></div>
                                         </div>
-                                        <span class="badge bg-light border text-dark px-3 py-2"><t t-esc="this.state.selectedPurchaseOrder.status"/></span>
+                                        <span t-attf-class="badge fs-6 px-3 py-2 shadow-sm #{this.statusBadgeClass(this.state.selectedPurchaseOrder.status)}"><t t-esc="this.state.selectedPurchaseOrder.status"/></span>
                                     </div>
                                     <div class="row g-3 mt-2">
-                                        <div class="col-md-4"><small class="text-muted d-block">Order Date</small><span class="fw-bold"><t t-esc="this.state.selectedPurchaseOrder.date"/></span></div>
-                                        <div class="col-md-4"><small class="text-muted d-block">Expected Delivery</small><span class="fw-bold"><t t-esc="this.state.selectedPurchaseOrder.expectedDate"/></span></div>
-                                        <div class="col-md-4"><small class="text-muted d-block">Total</small><span class="fw-bold text-success">Rs. <t t-esc="this.state.selectedPurchaseOrder.amount"/></span></div>
+                                        <div class="col-md-3"><small class="text-muted d-block">Order Date</small><span class="fw-bold"><t t-esc="this.state.selectedPurchaseOrder.date"/></span></div>
+                                        <div class="col-md-3"><small class="text-muted d-block">Expected Delivery</small><span class="fw-bold"><t t-esc="this.state.selectedPurchaseOrder.expectedDate"/></span></div>
+                                        <div class="col-md-2"><small class="text-muted d-block">Untaxed</small><span class="fw-bold">Rs. <t t-esc="this.state.selectedPurchaseOrder.amount_untaxed ? this.state.selectedPurchaseOrder.amount_untaxed.toLocaleString() : '0'"/></span></div>
+                                        <div class="col-md-2"><small class="text-muted d-block">Tax</small><span class="fw-bold">Rs. <t t-esc="this.state.selectedPurchaseOrder.amount_tax ? this.state.selectedPurchaseOrder.amount_tax.toLocaleString() : '0'"/></span></div>
+                                        <div class="col-md-2"><small class="text-muted d-block">Total</small><span class="fw-bold text-success">Rs. <t t-esc="this.state.selectedPurchaseOrder.amount"/></span></div>
                                     </div>
                                 </div>
                                 <div class="table-responsive">
@@ -1890,24 +1929,70 @@
                                             <tr>
                                                 <th class="ps-4">Product</th>
                                                 <th class="text-center">Ordered</th>
-                                                <th class="text-center">Received</th>
-                                                <th class="text-center">Billed</th>
+                                                <th t-if="!this.state.isEditingPO" class="text-center">Received</th>
+                                                <th t-if="!this.state.isEditingPO" class="text-center">Billed</th>
+                                                <th t-if="this.state.isEditingPO" class="text-end">Unit Cost</th>
+                                                <th>Tax</th>
+                                                <th class="text-end">Tax Amount</th>
                                                 <th class="text-end pe-4">Amount</th>
+                                                <th t-if="this.state.isEditingPO" class="text-end pe-3">Action</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             <t t-if="this.state.selectedPurchaseOrderLines.length === 0 and !this.state.isLoadingLines">
-                                                <tr><td colspan="5" class="text-center py-5 text-muted">No purchase lines found.</td></tr>
+                                                <tr><td t-att-colspan="this.state.isEditingPO ? 7 : 7" class="text-center py-5 text-muted">No purchase lines found.</td></tr>
                                             </t>
                                             <t t-foreach="this.state.selectedPurchaseOrderLines" t-as="line" t-key="line.id">
                                                 <tr>
-                                                    <td class="ps-4 fw-bold"><t t-esc="line.product"/></td>
-                                                    <td class="text-center"><t t-esc="line.qty"/></td>
-                                                    <td class="text-center text-primary fw-bold"><t t-esc="line.received"/></td>
-                                                    <td class="text-center text-success fw-bold"><t t-esc="line.billed"/></td>
+                                                    <td class="ps-4 fw-bold">
+                                                        <t t-if="this.state.isEditingPO">
+                                                            <select class="form-select form-select-sm" t-model="line.product_id" t-on-change="() => this.onPurchaseProductChange(line)">
+                                                                <option value="">-- Select Product --</option>
+                                                                <t t-foreach="this.state.poLookups.products" t-as="product" t-key="product.id">
+                                                                    <option t-att-value="product.id"><t t-esc="product.name"/></option>
+                                                                </t>
+                                                            </select>
+                                                        </t>
+                                                        <t t-else="">
+                                                            <t t-esc="line.product"/>
+                                                        </t>
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <t t-if="this.state.isEditingPO">
+                                                            <input type="number" min="0" step="any" class="form-control form-control-sm text-center" t-model="line.qty"/>
+                                                        </t>
+                                                        <t t-else=""><t t-esc="line.qty"/></t>
+                                                    </td>
+                                                    <td t-if="!this.state.isEditingPO" class="text-center text-primary fw-bold"><t t-esc="line.received"/></td>
+                                                    <td t-if="!this.state.isEditingPO" class="text-center text-success fw-bold"><t t-esc="line.billed"/></td>
+                                                    <td t-if="this.state.isEditingPO" class="text-end">
+                                                        <input type="number" min="0" step="any" class="form-control form-control-sm text-end" t-model="line.price"/>
+                                                    </td>
+                                                    <td>
+                                                        <t t-if="this.state.isEditingPO">
+                                                            <select class="form-select form-select-sm" t-model="line.tax_id">
+                                                                <option value="">No Tax</option>
+                                                                <t t-foreach="this.state.availablePurchaseTaxes" t-as="tax" t-key="tax.id">
+                                                                    <option t-att-value="tax.id"><t t-esc="tax.name"/></option>
+                                                                </t>
+                                                            </select>
+                                                        </t>
+                                                        <t t-else=""><span class="badge bg-light border text-dark"><t t-esc="line.taxes"/></span></t>
+                                                    </td>
+                                                    <td class="text-end">Rs. <t t-esc="line.taxAmount"/></td>
                                                     <td class="text-end pe-4 fw-bold">Rs. <t t-esc="line.subtotal"/></td>
+                                                    <td t-if="this.state.isEditingPO" class="text-end pe-3">
+                                                        <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.removePurchaseOrderEditLine(line.id)">Remove</button>
+                                                    </td>
                                                 </tr>
                                             </t>
+                                            <tr t-if="this.state.isEditingPO">
+                                                <td colspan="7" class="ps-4 py-3">
+                                                    <button class="btn btn-sm btn-outline-primary fw-bold" t-on-click="addPurchaseOrderEditLine">
+                                                        <i class="fa fa-plus me-1"></i> Add Product Line
+                                                    </button>
+                                                </td>
+                                            </tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -1952,7 +2037,7 @@
                                             <td><t t-esc="receipt.vendor"/></td>
                                             <td><t t-esc="receipt.origin"/></td>
                                             <td><t t-esc="receipt.scheduledDate"/></td>
-                                            <td class="text-center"><span class="badge bg-light border text-dark"><t t-esc="receipt.status"/></span></td>
+                                            <td class="text-center"><span t-attf-class="badge px-2 py-1 shadow-sm #{this.statusBadgeClass(receipt.status)}"><t t-esc="receipt.status"/></span></td>
                                             <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewReceipt(receipt)">View Details</button></td>
                                         </tr>
                                     </t>
@@ -1964,15 +2049,24 @@
                         <div class="p-4 bg-light">
                             <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                                 <button class="btn btn-sm btn-light border shadow-sm fw-bold" t-on-click="() => this.state.selectedReceipt = null">Back to Receipts</button>
-                                <button t-if="this.state.selectedReceipt.status === 'Ready'" class="btn btn-success fw-bold text-white shadow-sm" t-on-click="() => this.actionValidateReceipt(this.state.selectedReceipt)">Validate Receipt</button>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <button t-if="this.state.selectedReceipt.state === 'draft'" class="btn btn-primary fw-bold text-white shadow-sm" t-on-click="() => this.actionConfirmReceipt(this.state.selectedReceipt)">Confirm</button>
+                                    <button t-if="this.state.selectedReceipt.state === 'waiting' or this.state.selectedReceipt.state === 'confirmed' or this.state.selectedReceipt.state === 'partially_available'" class="btn btn-outline-dark fw-bold shadow-sm" t-on-click="() => this.actionCheckReceiptAvailability(this.state.selectedReceipt)">Check Availability</button>
+                                    <button t-if="this.state.selectedReceipt.state !== 'done' and this.state.selectedReceipt.state !== 'cancel'" class="btn btn-success fw-bold text-white shadow-sm" t-on-click="() => this.actionValidateReceipt(this.state.selectedReceipt)">Validate</button>
+                                    <button t-if="this.state.selectedReceipt.state === 'done'" class="btn btn-outline-danger fw-bold shadow-sm" t-on-click="openReturnModal">Return</button>
+                                    <button class="btn btn-outline-dark fw-bold shadow-sm" t-on-click="() => this.actionPrintReceipt(this.state.selectedReceipt)">
+                                        <i class="fa fa-print me-1"></i> Print
+                                    </button>
+                                    <button t-if="this.state.selectedReceipt.state !== 'done' and this.state.selectedReceipt.state !== 'cancel'" class="btn btn-outline-danger fw-bold" t-on-click="() => this.actionCancelReceipt(this.state.selectedReceipt)">Cancel</button>
+                                </div>
                             </div>
-                            <div class="card border-0 shadow-sm rounded-4 p-4">
+                            <div t-attf-class="card border-0 shadow-sm rounded-4 p-4 border-start border-4 #{this.statusBorderClass(this.state.selectedReceipt.status)}">
                                 <div class="d-flex justify-content-between align-items-start mb-3">
                                     <div>
                                         <h4 class="fw-bold mb-1"><t t-esc="this.state.selectedReceipt.display_name"/></h4>
                                         <div class="text-muted"><t t-esc="this.state.selectedReceipt.vendor"/></div>
                                     </div>
-                                    <span class="badge bg-light border text-dark px-3 py-2"><t t-esc="this.state.selectedReceipt.status"/></span>
+                                    <span t-attf-class="badge fs-6 px-3 py-2 shadow-sm #{this.statusBadgeClass(this.state.selectedReceipt.status)}"><t t-esc="this.state.selectedReceipt.status"/></span>
                                 </div>
                                 <div class="row g-3 mb-4">
                                     <div class="col-md-6"><small class="text-muted d-block">Origin PO</small><span class="fw-bold"><t t-esc="this.state.selectedReceipt.origin"/></span></div>
@@ -2045,7 +2139,7 @@
                                             <td><t t-esc="bill.origin"/></td>
                                             <td><t t-esc="bill.date"/></td>
                                             <td class="text-end fw-bold text-success">Rs. <t t-esc="bill.amount"/></td>
-                                            <td class="text-center"><span class="badge bg-light border text-dark"><t t-esc="bill.status"/></span></td>
+                                            <td class="text-center"><span t-attf-class="badge px-2 py-1 shadow-sm #{this.statusBadgeClass(bill.status)}"><t t-esc="bill.status"/></span></td>
                                             <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewVendorBill(bill)">View Details</button></td>
                                         </tr>
                                     </t>
@@ -2055,19 +2149,64 @@
                     </t>
                     <t t-else="">
                         <div class="p-4 bg-light">
-                            <button class="btn btn-sm btn-light border shadow-sm fw-bold mb-4" t-on-click="() => this.state.selectedVendorBill = null">Back to Vendor Bills</button>
-                            <div class="card border-0 shadow-sm rounded-4 p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                                <button class="btn btn-sm btn-light border shadow-sm fw-bold" t-on-click="() => this.state.selectedVendorBill = null">Back to Vendor Bills</button>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <t t-if="this.state.isEditingVendorBill">
+                                        <button class="btn btn-sm btn-success fw-bold text-white shadow-sm" t-on-click="saveVendorBillEdits" t-att-disabled="this.state.isSavingVendorBill">
+                                            <span t-if="this.state.isSavingVendorBill" class="spinner-border spinner-border-sm me-1"/>
+                                            Save Changes
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="cancelEditVendorBill" t-att-disabled="this.state.isSavingVendorBill">Discard</button>
+                                    </t>
+                                    <t t-else="">
+                                        <button t-if="this.state.selectedVendorBill.status === 'Draft'" class="btn btn-outline-primary fw-bold" t-on-click="toggleEditVendorBill">
+                                            <i class="fa fa-pencil me-1"></i> Edit Lines
+                                        </button>
+                                        <button t-if="this.state.selectedVendorBill.status === 'Draft'" class="btn btn-outline-danger fw-bold" t-on-click="() => this.actionCancelVendorBill(this.state.selectedVendorBill)" t-att-disabled="this.state.isCancelling">
+                                            <span t-if="this.state.isCancelling" class="spinner-border spinner-border-sm me-2"/>
+                                            Cancel
+                                        </button>
+                                        <button t-if="this.state.selectedVendorBill.status === 'Posted' or this.state.selectedVendorBill.status === 'Cancelled'" class="btn btn-warning fw-bold text-dark" t-on-click="() => this.actionResetVendorBill(this.state.selectedVendorBill)" t-att-disabled="this.state.isResetting">
+                                            <span t-if="this.state.isResetting" class="spinner-border spinner-border-sm me-2"/>
+                                            Reset to Draft
+                                        </button>
+                                        <button t-if="this.state.selectedVendorBill.status === 'Draft'" class="btn btn-success fw-bold text-white shadow-sm" t-on-click="() => this.actionConfirmVendorBill(this.state.selectedVendorBill)" t-att-disabled="this.state.isConfirming">
+                                            <span t-if="this.state.isConfirming" class="spinner-border spinner-border-sm me-2"/>
+                                            Confirm
+                                        </button>
+                                        <button t-if="this.state.selectedVendorBill.status === 'Posted' or this.state.selectedVendorBill.status === 'Partial'" class="btn btn-success fw-bold text-white shadow-sm" t-on-click="openPaymentModal">
+                                            <i class="fa fa-money me-1"></i> Pay
+                                        </button>
+                                        <button t-if="this.canIssueVendorCreditNote(this.state.selectedVendorBill)" class="btn btn-danger fw-bold text-white shadow-sm" t-on-click="() => this.actionVendorBillCreditNote(this.state.selectedVendorBill)">
+                                            <i class="fa fa-reply me-1"></i> Credit Note
+                                        </button>
+                                    </t>
+                                </div>
+                            </div>
+                            <div t-attf-class="card border-0 shadow-sm rounded-4 p-4 border-start border-4 #{this.statusBorderClass(this.state.selectedVendorBill.status)}">
                                 <div class="d-flex justify-content-between align-items-start mb-3">
                                     <div>
                                         <h4 class="fw-bold mb-1"><t t-esc="this.state.selectedVendorBill.display_name"/></h4>
                                         <div class="text-muted"><t t-esc="this.state.selectedVendorBill.vendor"/></div>
                                     </div>
-                                    <span class="badge bg-light border text-dark px-3 py-2"><t t-esc="this.state.selectedVendorBill.status"/></span>
+                                    <span t-attf-class="badge fs-6 px-3 py-2 shadow-sm #{this.statusBadgeClass(this.state.selectedVendorBill.status)}"><t t-esc="this.state.selectedVendorBill.status"/></span>
                                 </div>
                                 <div class="row g-3 mb-4">
-                                    <div class="col-md-4"><small class="text-muted d-block">Date</small><span class="fw-bold"><t t-esc="this.state.selectedVendorBill.date"/></span></div>
-                                    <div class="col-md-4"><small class="text-muted d-block">Origin</small><span class="fw-bold"><t t-esc="this.state.selectedVendorBill.origin"/></span></div>
-                                    <div class="col-md-4"><small class="text-muted d-block">Total</small><span class="fw-bold text-success">Rs. <t t-esc="this.state.selectedVendorBill.amount"/></span></div>
+                                    <div class="col-md-3">
+                                        <small class="text-muted d-block">Bill Date</small>
+                                        <t t-if="this.state.selectedVendorBill.status === 'Draft'">
+                                            <input type="date" class="form-control form-control-sm mt-1" t-model="this.state.selectedVendorBill.invoiceDate"/>
+                                        </t>
+                                        <t t-else="">
+                                            <span class="fw-bold"><t t-esc="this.state.selectedVendorBill.date"/></span>
+                                        </t>
+                                    </div>
+                                    <div class="col-md-3"><small class="text-muted d-block">Origin</small><span class="fw-bold"><t t-esc="this.state.selectedVendorBill.origin"/></span></div>
+                                    <div class="col-md-2"><small class="text-muted d-block">Untaxed</small><span class="fw-bold">Rs. <t t-esc="this.state.selectedVendorBill.amount_untaxed ? this.state.selectedVendorBill.amount_untaxed.toLocaleString() : '0'"/></span></div>
+                                    <div class="col-md-2"><small class="text-muted d-block">Tax</small><span class="fw-bold">Rs. <t t-esc="this.state.selectedVendorBill.amount_tax ? this.state.selectedVendorBill.amount_tax.toLocaleString() : '0'"/></span></div>
+                                    <div class="col-md-2"><small class="text-muted d-block">Total</small><span class="fw-bold text-success">Rs. <t t-esc="this.state.selectedVendorBill.amount"/></span></div>
+                                    <div class="col-md-12"><small class="text-muted d-block">Amount Due</small><span class="fw-bold text-danger">Rs. <t t-esc="this.state.selectedVendorBill.residual"/></span></div>
                                 </div>
                                 <div class="table-responsive">
                                     <table class="table table-hover mb-0 align-middle">
@@ -2076,21 +2215,64 @@
                                                 <th class="ps-4">Product</th>
                                                 <th class="text-center">Qty</th>
                                                 <th class="text-end">Unit Price</th>
+                                                <th>Tax</th>
                                                 <th class="text-end pe-4">Subtotal</th>
+                                                <th t-if="this.state.isEditingVendorBill" class="text-end pe-3">Action</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             <t t-if="this.state.selectedVendorBillLines.length === 0 and !this.state.isLoadingLines">
-                                                <tr><td colspan="4" class="text-center py-5 text-muted">No bill lines found.</td></tr>
+                                                <tr><td t-att-colspan="this.state.isEditingVendorBill ? 6 : 5" class="text-center py-5 text-muted">No bill lines found.</td></tr>
                                             </t>
                                             <t t-foreach="this.state.selectedVendorBillLines" t-as="line" t-key="line.id">
                                                 <tr>
-                                                    <td class="ps-4 fw-bold"><t t-esc="line.product"/></td>
-                                                    <td class="text-center"><t t-esc="line.qty"/></td>
-                                                    <td class="text-end">Rs. <t t-esc="line.price"/></td>
+                                                    <td class="ps-4 fw-bold">
+                                                        <t t-if="this.state.isEditingVendorBill">
+                                                            <select class="form-select form-select-sm" t-model="line.product_id" t-on-change="() => this.onVendorBillProductChange(line)">
+                                                                <option value="">-- Select Product --</option>
+                                                                <t t-foreach="this.state.poLookups.products" t-as="product" t-key="product.id">
+                                                                    <option t-att-value="product.id"><t t-esc="product.name"/></option>
+                                                                </t>
+                                                            </select>
+                                                        </t>
+                                                        <t t-else=""><t t-esc="line.product"/></t>
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <t t-if="this.state.isEditingVendorBill">
+                                                            <input type="number" min="0" step="any" class="form-control form-control-sm text-center" t-model="line.qty"/>
+                                                        </t>
+                                                        <t t-else=""><t t-esc="line.qty"/></t>
+                                                    </td>
+                                                    <td class="text-end">
+                                                        <t t-if="this.state.isEditingVendorBill">
+                                                            <input type="number" min="0" step="any" class="form-control form-control-sm text-end" t-model="line.price"/>
+                                                        </t>
+                                                        <t t-else="">Rs. <t t-esc="line.price"/></t>
+                                                    </td>
+                                                    <td>
+                                                        <t t-if="this.state.isEditingVendorBill">
+                                                            <select class="form-select form-select-sm" t-model="line.tax_id">
+                                                                <option value="">No Tax</option>
+                                                                <t t-foreach="this.state.availablePurchaseTaxes" t-as="tax" t-key="tax.id">
+                                                                    <option t-att-value="tax.id"><t t-esc="tax.name"/></option>
+                                                                </t>
+                                                            </select>
+                                                        </t>
+                                                        <t t-else=""><span class="badge bg-light border text-dark"><t t-esc="line.taxes"/></span></t>
+                                                    </td>
                                                     <td class="text-end pe-4 fw-bold">Rs. <t t-esc="line.subtotal"/></td>
+                                                    <td t-if="this.state.isEditingVendorBill" class="text-end pe-3">
+                                                        <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.removeVendorBillEditLine(line.id)">Remove</button>
+                                                    </td>
                                                 </tr>
                                             </t>
+                                            <tr t-if="this.state.isEditingVendorBill">
+                                                <td colspan="6" class="ps-4 py-3">
+                                                    <button class="btn btn-sm btn-outline-primary fw-bold" t-on-click="addVendorBillEditLine">
+                                                        <i class="fa fa-plus me-1"></i> Add Product Line
+                                                    </button>
+                                                </td>
+                                            </tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -2171,6 +2353,128 @@
                             </div>
                         </div>
                     </t>
+                </t>
+
+                <t t-if="this.state.showPaymentModal">
+                    <div class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background-color: rgba(0, 0, 0, 0.6); z-index: 1050; padding: 1rem;">
+                        <div class="bg-white p-4 rounded-3 shadow-lg" style="width: 500px; max-height: 90vh; overflow-y: auto;">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
+                                <div>
+                                    <h5 class="fw-bold text-dark mb-0">
+                                        <i class="fa fa-money text-success me-2"></i> Register Payment
+                                    </h5>
+                                    <small class="text-muted">Record a payment against this vendor bill.</small>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="small fw-bold text-muted">Linking to Document</label>
+                                <input type="text" class="form-control bg-light fw-bold text-primary" t-att-value="this.state.paymentForm.invoice_name" disabled="1"/>
+                            </div>
+                            <div class="row">
+                                <div class="col-6 mb-3">
+                                    <label class="small fw-bold">Payment Amount (Rs.)</label>
+                                    <input type="number" class="form-control fw-bold text-success" t-model="this.state.paymentForm.amount"/>
+                                </div>
+                                <div class="col-6 mb-3">
+                                    <label class="small fw-bold">Payment Date</label>
+                                    <input type="date" class="form-control" t-model="this.state.paymentForm.date"/>
+                                </div>
+                            </div>
+                            <div class="mb-3 mt-2">
+                                <label class="small fw-bold">Payment Method</label>
+                                <select class="form-select form-control" t-model="this.state.paymentForm.method">
+                                    <option value="cash">Cash</option>
+                                    <option value="cheque">Cheque</option>
+                                    <option value="online">Online Bank Transfer</option>
+                                    <option value="card">Card / POS</option>
+                                    <option value="other">Other Bank Payment</option>
+                                </select>
+                            </div>
+                            <t t-if="this.state.paymentForm.method !== 'cash'">
+                                <div class="row bg-light border rounded-3 p-3 mb-3 mx-0">
+                                    <div class="col-12 mb-2">
+                                        <label class="small fw-bold text-muted">Vendor Bank</label>
+                                        <input type="text" class="form-control form-control-sm" t-model="this.state.paymentForm.bank_name" placeholder="e.g. HBL, Meezan"/>
+                                    </div>
+                                    <div class="col-6 mb-2">
+                                        <label class="small fw-bold text-muted">Vendor Acc No</label>
+                                        <input type="text" class="form-control form-control-sm" t-model="this.state.paymentForm.account_number"/>
+                                    </div>
+                                    <div class="col-6 mb-0">
+                                        <label class="small fw-bold text-muted">Cheque/Trans Ref</label>
+                                        <input type="text" class="form-control form-control-sm" t-model="this.state.paymentForm.reference"/>
+                                    </div>
+                                </div>
+                            </t>
+                            <div class="mb-3">
+                                <label class="small fw-bold">Payment Journal (Bank/Cash)</label>
+                                <select class="form-select form-control" t-model="this.state.paymentForm.journal_id">
+                                    <t t-foreach="this.state.journals" t-as="j" t-key="j.id">
+                                        <option t-att-value="j.id">
+                                            <t t-esc="j.name"/>
+                                        </option>
+                                    </t>
+                                </select>
+                            </div>
+                            <div class="mb-4">
+                                <label class="small fw-bold">Payment Notes</label>
+                                <textarea class="form-control" rows="2" t-model="this.state.paymentForm.notes" placeholder="Optional notes..."></textarea>
+                            </div>
+                            <div class="d-flex justify-content-end gap-2 border-top pt-3 mt-2">
+                                <button class="btn btn-light fw-bold border px-4" t-on-click="closePaymentModal" t-att-disabled="this.state.isPaying">Cancel</button>
+                                <button class="btn btn-success fw-bold text-white px-4 shadow-sm" t-on-click="processPayment" t-att-disabled="this.state.isPaying">
+                                    <span t-if="this.state.isPaying" class="spinner-border spinner-border-sm me-2"/>
+                                    <t t-if="this.state.isPaying">Validating...</t>
+                                    <t t-else="">Validate &amp; Pay</t>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <t t-if="this.state.showReturnModal">
+                    <div class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background-color: rgba(0, 0, 0, 0.6); z-index: 1050; padding: 1rem;">
+                        <div class="bg-white p-4 rounded-3 shadow-lg" style="width: 560px; max-height: 90vh; overflow-y: auto;">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-3">
+                                <div>
+                                    <h5 class="fw-bold text-dark mb-0">Return Products</h5>
+                                    <small class="text-muted">Enter a quantity to return, or return all received qty.</small>
+                                </div>
+                            </div>
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead class="bg-light small text-muted text-uppercase">
+                                        <tr>
+                                            <th class="ps-2">Product</th>
+                                            <th class="text-center">Received</th>
+                                            <th class="text-center">Return Qty</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-foreach="this.state.returnForm.lines" t-as="line" t-key="line.move_id">
+                                            <tr>
+                                                <td class="ps-2 fw-bold"><t t-esc="line.product"/></td>
+                                                <td class="text-center"><t t-esc="line.maxQty"/></td>
+                                                <td class="text-center">
+                                                    <input type="number" min="0" t-att-max="line.maxQty" step="any" class="form-control form-control-sm text-center" t-model="line.qty"/>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center border-top pt-3">
+                                <button class="btn btn-outline-dark fw-bold" t-on-click="returnAllReceiptQty" t-att-disabled="this.state.isReturning">Return All</button>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-light fw-bold border" t-on-click="closeReturnModal" t-att-disabled="this.state.isReturning">Cancel</button>
+                                    <button class="btn btn-danger fw-bold text-white" t-on-click="submitReturnReceipt" t-att-disabled="this.state.isReturning">
+                                        <span t-if="this.state.isReturning" class="spinner-border spinner-border-sm me-1"/>
+                                        Create Return
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </t>
             </t>
 
