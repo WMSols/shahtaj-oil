@@ -1,8 +1,9 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart } from "@odoo/owl";
+import { Component, useState, onWillStart, onWillUnmount, useRef, useEffect } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { registry } from "@web/core/registry";
+import { loadBundle, loadJS } from "@web/core/assets";
 import { hasFinancialAccess } from "../shahtaj_access";
 import { StaffManagement } from "./staff_management";
 import { OperationsTracking } from "./operations_tracking";
@@ -19,16 +20,13 @@ export class ShahtajDashboard extends Component {
 
     setup() {
         this.orm = useService("orm");
+        this.cashChartRef = useRef("cashChart");
+        this.cashChart = null;
+        this._cashChartToken = 0;
         const today = new Date();
         const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-        const formatDate = (d) => {
-            const year = d.getFullYear();
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-        this.todayStr = formatDate(today);
-        this.tomorrowStr = formatDate(tomorrow);
+        this.todayStr = this._formatDate(today);
+        this.tomorrowStr = this._formatDate(tomorrow);
 
         this.state = useState({
             activeTab: 'overview', // Default to the new Master Overview
@@ -36,6 +34,7 @@ export class ShahtajDashboard extends Component {
             isSidebarOpen: false, 
             isSwitchingTab: false,
             isLoadingKpis: false,
+            cashRangeDays: 30,
             // Master KPI State
             kpis: {
                 totalZones: 0,
@@ -55,7 +54,12 @@ export class ShahtajDashboard extends Component {
                 toInvoice: 0,
                 openInvoices: 0,
                 creditNotes: 0,
-                approvedShops: 0,
+                vendorBills: 0,
+                cashIn: 0,
+                cashOut: 0,
+                netCash: 0,
+                stillOwed: 0,
+                cashTrend: { labels: [], cashIn: [], cashOut: [] },
             },
             // Tracks which accordion menus are currently expanded
             expandedMenus: {
@@ -71,9 +75,71 @@ export class ShahtajDashboard extends Component {
             this.switchTab(ev.detail.tab, ev.detail.subTab);
         });
         onWillStart(async () => {
-            await this.fetchMasterKPIs();
+            const chartPromise = this.hasFinancialAccess ? this.ensureChartJs() : Promise.resolve();
+            await Promise.all([this.fetchMasterKPIs(), chartPromise]);
         });
+        useEffect(
+            () => {
+                this.renderCashChart();
+                return () => this.destroyCashChart();
+            },
+            () => [
+                this.state.activeTab,
+                this.state.isSwitchingTab,
+                this.state.cashRangeDays,
+                this.state.kpis.cashIn,
+                this.state.kpis.cashOut,
+                this.state.kpis.cashTrend.labels.join("|"),
+            ]
+        );
+        onWillUnmount(() => this.destroyCashChart());
         
+    }
+
+    _formatDate(d) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    _parseDayKey(value) {
+        if (!value) {
+            return "";
+        }
+        return String(value).slice(0, 10);
+    }
+
+    _buildDayKeys(fromStr, toStr) {
+        const keys = [];
+        const cursor = new Date(`${fromStr}T00:00:00`);
+        const end = new Date(`${toStr}T00:00:00`);
+        while (cursor <= end) {
+            keys.push(this._formatDate(cursor));
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        return keys;
+    }
+
+    _getCashDateRange() {
+        const days = this.state.cashRangeDays || 30;
+        const to = new Date();
+        const from = new Date(to.getFullYear(), to.getMonth(), to.getDate() - (days - 1));
+        return { from: this._formatDate(from), to: this._formatDate(to) };
+    }
+
+    _labelForDay(dayKey) {
+        const date = new Date(`${dayKey}T00:00:00`);
+        return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    }
+
+    formatMoney(value) {
+        const amount = Number(value) || 0;
+        const abs = Math.abs(amount).toLocaleString(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        });
+        return amount < 0 ? `Rs. -${abs}` : `Rs. ${abs}`;
     }
     
     async fetchMasterKPIs() {
@@ -103,17 +169,22 @@ export class ShahtajDashboard extends Component {
                 this.orm.searchCount("shahtaj.visit.target", [["active", "=", true]]),
             ]);
 
-            const financialCountsPromise = this.hasFinancialAccess
-                ? Promise.all([
-                    this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false]]),
-                    this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]]),
-                    this.orm.searchCount("account.move", [["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true], ["state", "=", "posted"], ["payment_state", "in", ["not_paid", "partial"]]]),
-                    this.orm.searchCount("account.move", [["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]]),
-                    this.orm.searchCount("res.partner", [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]]),
-                ])
-                : Promise.resolve([0, 0, 0, 0, 0]);
+            const financialPromise = this.hasFinancialAccess
+                ? this.fetchFinancialOverview()
+                : Promise.resolve({
+                    totalOrders: 0,
+                    toInvoice: 0,
+                    openInvoices: 0,
+                    creditNotes: 0,
+                    vendorBills: 0,
+                    cashIn: 0,
+                    cashOut: 0,
+                    netCash: 0,
+                    stillOwed: 0,
+                    cashTrend: { labels: [], cashIn: [], cashOut: [] },
+                });
 
-            const [coreCounts, financialCounts] = await Promise.all([coreCountsPromise, financialCountsPromise]);
+            const [coreCounts, financial] = await Promise.all([coreCountsPromise, financialPromise]);
 
             const [
                 zones, routes, shops, pendingShops,
@@ -122,8 +193,6 @@ export class ShahtajDashboard extends Component {
                 totalProducts, outOfStockProducts,
                 activeSchedules, activeTargets,
             ] = coreCounts;
-
-            const [totalOrders, toInvoice, openInvoices, creditNotes, approvedShops] = financialCounts;
 
             Object.assign(this.state.kpis, {
                 totalZones: zones,
@@ -139,11 +208,7 @@ export class ShahtajDashboard extends Component {
                 outOfStockProducts,
                 activeSchedules,
                 activeTargets,
-                totalOrders,
-                toInvoice,
-                openInvoices,
-                creditNotes,
-                approvedShops,
+                ...financial,
             });
         } catch (error) {
             console.error("Failed to fetch Master KPIs", error);
@@ -151,8 +216,209 @@ export class ShahtajDashboard extends Component {
             this.state.isLoadingKpis = false;
         }
     }
+
+    async fetchFinancialOverview() {
+        const { from, to } = this._getCashDateRange();
+        const dayKeys = this._buildDayKeys(from, to);
+        const byDay = {};
+        for (const key of dayKeys) {
+            byDay[key] = { cashIn: 0, cashOut: 0 };
+        }
+
+        const paymentDomain = [
+            ["journal_id.type", "in", ["bank", "cash"]],
+            ["date", ">=", from],
+            ["date", "<=", to],
+            ["state", "in", ["paid", "in_process", "posted", "reconciled"]],
+        ];
+
+        const [
+            totalOrders,
+            toInvoice,
+            openInvoices,
+            creditNotes,
+            vendorBills,
+            payments,
+            shopsData,
+        ] = await Promise.all([
+            this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false]]),
+            this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]]),
+            this.orm.searchCount("account.move", [["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true], ["state", "=", "posted"], ["payment_state", "in", ["not_paid", "partial"]]]),
+            this.orm.searchCount("account.move", [["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]]),
+            this.orm.searchCount("account.move", [["move_type", "in", ["in_invoice", "in_refund"]], ["state", "in", ["draft", "posted"]]]),
+            this.orm.searchRead("account.payment", paymentDomain, ["date", "amount", "amount_signed", "payment_type"], { limit: 10000 }),
+            this.orm.searchRead("res.partner", [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]], ["outstanding_balance"], { limit: 10000 }),
+        ]);
+
+        let cashIn = 0;
+        let cashOut = 0;
+        for (const payment of payments || []) {
+            const amount = Math.abs(payment.amount_signed || payment.amount || 0);
+            const day = this._parseDayKey(payment.date);
+            if (payment.payment_type === "outbound") {
+                cashOut += amount;
+                if (byDay[day]) {
+                    byDay[day].cashOut += amount;
+                }
+            } else {
+                cashIn += amount;
+                if (byDay[day]) {
+                    byDay[day].cashIn += amount;
+                }
+            }
+        }
+
+        const stillOwed = (shopsData || []).reduce((sum, shop) => sum + (shop.outstanding_balance || 0), 0);
+
+        return {
+            totalOrders,
+            toInvoice,
+            openInvoices,
+            creditNotes,
+            vendorBills,
+            cashIn,
+            cashOut,
+            netCash: cashIn - cashOut,
+            stillOwed,
+            cashTrend: {
+                labels: dayKeys.map((key) => this._labelForDay(key)),
+                cashIn: dayKeys.map((key) => byDay[key].cashIn),
+                cashOut: dayKeys.map((key) => byDay[key].cashOut),
+            },
+        };
+    }
+
+    async setCashRangeDays(days) {
+        if (this.state.cashRangeDays === days) {
+            return;
+        }
+        this.state.cashRangeDays = days;
+        await this.fetchMasterKPIs();
+    }
+
+    async ensureChartJs() {
+        if (window.Chart) {
+            return window.Chart.default || window.Chart;
+        }
+        try {
+            await loadBundle("web.chartjs_lib");
+        } catch (_error) {
+            await loadJS("/web/static/lib/Chart/Chart.js");
+        }
+        return window.Chart?.default || window.Chart;
+    }
+
+    destroyCashChart() {
+        if (this.cashChart) {
+            this.cashChart.destroy();
+            this.cashChart = null;
+        }
+    }
+
+    async renderCashChart() {
+        if (!this.hasFinancialAccess || this.state.activeTab !== "overview" || this.state.isSwitchingTab) {
+            this.destroyCashChart();
+            return;
+        }
+        const canvas = this.cashChartRef.el;
+        if (!canvas) {
+            return;
+        }
+        this._cashChartToken += 1;
+        const token = this._cashChartToken;
+        const ChartLib = await this.ensureChartJs();
+        if (!ChartLib || token !== this._cashChartToken) {
+            return;
+        }
+        this.destroyCashChart();
+        const trend = this.state.kpis.cashTrend || { labels: [], cashIn: [], cashOut: [] };
+        this.cashChart = new ChartLib(canvas, {
+            type: "bar",
+            data: {
+                labels: trend.labels,
+                datasets: [
+                    {
+                        label: "Cash in",
+                        data: trend.cashIn,
+                        backgroundColor: "rgba(52, 211, 153, 0.88)",
+                        borderRadius: 4,
+                        maxBarThickness: 18,
+                    },
+                    {
+                        label: "Cash out",
+                        data: trend.cashOut,
+                        backgroundColor: "rgba(251, 146, 60, 0.92)",
+                        borderRadius: 4,
+                        maxBarThickness: 18,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: "index", intersect: false },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: "#e2e8f0",
+                            boxWidth: 12,
+                            font: { weight: "600" },
+                        },
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => `${context.dataset.label}: ${this.formatMoney(context.parsed.y)}`,
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        ticks: { color: "#94a3b8", maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+                        grid: { display: false },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            color: "#94a3b8",
+                            callback: (value) => this.formatMoney(value),
+                        },
+                        grid: { color: "rgba(255, 255, 255, 0.08)" },
+                    },
+                },
+            },
+        });
+    }
     get hasFinancialAccess() {
         return hasFinancialAccess();
+    }
+
+    get overviewDateLabel() {
+        return new Date().toLocaleDateString("en-GB", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+        });
+    }
+
+    get onlineBookerPct() {
+        const total = this.state.kpis.totalBookers;
+        if (!total) {
+            return 0;
+        }
+        return Math.round((this.state.kpis.onlineBookers / total) * 100);
+    }
+
+    get inStockProducts() {
+        return Math.max(0, this.state.kpis.totalProducts - this.state.kpis.outOfStockProducts);
+    }
+
+    get hasAttentionItems() {
+        const kpis = this.state.kpis;
+        return kpis.pendingShops > 0
+            || kpis.pendingDeliveries > 0
+            || kpis.outOfStockProducts > 0
+            || (this.hasFinancialAccess && kpis.toInvoice > 0);
     }
 
     async toggleMenu(menuName, defaultSubTab = '') {
