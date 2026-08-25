@@ -341,7 +341,7 @@ export class FinancialsInvoicing extends Component {
             'credit_notes': { stateKey: 'creditNotes', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"] },
             'payments': { stateKey: 'payments', model: 'account.payment', fields: ["name", "partner_id", "date", "amount", "journal_id", "memo", "state", "shahtaj_payment_channel", "shahtaj_payer_bank_name", "shahtaj_payer_account_number", "shahtaj_instrument_reference", "shahtaj_payment_notes"] },
             'purchase_orders': { stateKey: 'purchaseOrders', model: 'purchase.order', fields: ["name", "partner_id", "date_order", "date_planned", "amount_untaxed", "amount_tax", "amount_total", "state", "invoice_status", "currency_id"] },
-            'receipts': { stateKey: 'receipts', model: 'stock.picking', fields: ["name", "partner_id", "origin", "scheduled_date", "state", "purchase_id"] },
+            'receipts': { stateKey: 'receipts', model: 'stock.picking', fields: this._receiptFields() },
             'vendor_bills': { stateKey: 'vendorBills', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "invoice_origin", "move_type", "journal_id"] },
             'vendors': { stateKey: 'vendors', model: 'res.partner', fields: ["name", "phone", "email", "street", "city", "supplier_rank"] },
             'credit': { stateKey: 'credits', model: 'res.partner', fields: ["name", "owner_name", "shahtaj_shop_category", "credit_limit", "outstanding_balance"] },
@@ -367,7 +367,7 @@ export class FinancialsInvoicing extends Component {
             if (stateKey === 'creditNotes') domain.push(["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]);
             if (stateKey === 'payments') domain.push(["partner_id.is_shahtaj_shop", "=", true]);
             if (stateKey === 'purchaseOrders') domain.push(["partner_id.supplier_rank", ">", 0]);
-            if (stateKey === 'receipts') domain.push(["picking_type_code", "=", "incoming"]);
+            if (stateKey === 'receipts') domain.push(...this._receiptsListDomain());
             if (stateKey === 'vendorBills') domain.push(["move_type", "in", ["in_invoice", "in_refund"]]);
             if (stateKey === 'vendors') domain.push(["supplier_rank", ">", 0], ["is_shahtaj_shop", "=", false]);
             if (stateKey === 'credits') domain.push(["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]);
@@ -408,7 +408,8 @@ export class FinancialsInvoicing extends Component {
                 }
                 if (stateKey === 'receipts') {
                     if (filters.status === 'Ready') domain.push(['state', 'in', ['assigned', 'confirmed', 'waiting']]);
-                    if (filters.status === 'Done') domain.push(['state', '=', 'done']);
+                    if (filters.status === 'Product Received') domain.push(['state', '=', 'done'], ['picking_type_code', '=', 'incoming']);
+                    if (filters.status === 'Returned') domain.push(['state', '=', 'done'], ['picking_type_code', '=', 'outgoing']);
                     if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
                 }
                 if (stateKey === 'vendorBills') {
@@ -2027,7 +2028,8 @@ export class FinancialsInvoicing extends Component {
             "To Approve": "bg-warning text-dark",
             Ready: "bg-info text-white",
             Waiting: "bg-warning text-dark",
-            Done: "bg-success text-white",
+            "Product Received": "bg-success text-white",
+            Returned: "bg-warning text-dark",
             Posted: "bg-info text-white",
             Partial: "bg-warning text-dark",
             Paid: "bg-success text-white",
@@ -2043,7 +2045,8 @@ export class FinancialsInvoicing extends Component {
             "To Approve": "border-warning",
             Ready: "border-info",
             Waiting: "border-warning",
-            Done: "border-success",
+            "Product Received": "border-success",
+            Returned: "border-warning",
             Posted: "border-info",
             Partial: "border-warning",
             Paid: "border-success",
@@ -2261,10 +2264,29 @@ export class FinancialsInvoicing extends Component {
         await this.viewVendorBill(this._mapVendorBill(records[0]));
     }
 
+    _receiptsListDomain() {
+        // Match native Receipts & Returns: incoming WH/IN plus vendor returns (WH/OUT to supplier).
+        return [
+            "|",
+            ["picking_type_code", "=", "incoming"],
+            "&",
+            ["location_dest_id.usage", "=", "supplier"],
+            "|",
+            ["purchase_id", "!=", false],
+            ["return_id", "!=", false],
+        ];
+    }
+
+    _receiptFields() {
+        return ["name", "partner_id", "origin", "scheduled_date", "state", "purchase_id", "picking_type_code", "return_id"];
+    }
+
     _mapReceipt(pick) {
         const state = pick.state || 'draft';
+        const pickingType = pick.picking_type_code || 'incoming';
+        const isReturn = pickingType === 'outgoing';
         let status = 'Waiting';
-        if (state === 'done') status = 'Done';
+        if (state === 'done') status = isReturn ? 'Returned' : 'Product Received';
         else if (state === 'cancel') status = 'Cancelled';
         else if (state === 'draft') status = 'Draft';
         else if (state === 'assigned') status = 'Ready';
@@ -2276,6 +2298,9 @@ export class FinancialsInvoicing extends Component {
             scheduledDate: pick.scheduled_date ? pick.scheduled_date.split(" ")[0] : 'N/A',
             status,
             state,
+            pickingType,
+            isReturn,
+            typeLabel: isReturn ? 'Return' : 'Receipt',
             purchaseId: pick.purchase_id ? pick.purchase_id[0] : false,
         };
     }
@@ -2284,7 +2309,7 @@ export class FinancialsInvoicing extends Component {
         const records = await this.orm.searchRead(
             "stock.picking",
             [["id", "=", receiptId]],
-            ["name", "partner_id", "origin", "scheduled_date", "state", "purchase_id"]
+            this._receiptFields()
         );
         if (!records.length) {
             return;
@@ -2415,7 +2440,7 @@ export class FinancialsInvoicing extends Component {
             const receipts = await this.orm.searchRead(
                 "stock.picking",
                 ["|", ["purchase_id", "=", po.id], ["origin", "=", po.display_name], ["picking_type_code", "=", "incoming"]],
-                ["name", "partner_id", "origin", "scheduled_date", "state", "purchase_id"],
+                this._receiptFields(),
                 { limit: 1, order: "id desc" }
             );
             if (!receipts.length) {
@@ -2436,7 +2461,7 @@ export class FinancialsInvoicing extends Component {
             await this.orm.call("stock.picking", "action_confirm", [[receipt.id]]);
             await this.fetchActiveList();
             await this._reloadReceipt(receipt.id);
-            this.notification.add("Receipt confirmed.", { type: "success" });
+            this.notification.add((receipt.isReturn ? "Return" : "Receipt") + " confirmed.", { type: "success" });
         } catch (error) {
             this.notification.add("Failed to confirm receipt: " + (error.data?.message || error.message), { type: "danger" });
         }
@@ -2464,21 +2489,22 @@ export class FinancialsInvoicing extends Component {
             await this.fetchRealData({ includeLookups: true, includePnl: false });
             await this.fetchActiveList();
             await this._reloadReceipt(receipt.id);
-            this.notification.add("Receipt validated successfully.", { type: "success" });
+            this.notification.add((receipt.isReturn ? "Return" : "Receipt") + " validated successfully.", { type: "success" });
         } catch (error) {
             this.notification.add("Failed to validate receipt: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
 
     actionCancelReceipt(receipt) {
-        this.showConfirm("Cancel Receipt", "Are you sure you want to cancel this incoming receipt?", async () => {
+        const label = receipt.isReturn ? "Return" : "Receipt";
+        this.showConfirm(`Cancel ${label}`, `Are you sure you want to cancel this ${label.toLowerCase()}?`, async () => {
             try {
                 await this.orm.call("stock.picking", "action_cancel", [[receipt.id]]);
                 await this.fetchActiveList();
                 await this._reloadReceipt(receipt.id);
-                this.notification.add("Receipt cancelled.", { type: "success" });
+                this.notification.add(`${label} cancelled.`, { type: "success" });
             } catch (error) {
-                this.notification.add("Failed to cancel receipt: " + (error.data?.message || error.message), { type: "danger" });
+                this.notification.add(`Failed to cancel ${label.toLowerCase()}: ` + (error.data?.message || error.message), { type: "danger" });
             }
         });
     }
@@ -2506,7 +2532,7 @@ export class FinancialsInvoicing extends Component {
 
     openReturnModal() {
         const receipt = this.state.selectedReceipt;
-        if (!receipt || receipt.state !== "done") {
+        if (!receipt || receipt.state !== "done" || receipt.isReturn) {
             return;
         }
         if (!this.state.selectedReceiptLines.length) {

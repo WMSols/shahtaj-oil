@@ -56,7 +56,7 @@ export class OperationsTracking extends Component {
             filters: {
                 deliveries: { search: '', status: '' },
                 checkins: { search: '', status: '', booker: 'all', date: '' },
-                orders: { search: '', status: '' },
+                orders: { search: '', status: '', booker: 'all' },
                 schedules: { booker: 'all', day: 'all' },
                 targets: { booker: 'all', type: 'all' },
             },
@@ -246,6 +246,7 @@ export class OperationsTracking extends Component {
                 
                 if (tab === 'deliveries') domain.push(['state', 'in', ['sale', 'done']]);
                 if (filters.search) domain.push('|', '|', ['name', 'ilike', filters.search], ['partner_id.name', 'ilike', filters.search], ['user_id.name', 'ilike', filters.search]);
+                if (tab === 'orders' && filters.booker && filters.booker !== 'all') domain.push(['user_id', '=', parseInt(filters.booker)]);
                 if (filters.status) {
                     if (filters.status === 'Draft') domain.push(['state', '=', 'draft']);
                     else if (filters.status === 'Delivered') domain.push(['state', '=', 'done']);
@@ -730,7 +731,7 @@ export class OperationsTracking extends Component {
         const defaultFilters = {
             deliveries: { search: '', status: '' },
             checkins:   { search: '', status: '', booker: 'all', date: '' },
-            orders:     { search: '', status: '' },
+            orders:     { search: '', status: '', booker: 'all' },
             schedules:  { booker: 'all', day: 'all' },
             targets:    { booker: 'all', type: 'all' },
         };

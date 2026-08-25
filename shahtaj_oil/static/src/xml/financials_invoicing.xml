@@ -1711,7 +1711,7 @@
                         </li>
                         <li class="nav-item me-4">
                             <button t-on-click="() => this.setPoSubTab('receipts')" t-attf-class="nav-link bg-transparent border-0 fw-bold pb-2 fs-6 #{this.state.poSubTab === 'receipts' ? 'text-primary border-bottom border-primary border-3 rounded-0' : 'text-muted'}">
-                                <i class="fa fa-truck me-1"></i> Incoming Receipts
+                                <i class="fa fa-truck me-1"></i> Receipts &amp; Returns
                             </button>
                         </li>
                         <li class="nav-item me-4">
@@ -1882,6 +1882,21 @@
                                     </tbody>
                                 </table>
                             </div>
+                            <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                                <small class="text-muted fw-bold">
+                                    Showing <t t-esc="this.state.pagination.purchaseOrders.total === 0 ? 0 : ((this.state.pagination.purchaseOrders.page - 1) * this.state.pagination.purchaseOrders.limit) + 1"/>
+                                    to
+                                    <t t-esc="Math.min(this.state.pagination.purchaseOrders.page * this.state.pagination.purchaseOrders.limit, this.state.pagination.purchaseOrders.total)"/>
+                                    of <t t-esc="this.state.pagination.purchaseOrders.total"/>
+                                </small>
+                                <div class="btn-group shadow-sm">
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('purchaseOrders', -1)" t-att-disabled="this.state.pagination.purchaseOrders.page === 1">Prev</button>
+                                    <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark">
+                                        <t t-esc="this.state.pagination.purchaseOrders.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.purchaseOrders.total / this.state.pagination.purchaseOrders.limit))"/>
+                                    </button>
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('purchaseOrders', 1)" t-att-disabled="this.state.pagination.purchaseOrders.page &gt;= Math.ceil(this.state.pagination.purchaseOrders.total / this.state.pagination.purchaseOrders.limit)">Next</button>
+                                </div>
+                            </div>
                         </div>
                     </t>
                     <t t-else="">
@@ -2006,43 +2021,72 @@
                         <div class="d-flex justify-content-between align-items-center p-3 bg-light border-bottom flex-wrap gap-2">
                             <div class="input-group input-group-sm shadow-sm" style="width: 280px;">
                                 <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
-                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search receipts..." t-att-value="this.state.filters.receipts.search" t-on-input="(ev) => this.onSearchInput(ev, 'receipts')"/>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search receipts or returns..." t-att-value="this.state.filters.receipts.search" t-on-input="(ev) => this.onSearchInput(ev, 'receipts')"/>
                             </div>
-                            <select class="form-select form-select-sm shadow-sm" style="width: 180px;" t-model="this.state.filters.receipts.status" t-on-change="() => this.onFilterChange('receipts')">
+                            <select class="form-select form-select-sm shadow-sm" style="width: 200px;" t-model="this.state.filters.receipts.status" t-on-change="() => this.onFilterChange('receipts')">
                                 <option value="all">All Receipt Statuses</option>
                                 <option value="Ready">Ready / Waiting</option>
-                                <option value="Done">Done</option>
+                                <option value="Product Received">Product Received</option>
+                                <option value="Returned">Returned</option>
                                 <option value="Cancelled">Cancelled</option>
                             </select>
                         </div>
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0 align-middle">
-                                <thead class="bg-light text-uppercase small fw-bold text-muted">
-                                    <tr>
-                                        <th class="ps-4">Receipt</th>
-                                        <th>Vendor</th>
-                                        <th>Origin PO</th>
-                                        <th>Scheduled Date</th>
-                                        <th class="text-center">Status</th>
-                                        <th class="text-end pe-4">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <t t-if="this.state.receipts.length === 0 and !this.state.isLoadingList">
-                                        <tr><td colspan="6" class="text-center py-5 text-muted fw-bold">No receipts found.</td></tr>
-                                    </t>
-                                    <t t-foreach="this.state.receipts" t-as="receipt" t-key="receipt.id">
+                        <div class="position-relative">
+                            <t t-if="this.state.isLoadingList">
+                                <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </div>
+                            </t>
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="bg-light text-uppercase small fw-bold text-muted">
                                         <tr>
-                                            <td class="ps-4 fw-bold"><t t-esc="receipt.display_name"/></td>
-                                            <td><t t-esc="receipt.vendor"/></td>
-                                            <td><t t-esc="receipt.origin"/></td>
-                                            <td><t t-esc="receipt.scheduledDate"/></td>
-                                            <td class="text-center"><span t-attf-class="badge px-2 py-1 shadow-sm #{this.statusBadgeClass(receipt.status)}"><t t-esc="receipt.status"/></span></td>
-                                            <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewReceipt(receipt)">View Details</button></td>
+                                            <th class="ps-4">Reference</th>
+                                            <th>Type</th>
+                                            <th>Vendor</th>
+                                            <th>Origin PO</th>
+                                            <th>Scheduled Date</th>
+                                            <th class="text-center">Status</th>
+                                            <th class="text-end pe-4">Action</th>
                                         </tr>
-                                    </t>
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="this.state.receipts.length === 0 and !this.state.isLoadingList">
+                                            <tr><td colspan="7" class="text-center py-5 text-muted fw-bold">No receipts or returns found.</td></tr>
+                                        </t>
+                                        <t t-foreach="this.state.receipts" t-as="receipt" t-key="receipt.id">
+                                            <tr>
+                                                <td class="ps-4 fw-bold"><t t-esc="receipt.display_name"/></td>
+                                                <td>
+                                                    <span t-attf-class="badge px-2 py-1 shadow-sm #{receipt.isReturn ? 'bg-warning text-dark' : 'bg-primary text-white'}">
+                                                        <t t-esc="receipt.typeLabel"/>
+                                                    </span>
+                                                </td>
+                                                <td><t t-esc="receipt.vendor"/></td>
+                                                <td><t t-esc="receipt.origin"/></td>
+                                                <td><t t-esc="receipt.scheduledDate"/></td>
+                                                <td class="text-center"><span t-attf-class="badge px-2 py-1 shadow-sm #{this.statusBadgeClass(receipt.status)}"><t t-esc="receipt.status"/></span></td>
+                                                <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewReceipt(receipt)">View Details</button></td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                                <small class="text-muted fw-bold">
+                                    Showing <t t-esc="this.state.pagination.receipts.total === 0 ? 0 : ((this.state.pagination.receipts.page - 1) * this.state.pagination.receipts.limit) + 1"/>
+                                    to
+                                    <t t-esc="Math.min(this.state.pagination.receipts.page * this.state.pagination.receipts.limit, this.state.pagination.receipts.total)"/>
+                                    of <t t-esc="this.state.pagination.receipts.total"/>
+                                </small>
+                                <div class="btn-group shadow-sm">
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('receipts', -1)" t-att-disabled="this.state.pagination.receipts.page === 1">Prev</button>
+                                    <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark">
+                                        <t t-esc="this.state.pagination.receipts.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.receipts.total / this.state.pagination.receipts.limit))"/>
+                                    </button>
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('receipts', 1)" t-att-disabled="this.state.pagination.receipts.page &gt;= Math.ceil(this.state.pagination.receipts.total / this.state.pagination.receipts.limit)">Next</button>
+                                </div>
+                            </div>
                         </div>
                     </t>
                     <t t-else="">
@@ -2053,7 +2097,7 @@
                                     <button t-if="this.state.selectedReceipt.state === 'draft'" class="btn btn-primary fw-bold text-white shadow-sm" t-on-click="() => this.actionConfirmReceipt(this.state.selectedReceipt)">Confirm</button>
                                     <button t-if="this.state.selectedReceipt.state === 'waiting' or this.state.selectedReceipt.state === 'confirmed' or this.state.selectedReceipt.state === 'partially_available'" class="btn btn-outline-dark fw-bold shadow-sm" t-on-click="() => this.actionCheckReceiptAvailability(this.state.selectedReceipt)">Check Availability</button>
                                     <button t-if="this.state.selectedReceipt.state !== 'done' and this.state.selectedReceipt.state !== 'cancel'" class="btn btn-success fw-bold text-white shadow-sm" t-on-click="() => this.actionValidateReceipt(this.state.selectedReceipt)">Validate</button>
-                                    <button t-if="this.state.selectedReceipt.state === 'done'" class="btn btn-outline-danger fw-bold shadow-sm" t-on-click="openReturnModal">Return</button>
+                                    <button t-if="this.state.selectedReceipt.state === 'done' and !this.state.selectedReceipt.isReturn" class="btn btn-outline-danger fw-bold shadow-sm" t-on-click="openReturnModal">Return</button>
                                     <button class="btn btn-outline-dark fw-bold shadow-sm" t-on-click="() => this.actionPrintReceipt(this.state.selectedReceipt)">
                                         <i class="fa fa-print me-1"></i> Print
                                     </button>
@@ -2066,7 +2110,12 @@
                                         <h4 class="fw-bold mb-1"><t t-esc="this.state.selectedReceipt.display_name"/></h4>
                                         <div class="text-muted"><t t-esc="this.state.selectedReceipt.vendor"/></div>
                                     </div>
-                                    <span t-attf-class="badge fs-6 px-3 py-2 shadow-sm #{this.statusBadgeClass(this.state.selectedReceipt.status)}"><t t-esc="this.state.selectedReceipt.status"/></span>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <span t-attf-class="badge fs-6 px-3 py-2 shadow-sm #{this.state.selectedReceipt.isReturn ? 'bg-warning text-dark' : 'bg-primary text-white'}">
+                                            <t t-esc="this.state.selectedReceipt.typeLabel"/>
+                                        </span>
+                                        <span t-attf-class="badge fs-6 px-3 py-2 shadow-sm #{this.statusBadgeClass(this.state.selectedReceipt.status)}"><t t-esc="this.state.selectedReceipt.status"/></span>
+                                    </div>
                                 </div>
                                 <div class="row g-3 mb-4">
                                     <div class="col-md-6"><small class="text-muted d-block">Origin PO</small><span class="fw-bold"><t t-esc="this.state.selectedReceipt.origin"/></span></div>
@@ -2115,36 +2164,58 @@
                                 <option value="Cancelled">Cancelled</option>
                             </select>
                         </div>
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0 align-middle">
-                                <thead class="bg-light text-uppercase small fw-bold text-muted">
-                                    <tr>
-                                        <th class="ps-4">Bill</th>
-                                        <th>Vendor</th>
-                                        <th>Origin</th>
-                                        <th>Date</th>
-                                        <th class="text-end">Amount</th>
-                                        <th class="text-center">Status</th>
-                                        <th class="text-end pe-4">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <t t-if="this.state.vendorBills.length === 0 and !this.state.isLoadingList">
-                                        <tr><td colspan="7" class="text-center py-5 text-muted fw-bold">No vendor bills found.</td></tr>
-                                    </t>
-                                    <t t-foreach="this.state.vendorBills" t-as="bill" t-key="bill.id">
+                        <div class="position-relative">
+                            <t t-if="this.state.isLoadingList">
+                                <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </div>
+                            </t>
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="bg-light text-uppercase small fw-bold text-muted">
                                         <tr>
-                                            <td class="ps-4 fw-bold"><t t-esc="bill.display_name"/></td>
-                                            <td><t t-esc="bill.vendor"/></td>
-                                            <td><t t-esc="bill.origin"/></td>
-                                            <td><t t-esc="bill.date"/></td>
-                                            <td class="text-end fw-bold text-success">Rs. <t t-esc="bill.amount"/></td>
-                                            <td class="text-center"><span t-attf-class="badge px-2 py-1 shadow-sm #{this.statusBadgeClass(bill.status)}"><t t-esc="bill.status"/></span></td>
-                                            <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewVendorBill(bill)">View Details</button></td>
+                                            <th class="ps-4">Bill</th>
+                                            <th>Vendor</th>
+                                            <th>Origin</th>
+                                            <th>Date</th>
+                                            <th class="text-end">Amount</th>
+                                            <th class="text-center">Status</th>
+                                            <th class="text-end pe-4">Action</th>
                                         </tr>
-                                    </t>
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="this.state.vendorBills.length === 0 and !this.state.isLoadingList">
+                                            <tr><td colspan="7" class="text-center py-5 text-muted fw-bold">No vendor bills found.</td></tr>
+                                        </t>
+                                        <t t-foreach="this.state.vendorBills" t-as="bill" t-key="bill.id">
+                                            <tr>
+                                                <td class="ps-4 fw-bold"><t t-esc="bill.display_name"/></td>
+                                                <td><t t-esc="bill.vendor"/></td>
+                                                <td><t t-esc="bill.origin"/></td>
+                                                <td><t t-esc="bill.date"/></td>
+                                                <td class="text-end fw-bold text-success">Rs. <t t-esc="bill.amount"/></td>
+                                                <td class="text-center"><span t-attf-class="badge px-2 py-1 shadow-sm #{this.statusBadgeClass(bill.status)}"><t t-esc="bill.status"/></span></td>
+                                                <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewVendorBill(bill)">View Details</button></td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                                <small class="text-muted fw-bold">
+                                    Showing <t t-esc="this.state.pagination.vendorBills.total === 0 ? 0 : ((this.state.pagination.vendorBills.page - 1) * this.state.pagination.vendorBills.limit) + 1"/>
+                                    to
+                                    <t t-esc="Math.min(this.state.pagination.vendorBills.page * this.state.pagination.vendorBills.limit, this.state.pagination.vendorBills.total)"/>
+                                    of <t t-esc="this.state.pagination.vendorBills.total"/>
+                                </small>
+                                <div class="btn-group shadow-sm">
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('vendorBills', -1)" t-att-disabled="this.state.pagination.vendorBills.page === 1">Prev</button>
+                                    <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark">
+                                        <t t-esc="this.state.pagination.vendorBills.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.vendorBills.total / this.state.pagination.vendorBills.limit))"/>
+                                    </button>
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('vendorBills', 1)" t-att-disabled="this.state.pagination.vendorBills.page &gt;= Math.ceil(this.state.pagination.vendorBills.total / this.state.pagination.vendorBills.limit)">Next</button>
+                                </div>
+                            </div>
                         </div>
                     </t>
                     <t t-else="">
@@ -2309,32 +2380,54 @@
                             </div>
                             <button class="btn btn-sm btn-dark fw-bold text-white shadow-sm" t-on-click="openVendorForm">New Vendor</button>
                         </div>
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0 align-middle">
-                                <thead class="bg-light text-uppercase small fw-bold text-muted">
-                                    <tr>
-                                        <th class="ps-4">Vendor</th>
-                                        <th>Phone</th>
-                                        <th>Email</th>
-                                        <th>Address</th>
-                                        <th class="text-end pe-4">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <t t-if="this.state.vendors.length === 0 and !this.state.isLoadingList">
-                                        <tr><td colspan="5" class="text-center py-5 text-muted fw-bold">No vendors found.</td></tr>
-                                    </t>
-                                    <t t-foreach="this.state.vendors" t-as="vendor" t-key="vendor.id">
+                        <div class="position-relative">
+                            <t t-if="this.state.isLoadingList">
+                                <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </div>
+                            </t>
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="bg-light text-uppercase small fw-bold text-muted">
                                         <tr>
-                                            <td class="ps-4 fw-bold text-dark"><t t-esc="vendor.name"/></td>
-                                            <td><t t-esc="vendor.phone"/></td>
-                                            <td><t t-esc="vendor.email"/></td>
-                                            <td><t t-esc="vendor.address"/></td>
-                                            <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewVendor(vendor)">View Details</button></td>
+                                            <th class="ps-4">Vendor</th>
+                                            <th>Phone</th>
+                                            <th>Email</th>
+                                            <th>Address</th>
+                                            <th class="text-end pe-4">Action</th>
                                         </tr>
-                                    </t>
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="this.state.vendors.length === 0 and !this.state.isLoadingList">
+                                            <tr><td colspan="5" class="text-center py-5 text-muted fw-bold">No vendors found.</td></tr>
+                                        </t>
+                                        <t t-foreach="this.state.vendors" t-as="vendor" t-key="vendor.id">
+                                            <tr>
+                                                <td class="ps-4 fw-bold text-dark"><t t-esc="vendor.name"/></td>
+                                                <td><t t-esc="vendor.phone"/></td>
+                                                <td><t t-esc="vendor.email"/></td>
+                                                <td><t t-esc="vendor.address"/></td>
+                                                <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewVendor(vendor)">View Details</button></td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                                <small class="text-muted fw-bold">
+                                    Showing <t t-esc="this.state.pagination.vendors.total === 0 ? 0 : ((this.state.pagination.vendors.page - 1) * this.state.pagination.vendors.limit) + 1"/>
+                                    to
+                                    <t t-esc="Math.min(this.state.pagination.vendors.page * this.state.pagination.vendors.limit, this.state.pagination.vendors.total)"/>
+                                    of <t t-esc="this.state.pagination.vendors.total"/>
+                                </small>
+                                <div class="btn-group shadow-sm">
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('vendors', -1)" t-att-disabled="this.state.pagination.vendors.page === 1">Prev</button>
+                                    <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark">
+                                        <t t-esc="this.state.pagination.vendors.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.vendors.total / this.state.pagination.vendors.limit))"/>
+                                    </button>
+                                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('vendors', 1)" t-att-disabled="this.state.pagination.vendors.page &gt;= Math.ceil(this.state.pagination.vendors.total / this.state.pagination.vendors.limit)">Next</button>
+                                </div>
+                            </div>
                         </div>
                     </t>
                     <t t-else="">
