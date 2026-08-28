@@ -433,6 +433,33 @@
                         Staff Management
                     </button>
 
+                    <div class="mb-2" t-if="this.hasFinancialAccess">
+                        <button t-on-click="() => this.toggleMenu('accounting', 'journals')" class="list-group-item list-group-item-action border-0 rounded text-start d-flex align-items-center justify-content-between transition-all w-100" t-att-style="this.state.activeTab === 'accounting' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
+                            <div class="d-flex align-items-center">
+                                <span class="me-3 d-flex align-items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open">
+                                        <path d="M12 7v14"/>
+                                        <path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>
+                                    </svg>
+                                </span>
+                                Accounting
+                            </div>
+                            <span class="d-flex align-items-center transition-all" t-att-style="this.state.expandedMenus.accounting ? 'transform: rotate(180deg);' : ''">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down">
+                                    <path d="m6 9 6 6 6-6"/>
+                                </svg>
+                            </span>
+                        </button>
+                        <div t-attf-class="smooth-accordion #{this.state.expandedMenus.accounting ? 'open' : ''}">
+                            <div class="smooth-accordion-inner">
+                                <div class="d-flex flex-column ps-4 mt-1 pe-2 gap-1 border-start ms-3 border-2 border-light mb-1">
+                                    <button t-on-click="() => this.switchTab('accounting', 'journals')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'accounting' and this.state.activeSubTab === 'journals' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Journals</button>
+                                    <button t-on-click="() => this.switchTab('accounting', 'accounts')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'accounting' and this.state.activeSubTab === 'accounts' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Chart of Accounts</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <button t-on-click="() => this.switchTab('settings')" class="list-group-item list-group-item-action border-0 rounded mb-2 text-start d-flex align-items-center transition-all" t-att-style="this.state.activeTab === 'settings' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
                         <span class="me-3 d-flex align-items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings">
@@ -876,6 +903,10 @@
 
                     <div t-if="!this.state.isSwitchingTab and this.hasFinancialAccess and this.state.activeTab === 'transactions'" class="h-100">
                         <BankTransactions />
+                    </div>
+
+                    <div t-if="!this.state.isSwitchingTab and this.hasFinancialAccess and this.state.activeTab === 'accounting'" class="w-100" style="min-width: 0;">
+                        <Accounting requestedSubTab="this.state.activeSubTab" />
                     </div>
 
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'settings'" class="h-100">

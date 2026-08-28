@@ -13,10 +13,11 @@ import { FinancialsInvoicing } from "./financials_invoicing";
 import { PortalSettings } from "./settings"
 import { SchedulesTargets } from "./schedules_targets";
 import { BankTransactions } from "./bank_transactions";
+import { Accounting } from "./accounting";
 import { ConfirmModal } from "./confirm_modal";
 
 export class ShahtajDashboard extends Component {
-    static components = { StaffManagement, OperationsTracking, TerritoryRoutes, WarehouseInventory, FinancialsInvoicing, PortalSettings, SchedulesTargets, BankTransactions, ConfirmModal }; 
+    static components = { StaffManagement, OperationsTracking, TerritoryRoutes, WarehouseInventory, FinancialsInvoicing, PortalSettings, SchedulesTargets, BankTransactions, Accounting, ConfirmModal }; 
 
     setup() {
         this.orm = useService("orm");
@@ -67,7 +68,8 @@ export class ShahtajDashboard extends Component {
                 warehouse: false,
                 operations: false,
                 financials: false,
-                schedules: false
+                schedules: false,
+                accounting: false,
             }
         });
         // Global Event listnere to sync child component tab switches with the main dashboard state
@@ -439,7 +441,7 @@ export class ShahtajDashboard extends Component {
         }
     }
     async switchTab(tabName, subTabName = '') {
-        if (!this.hasFinancialAccess && (tabName === 'financials' || tabName === 'transactions')) {
+        if (!this.hasFinancialAccess && (tabName === 'financials' || tabName === 'transactions' || tabName === 'accounting')) {
             tabName = 'operations';
             subTabName = 'checkins';
         }
