@@ -1291,3 +1291,127 @@ class ResPartner(models.Model):
                       lng=longitude),
         )
         return True
+
+    def action_shahtaj_reset_field_verification(self):
+        """Reset field verification and GPS coordinates so OB can re-verify on site."""
+        self.ensure_one()
+        if not self.is_shahtaj_shop:
+            raise UserError(_('Only shops can have field verification reset.'))
+        if not (
+            self.env.user.has_group('shahtaj_oil.group_shahtaj_distributor')
+            or self.env.user.has_group('account.group_account_manager')
+            or self.env.is_admin()
+        ):
+            raise AccessError(_('Only distributors or administrators can reset shop verification.'))
+
+        old_lat = self.partner_latitude
+        old_lng = self.partner_longitude
+        self.sudo().write({
+            'shahtaj_field_verified': False,
+            'shahtaj_field_verified_at': False,
+            'shahtaj_field_verified_by_id': False,
+            'partner_latitude': False,
+            'partner_longitude': False,
+        })
+        self.env['shahtaj.activity.log'].log_business(
+            operation='shop.reset_verification',
+            name='Shop verification and GPS reset',
+            related_record=self,
+            message=_(
+                'Verification reset by %(user)s. Previous GPS was (%(lat)s, %(lng)s). '
+                'Shop marked unverified and GPS cleared for field re-verification.',
+                user=self.env.user.display_name,
+                lat=old_lat or 'None',
+                lng=old_lng or 'None',
+            ),
+        )
+        return True
+
+    shahtaj_supplied_product_ids = fields.Many2many(
+        'product.template',
+        string='Supplied Products',
+        compute='_compute_shahtaj_supplied_products',
+        help='Products associated with this vendor.',
+    )
+    shahtaj_supplied_product_count = fields.Integer(
+        string='Products Count',
+        compute='_compute_shahtaj_supplied_products',
+    )
+
+    def _compute_shahtaj_supplied_products(self):
+        Template = self.env['product.template'].sudo()
+        SupplierInfo = self.env['product.supplierinfo'].sudo()
+        for partner in self:
+            if partner.supplier_rank > 0:
+                templates_from_field = Template.search([('shahtaj_vendor_id', '=', partner.id), ('active', '=', True)])
+                infos = SupplierInfo.search([('partner_id', '=', partner.id)])
+                templates_from_supplierinfo = infos.mapped('product_tmpl_id').filtered('active')
+                templates = (templates_from_field | templates_from_supplierinfo)
+                partner.shahtaj_supplied_product_ids = templates
+                partner.shahtaj_supplied_product_count = len(templates)
+            else:
+                partner.shahtaj_supplied_product_ids = self.env['product.template']
+                partner.shahtaj_supplied_product_count = 0
+
+    def action_create_purchase_order(self):
+        self.ensure_one()
+        return {
+            'name': _('New Purchase Order'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'purchase.order',
+            'view_mode': 'form',
+            'context': {
+                'default_partner_id': self.id,
+                'default_supplier_rank': 1,
+                'res_partner_search_mode': 'supplier',
+                'form_view_ref': 'shahtaj_oil.view_shahtaj_purchase_order_form',
+            },
+        }
+
+    def action_view_supplied_products(self):
+        self.ensure_one()
+        return {
+            'name': _('Supplied Products - %s', self.name),
+            'type': 'ir.actions.act_window',
+            'res_model': 'product.template',
+            'view_mode': 'list,form',
+            'domain': [('id', 'in', self.shahtaj_supplied_product_ids.ids)],
+            'context': {
+                'default_shahtaj_vendor_id': self.id,
+            },
+        }
+
+    @api.model
+    def action_shahtaj_toggle_archive_vendor(self, vendor_id, active=False):
+        """Archive or restore a vendor contact from the custom portal."""
+        partner = self.sudo().with_context(active_test=False).browse(vendor_id)
+        if not partner.exists() or partner.is_shahtaj_shop:
+            raise UserError(_('Invalid vendor record.'))
+        partner.write({'active': active})
+        return True
+
+    @api.model
+    def action_shahtaj_delete_vendor(self, vendor_id):
+        """Delete a vendor if no POs or bills exist, otherwise guide to archive."""
+        partner = self.sudo().with_context(active_test=False).browse(vendor_id)
+        if not partner.exists() or partner.is_shahtaj_shop:
+            raise UserError(_('Invalid vendor record.'))
+
+        pos_count = self.env['purchase.order'].sudo().search_count([('partner_id', '=', partner.id)])
+        bills_count = self.env['account.move'].sudo().search_count([('partner_id', '=', partner.id)])
+        if pos_count > 0 or bills_count > 0:
+            raise UserError(_(
+                'Cannot delete vendor "%(name)s" because %(pos)d purchase order(s) and %(bills)d bill(s) are recorded for them. '
+                'Please archive the vendor instead to protect financial and purchasing history.',
+                name=partner.name,
+                pos=pos_count,
+                bills=bills_count,
+            ))
+
+        # Clear supplierinfo links and product references first
+        self.env['product.supplierinfo'].sudo().search([('partner_id', '=', partner.id)]).unlink()
+        self.env['product.template'].sudo().search([('shahtaj_vendor_id', '=', partner.id)]).write({'shahtaj_vendor_id': False})
+        partner.unlink()
+        return True
+
+
