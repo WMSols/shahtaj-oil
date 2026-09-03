@@ -1739,13 +1739,25 @@
                             </div>
                             <div class="row g-3 mb-3">
                                 <div class="col-md-4">
-                                    <label class="small fw-bold">Vendor</label>
-                                    <select class="form-select" t-model="this.state.purchaseOrderForm.partner_id">
+                                    <label class="small fw-bold">Vendor <span class="text-danger">*</span></label>
+                                    <select class="form-select" t-model="this.state.purchaseOrderForm.partner_id" t-on-change="() => this.onPoVendorChange()">
                                         <option value="">-- Select Vendor --</option>
                                         <t t-foreach="this.state.poLookups.vendors" t-as="vendor" t-key="vendor.id">
                                             <option t-att-value="vendor.id"><t t-esc="vendor.name"/></option>
                                         </t>
                                     </select>
+                                    <t t-if="this.poSelectedVendorId">
+                                        <t t-if="this.poAssociatedProducts.length &gt; 0">
+                                            <small class="text-success fw-bold d-block mt-1">
+                                                <i class="fa fa-check-circle me-1"></i> <t t-esc="this.poAssociatedProducts.length"/> associated product(s) available
+                                            </small>
+                                        </t>
+                                        <t t-else="">
+                                            <small class="text-warning fw-bold d-block mt-1">
+                                                <i class="fa fa-info-circle me-1"></i> No products linked to this vendor yet
+                                            </small>
+                                        </t>
+                                    </t>
                                 </div>
                                 <div class="col-md-2">
                                     <label class="small fw-bold">Order Date</label>
@@ -1792,9 +1804,32 @@
                                             <tr>
                                                 <td class="ps-3">
                                                     <select class="form-select form-select-sm" t-model="line.product_id" t-on-change="() => this.onPurchaseProductChange(line)">
-                                                        <option value="">-- Select Product --</option>
-                                                        <t t-foreach="this.state.poLookups.products" t-as="product" t-key="product.id">
-                                                            <option t-att-value="product.id"><t t-esc="product.name"/></option>
+                                                        <t t-if="!this.poSelectedVendorId">
+                                                            <option value="">-- Select a Vendor above first --</option>
+                                                            <t t-foreach="this.state.products" t-as="product" t-key="product.id">
+                                                                <option t-att-value="product.id"><t t-esc="product.name"/></option>
+                                                            </t>
+                                                        </t>
+                                                        <t t-elif="this.poAssociatedProducts.length &gt; 0">
+                                                            <option value="">-- Select Associated Product (<t t-esc="this.poAssociatedProducts.length"/> available) --</option>
+                                                            <t t-foreach="this.poAssociatedProducts" t-as="product" t-key="product.id">
+                                                                <option t-att-value="product.id"><t t-esc="product.name"/></option>
+                                                            </t>
+                                                            <t t-if="this.poOtherProducts.length &gt; 0">
+                                                                <optgroup label="Other Catalog Products">
+                                                                    <t t-foreach="this.poOtherProducts" t-as="product" t-key="product.id">
+                                                                        <option t-att-value="product.id"><t t-esc="product.name"/></option>
+                                                                    </t>
+                                                                </optgroup>
+                                                            </t>
+                                                        </t>
+                                                        <t t-else="">
+                                                            <option value="">-- Select Product (None linked yet) --</option>
+                                                            <optgroup label="All Catalog Products">
+                                                                <t t-foreach="this.state.products" t-as="product" t-key="product.id">
+                                                                    <option t-att-value="product.id"><t t-esc="product.name"/></option>
+                                                                </t>
+                                                            </optgroup>
                                                         </t>
                                                     </select>
                                                 </td>
@@ -2374,11 +2409,23 @@
                     </t>
                     <t t-if="!this.state.selectedVendor">
                         <div class="d-flex justify-content-between align-items-center p-3 bg-light border-bottom flex-wrap gap-2">
-                            <div class="input-group input-group-sm shadow-sm" style="width: 280px;">
-                                <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
-                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search vendors..." t-att-value="this.state.filters.vendors.search" t-on-input="(ev) => this.onSearchInput(ev, 'vendors')"/>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <div class="input-group input-group-sm shadow-sm" style="width: 280px;">
+                                    <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
+                                    <input type="text" class="form-control border-start-0 ps-0" placeholder="Search vendors..." t-att-value="this.state.filters.vendors.search" t-on-input="(ev) => this.onSearchInput(ev, 'vendors')"/>
+                                </div>
+                                <div class="btn-group btn-group-sm shadow-sm">
+                                    <button t-attf-class="btn btn-sm #{this.state.vendorViewMode === 'active' ? 'btn-dark fw-bold' : 'btn-white border text-muted'}" t-on-click="() => this.setVendorViewMode('active')">
+                                        Active Vendors
+                                    </button>
+                                    <button t-attf-class="btn btn-sm #{this.state.vendorViewMode === 'archived' ? 'btn-danger text-white fw-bold' : 'btn-white border text-muted'}" t-on-click="() => this.setVendorViewMode('archived')">
+                                        Archived (<t t-esc="this.state.archivedVendorsCount || 0"/>)
+                                    </button>
+                                </div>
                             </div>
-                            <button class="btn btn-sm btn-dark fw-bold text-white shadow-sm" t-on-click="openVendorForm">New Vendor</button>
+                            <button t-if="this.state.vendorViewMode !== 'archived'" class="btn btn-sm btn-dark fw-bold text-white shadow-sm" t-on-click="openVendorForm">
+                                <i class="fa fa-plus me-1"></i> New Vendor
+                            </button>
                         </div>
                         <div class="position-relative">
                             <t t-if="this.state.isLoadingList">
@@ -2399,7 +2446,12 @@
                                     </thead>
                                     <tbody>
                                         <t t-if="this.state.vendors.length === 0 and !this.state.isLoadingList">
-                                            <tr><td colspan="5" class="text-center py-5 text-muted fw-bold">No vendors found.</td></tr>
+                                            <tr>
+                                                <td colspan="5" class="text-center py-5 text-muted fw-bold">
+                                                    <t t-if="this.state.vendorViewMode === 'archived'">No archived vendors found.</t>
+                                                    <t t-else="">No active vendors found.</t>
+                                                </td>
+                                            </tr>
                                         </t>
                                         <t t-foreach="this.state.vendors" t-as="vendor" t-key="vendor.id">
                                             <tr>
@@ -2407,7 +2459,25 @@
                                                 <td><t t-esc="vendor.phone"/></td>
                                                 <td><t t-esc="vendor.email"/></td>
                                                 <td><t t-esc="vendor.address"/></td>
-                                                <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewVendor(vendor)">View Details</button></td>
+                                                <td class="text-end pe-4 text-nowrap">
+                                                    <button class="btn btn-sm btn-outline-dark fw-bold me-1" t-on-click="() => this.viewVendor(vendor)">View Details</button>
+                                                    <t t-if="this.state.vendorViewMode === 'archived'">
+                                                        <button class="btn btn-sm btn-success fw-bold text-white me-1" t-on-click="() => this.toggleArchiveVendor(vendor, true)" title="Restore Vendor">
+                                                            <i class="fa fa-undo me-1"></i> Restore
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.deleteVendor(vendor)" title="Delete Vendor">
+                                                            <i class="fa fa-trash"></i>
+                                                        </button>
+                                                    </t>
+                                                    <t t-else="">
+                                                        <button class="btn btn-sm btn-outline-warning text-dark fw-bold me-1" t-on-click="() => this.toggleArchiveVendor(vendor, false)" title="Archive Vendor">
+                                                            <i class="fa fa-archive me-1"></i> Archive
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.deleteVendor(vendor)" title="Delete Vendor">
+                                                            <i class="fa fa-trash"></i>
+                                                        </button>
+                                                    </t>
+                                                </td>
                                             </tr>
                                         </t>
                                     </tbody>
@@ -2432,16 +2502,110 @@
                     </t>
                     <t t-else="">
                         <div class="p-4 bg-light">
-                            <div class="d-flex justify-content-between align-items-center mb-4">
-                                <button class="btn btn-sm btn-light border shadow-sm fw-bold" t-on-click="() => this.state.selectedVendor = null">Back to Vendors</button>
-                                <button class="btn btn-sm btn-outline-primary fw-bold" t-on-click="() => this.openVendorForm(this.state.selectedVendor)">Edit Vendor</button>
+                            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                                <button class="btn btn-sm btn-light border shadow-sm fw-bold" t-on-click="() => this.state.selectedVendor = null">
+                                    <i class="fa fa-arrow-left me-1"></i> Back to Vendors
+                                </button>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <t t-if="this.state.selectedVendor.active !== false and this.state.vendorViewMode !== 'archived'">
+                                        <button class="btn btn-sm btn-success fw-bold text-white shadow-sm" t-on-click="openPoForSelectedVendor">
+                                            <i class="fa fa-shopping-basket me-1"></i> + Create PO for this Vendor
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-primary fw-bold" t-on-click="() => this.openVendorForm(this.state.selectedVendor)">
+                                            <i class="fa fa-pencil me-1"></i> Edit Vendor
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning text-dark fw-bold" t-on-click="() => this.toggleArchiveVendor(this.state.selectedVendor, false)">
+                                            <i class="fa fa-archive me-1"></i> Archive Vendor
+                                        </button>
+                                    </t>
+                                    <t t-else="">
+                                        <button class="btn btn-sm btn-success fw-bold text-white shadow-sm" t-on-click="() => this.toggleArchiveVendor(this.state.selectedVendor, true)">
+                                            <i class="fa fa-undo me-1"></i> Restore Vendor
+                                        </button>
+                                    </t>
+                                    <button class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.deleteVendor(this.state.selectedVendor)">
+                                        <i class="fa fa-trash me-1"></i> Delete Vendor
+                                    </button>
+                                </div>
                             </div>
-                            <div class="card border-0 shadow-sm rounded-4 p-4">
+                            
+                            <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
                                 <h4 class="fw-bold mb-3"><t t-esc="this.state.selectedVendor.name"/></h4>
                                 <div class="row g-3">
                                     <div class="col-md-4"><small class="text-muted d-block">Phone</small><span class="fw-bold"><t t-esc="this.state.selectedVendor.phone"/></span></div>
                                     <div class="col-md-4"><small class="text-muted d-block">Email</small><span class="fw-bold"><t t-esc="this.state.selectedVendor.email"/></span></div>
                                     <div class="col-md-4"><small class="text-muted d-block">Address</small><span class="fw-bold"><t t-esc="this.state.selectedVendor.address"/></span></div>
+                                </div>
+                            </div>
+
+                            <!-- Associated Products Section -->
+                            <div class="card border-0 shadow-sm rounded-4 p-4">
+                                <div class="d-flex flex-wrap justify-content-between align-items-center pb-3 border-bottom mb-3 gap-2">
+                                    <div>
+                                        <h5 class="fw-bold mb-0 text-dark">
+                                            <i class="fa fa-cubes text-primary me-2"></i> Associated Products
+                                        </h5>
+                                        <small class="text-muted">Products manufactured or supplied by <t t-esc="this.state.selectedVendor.name"/></small>
+                                    </div>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <select class="form-select form-select-sm shadow-sm" style="width: 250px;" t-model="this.state.associateProductId">
+                                            <option value="">-- Associate Existing Product --</option>
+                                            <t t-foreach="this.state.allActiveProductsForVendor" t-as="p" t-key="p.id">
+                                                <option t-att-value="p.id"><t t-esc="p.name"/></option>
+                                            </t>
+                                        </select>
+                                        <button class="btn btn-sm btn-primary fw-bold text-nowrap shadow-sm" t-on-click="associateProductToSelectedVendor" t-att-disabled="!this.state.associateProductId">
+                                            + Associate Product
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                            <tr>
+                                                <th class="border-top-0 ps-3">Product Name</th>
+                                                <th class="border-top-0">Unit</th>
+                                                <th class="border-top-0 text-end">Avg Cost Price</th>
+                                                <th class="border-top-0 text-end">Sales Price</th>
+                                                <th class="border-top-0 text-end">On-Hand Qty</th>
+                                                <th class="border-top-0 text-end pe-3">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <t t-if="this.state.isLoadingVendorProducts">
+                                                <tr><td colspan="6" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Loading products...</td></tr>
+                                            </t>
+                                            <t t-elif="this.state.selectedVendorProducts.length === 0">
+                                                <tr>
+                                                    <td colspan="6" class="text-center py-4 text-muted">
+                                                        <i class="fa fa-cubes fs-2 mb-2 opacity-50 d-block"></i>
+                                                        No products currently associated with this vendor.<br/>
+                                                        <small class="text-muted">Select an existing product above or register a new product to associate it.</small>
+                                                    </td>
+                                                </tr>
+                                            </t>
+                                            <t t-else="">
+                                                <t t-foreach="this.state.selectedVendorProducts" t-as="prod" t-key="prod.id">
+                                                    <tr>
+                                                        <td class="ps-3 fw-bold text-dark"><t t-esc="prod.name"/></td>
+                                                        <td><span class="badge bg-light text-dark border"><t t-esc="prod.shahtaj_sale_uom || prod.uom_name || 'Unit'"/></span></td>
+                                                        <td class="text-end text-muted fw-bold">Rs. <t t-esc="(prod.standard_price || 0).toLocaleString()"/></td>
+                                                        <td class="text-end text-success fw-bold">Rs. <t t-esc="(prod.list_price || 0).toLocaleString()"/></td>
+                                                        <td class="text-end fw-bold"><t t-esc="prod.qty_available || 0"/></td>
+                                                        <td class="text-end pe-3">
+                                                            <button class="btn btn-sm btn-success fw-bold text-white shadow-sm me-2" t-on-click="() => this.openPoForSpecificProduct(prod)" title="Create PO for this product">
+                                                                <i class="fa fa-cart-plus me-1"></i> Order in PO
+                                                            </button>
+                                                            <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.removeProductFromVendor(prod.id)" title="Remove vendor association">
+                                                                <i class="fa fa-times"></i>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                </t>
+                                            </t>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>

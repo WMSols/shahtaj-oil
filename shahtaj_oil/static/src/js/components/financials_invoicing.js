@@ -187,7 +187,13 @@ export class FinancialsInvoicing extends Component {
             categoryForm: { id: null, name: '', sequence: 10, active: true, note: '' },
             expenseLookups: { categories: [], journals: [], partners: [] },
             poLookups: { vendors: [], products: [] },
+            vendorViewMode: 'active', // 'active' | 'archived'
+            archivedVendorsCount: 0,
             vendorForm: { id: null, name: '', phone: '', email: '', street: '', city: '' },
+            selectedVendorProducts: [],
+            isLoadingVendorProducts: false,
+            associateProductId: '',
+            allActiveProductsForVendor: [],
             purchaseOrderForm: {
                 id: null,
                 partner_id: '',
@@ -195,6 +201,11 @@ export class FinancialsInvoicing extends Component {
                 date_planned: formatDate(today),
                 lines: [],
             },
+        });
+        // Global listener to open PO form directly when a product is registered
+        window.addEventListener('shahtaj-open-create-po', (ev) => {
+            const { vendorId, productId, productName } = ev.detail || {};
+            this.openPurchaseOrderFormWithProduct({ vendorId, productId, productName });
         });
         // Universal Debouncer to protect the server from rapid keystrokes
         this.debounceSearch = (func, wait) => {
@@ -343,7 +354,7 @@ export class FinancialsInvoicing extends Component {
             'purchase_orders': { stateKey: 'purchaseOrders', model: 'purchase.order', fields: ["name", "partner_id", "date_order", "date_planned", "amount_untaxed", "amount_tax", "amount_total", "state", "invoice_status", "currency_id"] },
             'receipts': { stateKey: 'receipts', model: 'stock.picking', fields: this._receiptFields() },
             'vendor_bills': { stateKey: 'vendorBills', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "invoice_origin", "move_type", "journal_id"] },
-            'vendors': { stateKey: 'vendors', model: 'res.partner', fields: ["name", "phone", "email", "street", "city", "supplier_rank"] },
+            'vendors': { stateKey: 'vendors', model: 'res.partner', fields: ["name", "phone", "email", "street", "city", "supplier_rank", "active"] },
             'credit': { stateKey: 'credits', model: 'res.partner', fields: ["name", "owner_name", "shahtaj_shop_category", "credit_limit", "outstanding_balance"] },
             'expenses': { stateKey: 'expenses', model: 'shahtaj.expense', fields: ['name', 'date', 'category_id', 'description', 'amount', 'journal_id', 'partner_id', 'state', 'move_name'] },
             'categories': { stateKey: 'expenseCategories', model: 'shahtaj.expense.category', fields: ['name', 'sequence', 'active', 'note'] }
@@ -369,7 +380,14 @@ export class FinancialsInvoicing extends Component {
             if (stateKey === 'purchaseOrders') domain.push(["partner_id.supplier_rank", ">", 0]);
             if (stateKey === 'receipts') domain.push(...this._receiptsListDomain());
             if (stateKey === 'vendorBills') domain.push(["move_type", "in", ["in_invoice", "in_refund"]]);
-            if (stateKey === 'vendors') domain.push(["supplier_rank", ">", 0], ["is_shahtaj_shop", "=", false]);
+            if (stateKey === 'vendors') {
+                domain.push(["supplier_rank", ">", 0], ["is_shahtaj_shop", "=", false]);
+                if (this.state.vendorViewMode === 'archived') {
+                    domain.push(["active", "=", false]);
+                } else {
+                    domain.push(["active", "=", true]);
+                }
+            }
             if (stateKey === 'credits') domain.push(["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]);
 
             if (filters.search) {
@@ -421,9 +439,10 @@ export class FinancialsInvoicing extends Component {
             }
 
             // 4. FIRE DUAL QUERIES (Total Count + Paged Records)
+            const queryContext = (stateKey === 'vendors' && this.state.vendorViewMode === 'archived') ? { active_test: false } : {};
             const [total, records] = await Promise.all([
-                this.orm.searchCount(model, domain),
-                this.orm.searchRead(model, domain, fields, { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc" })
+                this.orm.searchCount(model, domain, { context: queryContext }),
+                this.orm.searchRead(model, domain, fields, { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc", context: queryContext })
             ]);
             this.state.pagination[stateKey].total = total;
             // 5. MAP DATA TO UI
@@ -507,6 +526,7 @@ export class FinancialsInvoicing extends Component {
                     phone: vendor.phone || 'N/A',
                     email: vendor.email || 'N/A',
                     address: [vendor.street, vendor.city].filter(Boolean).join(', ') || 'No address provided',
+                    active: vendor.active !== false,
                 }));
             }
             else if (stateKey === 'balances') {
@@ -712,24 +732,33 @@ export class FinancialsInvoicing extends Component {
         if (includeLookups) {
             const productDomain = ["|", ["sale_ok", "=", true], ["purchase_ok", "=", true], ["active", "=", true], ["product_tmpl_id.active", "=", true]];
             const vendorDomain = [["supplier_rank", ">", 0], ["is_shahtaj_shop", "=", false]];
-            const [taxesData, purchaseTaxesData, prodData, journalsData, vendorData] = await Promise.all([
+            const [taxesData, purchaseTaxesData, prodData, journalsData, vendorData, archivedVendorsTotal] = await Promise.all([
                 this.orm.searchRead("account.tax", [["type_tax_use", "=", "sale"], ["active", "=", true]], ["id", "name", "amount"]),
                 this.orm.searchRead("account.tax", [["type_tax_use", "=", "purchase"], ["active", "=", true]], ["id", "name", "amount"]),
-                this.orm.searchRead("product.product", productDomain, ["id", "name", "display_name", "uom_id", "standard_price", "supplier_taxes_id", "product_tmpl_id"]),
+                this.orm.searchRead("product.product", productDomain, ["id", "name", "display_name", "uom_id", "standard_price", "supplier_taxes_id", "product_tmpl_id", "shahtaj_vendor_id"]),
                 this.orm.searchRead("account.journal", [["type", "in", ["bank", "cash"]]], ["name", "type"]),
-                this.orm.searchRead("res.partner", vendorDomain, ["id", "name", "phone", "email", "street", "city"])
+                this.orm.searchRead("res.partner", vendorDomain, ["id", "name", "phone", "email", "street", "city", "active"]),
+                this.orm.searchCount("res.partner", [["supplier_rank", ">", 0], ["is_shahtaj_shop", "=", false], ["active", "=", false]], { context: { active_test: false } }),
             ]);
             this.state.availableTaxes = taxesData || [];
             this.state.availablePurchaseTaxes = purchaseTaxesData || [];
             this.state.allProducts = prodData || [];
-            this.state.products = (prodData || []).map((p) => ({
-                id: p.id,
-                name: p.display_name || p.name,
-                uom_po_id: p.uom_id ? p.uom_id[0] : false,
-                standard_price: p.standard_price || 0,
-                supplier_tax_id: (p.supplier_taxes_id && p.supplier_taxes_id[0]) || '',
-                product_tmpl_id: p.product_tmpl_id ? p.product_tmpl_id[0] : false,
-            }));
+            this.state.archivedVendorsCount = archivedVendorsTotal || 0;
+            this.state.products = (prodData || []).map((p) => {
+                let vendorId = false;
+                if (p.shahtaj_vendor_id) {
+                    vendorId = Array.isArray(p.shahtaj_vendor_id) ? p.shahtaj_vendor_id[0] : p.shahtaj_vendor_id;
+                }
+                return {
+                    id: p.id,
+                    name: p.display_name || p.name,
+                    uom_po_id: p.uom_id ? p.uom_id[0] : false,
+                    standard_price: p.standard_price || 0,
+                    supplier_tax_id: (p.supplier_taxes_id && p.supplier_taxes_id[0]) || '',
+                    product_tmpl_id: p.product_tmpl_id ? p.product_tmpl_id[0] : false,
+                    vendor_id: vendorId,
+                };
+            });
             this.state.journals = journalsData || [];
             this.state.poLookups.vendors = vendorData || [];
             this.state.poLookups.products = this.state.products;
@@ -1976,11 +2005,61 @@ export class FinancialsInvoicing extends Component {
                 name: vendor.name || '',
                 phone: vendor.phone === 'N/A' ? '' : (vendor.phone || ''),
                 email: vendor.email === 'N/A' ? '' : (vendor.email || ''),
-                street: '',
-                city: '',
+                street: vendor.street || '',
+                city: vendor.city || '',
             }
             : { id: null, name: '', phone: '', email: '', street: '', city: '' };
         this.state.showVendorForm = true;
+    }
+
+    setVendorViewMode(mode) {
+        this.state.vendorViewMode = mode;
+        this.state.selectedVendor = null;
+        this.state.pagination.vendors.page = 1;
+        this.fetchActiveList();
+    }
+
+    async toggleArchiveVendor(vendor, makeActive) {
+        const actionText = makeActive ? "restore" : "archive";
+        const title = makeActive ? "Restore Vendor" : "Archive Vendor";
+        const message = makeActive
+            ? `Are you sure you want to restore "${vendor.name}" to active vendors?`
+            : `Are you sure you want to archive "${vendor.name}"? They will be moved to the Archived vendors list and hidden from active purchase order creation.`;
+
+        this.showConfirm(title, message, async () => {
+            try {
+                await this.orm.call("res.partner", "action_shahtaj_toggle_archive_vendor", [], {
+                    vendor_id: vendor.id,
+                    active: makeActive,
+                });
+                this.notification.add(`Vendor "${vendor.name}" ${makeActive ? 'restored' : 'archived'} successfully.`, { type: "success" });
+                this.state.selectedVendor = null;
+                await this.fetchRealData({ includeLookups: true });
+                await this.fetchActiveList();
+            } catch (error) {
+                this.notification.add(`Failed to ${actionText} vendor: ` + (error.data?.message || error.message), { type: "danger" });
+            }
+        });
+    }
+
+    async deleteVendor(vendor) {
+        this.showConfirm(
+            "Delete Vendor",
+            `Are you sure you want to permanently delete vendor "${vendor.name}"?\n\nNote: If this vendor has existing purchase orders or invoices, they cannot be deleted and should be archived instead.`,
+            async () => {
+                try {
+                    await this.orm.call("res.partner", "action_shahtaj_delete_vendor", [], {
+                        vendor_id: vendor.id,
+                    });
+                    this.notification.add(`Vendor "${vendor.name}" deleted successfully.`, { type: "success" });
+                    this.state.selectedVendor = null;
+                    await this.fetchRealData({ includeLookups: true });
+                    await this.fetchActiveList();
+                } catch (error) {
+                    this.notification.add("Failed to delete vendor: " + (error.data?.message || error.message), { type: "danger" });
+                }
+            }
+        );
     }
 
     resetPurchaseOrderForm() {
@@ -2002,6 +2081,53 @@ export class FinancialsInvoicing extends Component {
             tax_id: "",
             uom_po_id: false,
         };
+    }
+
+    get poSelectedVendorId() {
+        return this.state.purchaseOrderForm.partner_id ? parseInt(this.state.purchaseOrderForm.partner_id, 10) : null;
+    }
+
+    get poAssociatedProducts() {
+        const vendorId = this.poSelectedVendorId;
+        if (!vendorId) return [];
+        return (this.state.products || []).filter((p) => p.vendor_id === vendorId);
+    }
+
+    get poOtherProducts() {
+        const vendorId = this.poSelectedVendorId;
+        if (!vendorId) return this.state.products || [];
+        return (this.state.products || []).filter((p) => p.vendor_id !== vendorId);
+    }
+
+    get poAvailableProducts() {
+        const vendorId = this.poSelectedVendorId;
+        if (!vendorId) {
+            return this.state.products || [];
+        }
+        const associated = this.poAssociatedProducts;
+        return associated.length > 0 ? associated : (this.state.products || []);
+    }
+
+    onPoVendorChange() {
+        const vendorId = this.poSelectedVendorId;
+        if (!vendorId) return;
+        const associated = this.poAssociatedProducts;
+        for (const line of this.state.purchaseOrderForm.lines) {
+            if (line.product_id) {
+                if (associated.length > 0) {
+                    const isAssociated = associated.some((p) => p.id == line.product_id);
+                    if (!isAssociated) {
+                        line.product_id = '';
+                        line.price_unit = 0;
+                        line.product = '';
+                    } else {
+                        this.onPurchaseProductChange(line, vendorId);
+                    }
+                } else {
+                    this.onPurchaseProductChange(line, vendorId);
+                }
+            }
+        }
     }
 
     openPurchaseOrderForm() {
@@ -2109,11 +2235,11 @@ export class FinancialsInvoicing extends Component {
         }
         try {
             const vals = {
-                name: form.name,
-                phone: form.phone || false,
-                email: form.email || false,
-                street: form.street || false,
-                city: form.city || false,
+                name: form.name.trim(),
+                phone: (form.phone || '').trim() || false,
+                email: (form.email || '').trim() || false,
+                street: (form.street || '').trim() || false,
+                city: (form.city || '').trim() || false,
                 supplier_rank: 1,
                 customer_rank: 0,
                 is_shahtaj_shop: false,
@@ -2129,9 +2255,18 @@ export class FinancialsInvoicing extends Component {
             await this.fetchRealData({ includeLookups: true, includePnl: false });
             await this.fetchActiveList();
             this.state.showVendorForm = false;
+            if (this.state.selectedVendor && this.state.selectedVendor.id === vendorId) {
+                this.state.selectedVendor = {
+                    ...this.state.selectedVendor,
+                    ...vals,
+                    phone: vals.phone || 'N/A',
+                    email: vals.email || 'N/A',
+                    address: [vals.street, vals.city].filter(Boolean).join(', ') || 'No address provided',
+                };
+            }
             this.notification.add("Vendor saved successfully.", { type: "success" });
             if (!form.id) {
-                this.state.purchaseOrderForm.partner_id = vendorId;
+                this.state.purchaseOrderForm.partner_id = vendorId.toString();
             }
         } catch (error) {
             this.notification.add("Failed to save vendor: " + (error.data?.message || error.message), { type: "danger" });
@@ -2411,6 +2546,103 @@ export class FinancialsInvoicing extends Component {
 
     async viewVendor(vendor) {
         this.state.selectedVendor = vendor;
+        this.state.selectedVendorProducts = [];
+        this.state.associateProductId = '';
+        this.state.isLoadingVendorProducts = true;
+        try {
+            const [products, allProducts] = await Promise.all([
+                this.orm.searchRead(
+                    "product.template",
+                    [["shahtaj_vendor_id", "=", vendor.id], ["active", "=", true]],
+                    ["id", "name", "qty_available", "shahtaj_sale_uom", "uom_name", "standard_price", "list_price"]
+                ),
+                this.orm.searchRead(
+                    "product.template",
+                    [["sale_ok", "=", true], ["active", "=", true], ["default_code", "!=", "SHAHTAJ-LEGACY"]],
+                    ["id", "name", "shahtaj_vendor_id"]
+                ),
+            ]);
+            this.state.selectedVendorProducts = products || [];
+            this.state.allActiveProductsForVendor = allProducts || [];
+        } catch (e) {
+            console.error("Failed to load vendor products:", e);
+        } finally {
+            this.state.isLoadingVendorProducts = false;
+        }
+    }
+
+    openPoForSelectedVendor() {
+        if (!this.state.selectedVendor) return;
+        const vendorId = this.state.selectedVendor.id;
+        this.resetPurchaseOrderForm();
+        this.state.purchaseOrderForm.partner_id = vendorId.toString();
+        this.state.selectedVendor = null;
+        this.state.activeSubTab = 'po_management';
+        this.state.poSubTab = 'purchase_orders';
+        this.state.showPurchaseOrderForm = true;
+    }
+
+    openPoForSpecificProduct(product, vendor = null) {
+        const v = vendor || this.state.selectedVendor;
+        const vendorId = v ? v.id : null;
+        this.openPurchaseOrderFormWithProduct({
+            vendorId: vendorId,
+            productId: product.id,
+            productName: product.name,
+        });
+    }
+
+    async openPurchaseOrderFormWithProduct({ vendorId, productId, productName }) {
+        this.resetPurchaseOrderForm();
+        if (vendorId) {
+            this.state.purchaseOrderForm.partner_id = vendorId.toString();
+        }
+        if (productId) {
+            const line = this._emptyPurchaseOrderLine();
+            line.product_id = productId.toString();
+            line.product = productName || 'Product';
+            this.state.purchaseOrderForm.lines = [line];
+            // Resolve line details if possible
+            await this.onPurchaseProductChange(line, vendorId);
+        }
+        this.state.selectedVendor = null;
+        this.state.activeSubTab = 'po_management';
+        this.state.poSubTab = 'purchase_orders';
+        this.state.showPurchaseOrderForm = true;
+    }
+
+    async associateProductToSelectedVendor() {
+        const prodId = parseInt(this.state.associateProductId, 10);
+        const vendorId = this.state.selectedVendor ? this.state.selectedVendor.id : null;
+        if (!prodId || !vendorId) {
+            this.notification.add("Please select a product to associate.", { type: "warning" });
+            return;
+        }
+        try {
+            await this.orm.write("product.template", [prodId], { shahtaj_vendor_id: vendorId });
+            this.notification.add("Product associated with vendor successfully.", { type: "success" });
+            this.state.associateProductId = '';
+            await this.fetchRealData({ includeLookups: true });
+            if (this.state.selectedVendor) {
+                await this.viewVendor(this.state.selectedVendor);
+            }
+        } catch (error) {
+            this.notification.add("Failed to associate product: " + (error.data?.message || error.message), { type: "danger" });
+        }
+    }
+
+    async removeProductFromVendor(productId) {
+        if (!productId) return;
+        try {
+            await this.orm.write("product.template", [productId], { shahtaj_vendor_id: false });
+            this.notification.add("Product association removed.", { type: "info" });
+            await this.fetchRealData({ includeLookups: true });
+            if (this.state.selectedVendor) {
+                await this.viewVendor(this.state.selectedVendor);
+            }
+        } catch (error) {
+            this.notification.add("Failed to remove product association: " + (error.data?.message || error.message), { type: "danger" });
+        }
     }
 
     async actionConfirmPurchaseOrder(po) {

@@ -22,7 +22,7 @@ export class OperationsTracking extends Component {
             
             itemsPerPage: 5,
             
-
+            
             selectedDelivery: null,
 
             isCreatingInvoice: false,
@@ -368,7 +368,7 @@ export class OperationsTracking extends Component {
             this.state.isLoadingList = false;
         }
     }
-   async refreshData() {
+    async refreshData() {
         this.state.isRefreshing = true;
         try {
             await this.loadDropdownData();
@@ -399,7 +399,7 @@ export class OperationsTracking extends Component {
         }
     }
 
-    
+  
     closeDelivery() { 
         this.state.selectedDelivery = null; 
     }
@@ -483,9 +483,9 @@ export class OperationsTracking extends Component {
         }
         const [taxes, prods] = await Promise.all([
             this.orm.searchRead(
-                "account.tax",
-                [["type_tax_use", "=", "sale"], ["active", "=", true]],
-                ["id", "name", "amount"]
+            "account.tax",
+            [["type_tax_use", "=", "sale"], ["active", "=", true]],
+            ["id", "name", "amount"]
             ),
             this.orm.searchRead("product.template", [
                 ["sale_ok", "=", true],
@@ -501,7 +501,7 @@ export class OperationsTracking extends Component {
     // 2. UPDATE THIS METHOD TO MAP TAX NAMES IN DELIVERIES
     async viewDelivery(dlv) {
         this.state.selectedDelivery = dlv;
-        this.state.isEditingDelivery = false;
+        this.state.isEditingDelivery = false; 
         // Need tax catalog so line tax labels resolve the same as before.
         await this.ensureCatalogData();
         
@@ -701,7 +701,7 @@ export class OperationsTracking extends Component {
     }
     // --- NAVIGATION & FILTERS ---
 
-  setSubTab(tabName) {
+    setSubTab(tabName) {
         this.state.activeSubTab = tabName;
 
         // If we are programmatically jumping to a record, protect the view from being cleared
@@ -814,7 +814,7 @@ export class OperationsTracking extends Component {
     viewCheckin(log) { this.state.selectedCheckin = log; }
     closeCheckin() { this.state.selectedCheckin = null; }
 
-  async viewOrderFromCheckin(log) {
+    async viewOrderFromCheckin(log) {
         if (!log.sale_order_id) return;
         
         try {
