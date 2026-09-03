@@ -260,6 +260,7 @@
                         <group>
                             <field name="outstanding_balance" string="Posted Outstanding (Rs)"
                                    groups="shahtaj_oil.group_shahtaj_distributor_financial"/>
+                            <!-- Fields commented out — not yet defined on res.partner model (production upgrade guard)
                             <field name="shahtaj_pending_order_exposure" string="Pending Orders"
                                    widget="monetary"
                                    groups="shahtaj_oil.group_shahtaj_distributor_financial"/>
@@ -272,6 +273,7 @@
                             <field name="shahtaj_credit_remaining_effective" string="Credit Remaining"
                                    widget="monetary"
                                    groups="shahtaj_oil.group_shahtaj_distributor_financial"/>
+                            -->
                             <field name="credit" string="Total Receivable (Odoo)"
                                    groups="account.group_account_invoice,account.group_account_readonly"/>
                             <field name="property_account_receivable_id"
