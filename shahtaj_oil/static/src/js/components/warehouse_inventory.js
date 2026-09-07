@@ -455,6 +455,20 @@ export class WarehouseInventory extends Component {
             const createdId = Array.isArray(res) ? res[0] : res;
             const createdName = this.state.productForm.name;
             const createdVendorId = this.state.productForm.vendor_id;
+            let createdVariantId = createdId;
+            try {
+                const variants = await this.orm.searchRead(
+                    "product.product",
+                    [["product_tmpl_id", "=", createdId]],
+                    ["id"],
+                    { limit: 1 }
+                );
+                if (variants.length) {
+                    createdVariantId = variants[0].id;
+                }
+            } catch (_error) {
+                createdVariantId = createdId;
+            }
 
             await this.loadDropdownData();
             await this.fetchActiveList();
@@ -464,7 +478,8 @@ export class WarehouseInventory extends Component {
             
             // Set newly created product info for quick PO creation prompt
             this.state.createdProductPrompt = {
-                id: createdId,
+                id: createdVariantId,
+                templateId: createdId,
                 name: createdName,
                 vendor_id: createdVendorId,
             };
@@ -480,10 +495,12 @@ export class WarehouseInventory extends Component {
         const prod = this.state.createdProductPrompt;
         this.state.createdProductPrompt = null;
         if (!prod) return;
+        const vendorId = prod.vendor_id ? parseInt(prod.vendor_id, 10) : null;
         window.dispatchEvent(new CustomEvent('shahtaj-open-create-po', {
             detail: {
-                vendorId: prod.vendor_id ? parseInt(prod.vendor_id, 10) : null,
+                vendorId: vendorId || null,
                 productId: prod.id,
+                productTmplId: prod.templateId || prod.id,
                 productName: prod.name,
             }
         }));
@@ -536,7 +553,6 @@ export class WarehouseInventory extends Component {
         this.state.currentProduct = {
             ...product,
             tax_id: currentTaxId,
-            on_hand_qty: product.qty_available || 0,
             vendor_id: currentVendorId,
         };
         this.state.showProductDetails = true;
@@ -552,7 +568,6 @@ export class WarehouseInventory extends Component {
 
         this.state.isLoading = true;
         try {
-            const targetOnHand = parseFloat(this.state.currentProduct.on_hand_qty || 0);
             // Note: standard_price (Cost Price) is intentionally excluded from manual edits
             // as it is computed automatically via Weighted Average Cost (AVCO) from POs / receipts.
             const vals = {
@@ -580,12 +595,6 @@ export class WarehouseInventory extends Component {
             }
 
             await this.orm.write("product.template", [this.state.currentProduct.id], vals);
-            if (this.state.currentProduct.is_storable) {
-                const currentOnHand = parseFloat(this.state.currentProduct.qty_available || 0);
-                if (targetOnHand !== currentOnHand) {
-                    await this.orm.call("product.template", "action_shahtaj_set_on_hand_qty", [[this.state.currentProduct.id], targetOnHand]);
-                }
-            }
             await this.refreshData();
             this.state.showProductDetails = false;
             this.state.currentProduct = null;
