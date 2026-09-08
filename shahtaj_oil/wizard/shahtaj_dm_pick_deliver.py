@@ -232,40 +232,72 @@ class ShahtajDmDeliverWizard(models.TransientModel):
         res['line_ids'] = lines
         return res
 
+    def _log_deliver_gps(self, result, message, distance_m=0.0, min_m=0.0, max_m=0.0):
+        self.env['shahtaj.gps.attempt'].log_attempt(
+            purpose='deliver',
+            result=result,
+            shop=self.partner_id,
+            latitude=self.latitude,
+            longitude=self.longitude,
+            distance_m=distance_m,
+            min_distance_m=min_m,
+            max_distance_m=max_m,
+            message=message,
+            dm_delivery=self.delivery_id,
+        )
+
     def action_confirm_deliver(self):
         self.ensure_one()
         shop = self.partner_id.sudo()
+        limits = get_shop_distance_limits(self.env)
+        min_m = float(limits.get('min_m') or 0.0)
+        max_m = float(limits.get('max_m') or 0.0)
         if not shop.partner_latitude or not shop.partner_longitude:
-            raise UserError(_(
+            msg = _(
                 'Shop "%(shop)s" has no GPS coordinates. '
                 'Ask the distributor to set shop latitude/longitude before delivering.',
                 shop=shop.display_name,
-            ))
+            )
+            self._log_deliver_gps('blocked_missing_shop_gps', msg, max_m=max_m, min_m=min_m)
+            raise UserError(msg)
         if not self.latitude or not self.longitude:
-            raise UserError(_(
+            msg = _(
                 'Your GPS is missing. Tap “Use My GPS” (or enter your real latitude '
                 'and longitude), then confirm.'
-            ))
+            )
+            self._log_deliver_gps('blocked_missing_user_gps', msg, max_m=max_m, min_m=min_m)
+            raise UserError(msg)
         if not (-90 <= self.latitude <= 90) or not (-180 <= self.longitude <= 180):
-            raise UserError(_('Latitude/longitude values are out of range.'))
+            msg = _('Latitude/longitude values are out of range.')
+            self._log_deliver_gps('blocked_invalid_coords', msg, max_m=max_m, min_m=min_m)
+            raise UserError(msg)
 
         # Reject silent “standing on shop pin” when coords are exactly the shop
         # only if that was our old test path — real DM may be at the door.
         # Exact match is allowed when GPS is genuine.
 
-        limits = get_shop_distance_limits(self.env)
-        max_m = float(limits.get('max_m') or 0.0)
         distance = shahtaj_distance_meters(
             self.latitude, self.longitude,
             shop.partner_latitude, shop.partner_longitude,
         )
         if distance > max_m:
-            raise UserError(_(
+            msg = _(
                 'You are %(dist).0f m from the shop (max allowed %(max).0f m). '
                 'Move closer and tap “Use My GPS” again.',
                 dist=distance,
                 max=max_m,
-            ))
+            )
+            self._log_deliver_gps(
+                'blocked_too_far', msg, distance_m=distance, max_m=max_m, min_m=min_m,
+            )
+            raise UserError(msg)
+        self._log_deliver_gps(
+            'ok',
+            _('Within range (%(dist).0f m / max %(max).0f m)', dist=distance, max=max_m),
+            distance_m=distance,
+            max_m=max_m,
+            min_m=min_m,
+        )
 
         qty_map = {}
         for line in self.line_ids:

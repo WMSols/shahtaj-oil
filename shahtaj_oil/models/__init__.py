@@ -9,6 +9,7 @@ from . import shahtaj_shop_credit
 from . import shahtaj_weekly_schedule
 from . import shahtaj_visit_task
 from . import shahtaj_visit
+from . import shahtaj_gps_attempt
 from . import shahtaj_visit_target
 from . import sale_order
 from . import sale_order_line
