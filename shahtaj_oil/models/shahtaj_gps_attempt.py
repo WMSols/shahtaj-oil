@@ -2,7 +2,7 @@
 """Log every shop GPS check (success and blocked) for bookers and delivery men."""
 import logging
 
-from odoo import api, fields, models
+from odoo import SUPERUSER_ID, api, fields, models
 
 _logger = logging.getLogger(__name__)
 
@@ -145,7 +145,11 @@ class ShahtajGpsAttempt(models.Model):
         dm_delivery=None,
         role=None,
     ):
-        """Create a GPS attempt row (sudo). Never raises to callers."""
+        """Create a GPS attempt row (sudo). Never raises to callers.
+
+        Blocked check-ins raise ``UserError`` afterwards. That rolls back the
+        request transaction, so the log is written on a separate cursor.
+        """
         try:
             user = user or self.env.user
             shop = shop.sudo() if shop else shop
@@ -157,7 +161,7 @@ class ShahtajGpsAttempt(models.Model):
                 'distance_m': float(distance_m or 0.0),
                 'min_distance_m': float(min_distance_m or 0.0),
                 'max_distance_m': float(max_distance_m or 0.0),
-                'message': (message or '')[:512],
+                'message': str(message or '')[:512],
                 'company_id': self.env.company.id,
             }
             if shop:
@@ -176,9 +180,19 @@ class ShahtajGpsAttempt(models.Model):
                 vals['sale_order_id'] = sale_order.id
             if dm_delivery:
                 vals['dm_delivery_id'] = dm_delivery.id
-            return self.sudo().create(vals)
+            rec_id = self._create_attempt_committed(vals)
+            return self.browse(rec_id) if rec_id else self.browse()
         except Exception:  # noqa: BLE001 — logging must never block check-in/deliver
+            _logger.exception('Failed to log GPS attempt')
             return self.browse()
+
+    def _create_attempt_committed(self, vals):
+        """Commit the log outside the current request so a later UserError cannot roll it back."""
+        rec_id = False
+        with self.env.registry.cursor() as cr:
+            env = api.Environment(cr, SUPERUSER_ID, dict(self.env.context))
+            rec_id = env['shahtaj.gps.attempt'].create(vals).id
+        return rec_id
 
     def _stamp_create_date(self, when):
         """Set create_date so historical backfill sorts with the original visit."""
