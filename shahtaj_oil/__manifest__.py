@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Shahtaj Oil',
-    'version': '19.0.1.1.40',
+    'version': '19.0.1.1.45',
     'post_init_hook': 'post_init_hook',
     'category': 'Sales/Distribution',
     'summary': 'Unified Command Center for Shahtaj Oil distributions, field booking, and SPA frontend',
     'author': 'WMsols',
     'depends': [
-        'base', 
-        'web', 
-        'contacts', 
-        'sale', 
-        'sale_stock', 
-        'mail', 
-        'account', 
+        'base',
+        'web',
+        'contacts',
+        'sale',
+        'sale_stock',
+        'mail',
+        'account',
         'stock',
         'purchase',
         'purchase_stock',
@@ -78,8 +78,7 @@
         'wizard/shahtaj_assign_shops_route_views.xml',
 
         'report/shahtaj_manufacturer_summary_report.xml',
-        
-        'report/shahtaj_manufacturer_summary_report.xml',
+
         # ── 8. SECURITY FIXES (must update rules created in step 1) ──
         'security/shahtaj_record_rules_fix.xml',
         'security/shahtaj_booker_ui_fix.xml',
@@ -92,30 +91,20 @@
         'data/shahtaj_user_access_sync.xml',
 
         # ── 10. MENUS (ALWAYS LAST; includes distributor portal client action) ──
-        'views/menus.xml', # All combined Menus
+        'views/menus.xml',
         'views/shahtaj_api_test_menu.xml',
     ],
     'assets': {
-    'web.assets_backend': [
-    'shahtaj_oil/static/src/scss/custom_portal_shell.scss',
-    'shahtaj_oil/static/src/scss/shahtaj_route_checklist.scss',
-    'shahtaj_oil/static/src/js/custom_portal_shell.js',
-    'shahtaj_oil/static/src/js/shahtaj_access.js',
-    'shahtaj_oil/static/src/xml/dashboard.xml',
-    'shahtaj_oil/static/src/js/components/staff_management.js',
-    'shahtaj_oil/static/src/js/components/operations_tracking.js',
-    'shahtaj_oil/static/src/js/components/territory_routes.js',
-    'shahtaj_oil/static/src/js/components/warehouse_inventory.js',
-    'shahtaj_oil/static/src/js/components/financials_invoicing.js',
-    'shahtaj_oil/static/src/js/components/settings.js',
-    'shahtaj_oil/static/src/js/components/schedules_targets.js',
-    'shahtaj_oil/static/src/js/components/dashboard.js',
-    'shahtaj_oil/static/src/js/components/bank_transactions.js',
-    'shahtaj_oil/static/src/js/components/*.js',
-    'shahtaj_oil/static/src/xml/*.xml',
-    'shahtaj_oil/static/src/lib/leaflet/leaflet.css',
-    'shahtaj_oil/static/src/lib/leaflet/leaflet.js',
-],
+        'web.assets_backend': [
+            'shahtaj_oil/static/src/scss/custom_portal_shell.scss',
+            'shahtaj_oil/static/src/scss/shahtaj_route_checklist.scss',
+            'shahtaj_oil/static/src/js/custom_portal_shell.js',
+            'shahtaj_oil/static/src/js/shahtaj_access.js',
+            'shahtaj_oil/static/src/js/components/*.js',
+            'shahtaj_oil/static/src/xml/*.xml',
+            'shahtaj_oil/static/src/lib/leaflet/leaflet.css',
+            'shahtaj_oil/static/src/lib/leaflet/leaflet.js',
+        ],
     },
     'application': True,
     'installable': True,

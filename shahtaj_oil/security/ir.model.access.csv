@@ -75,3 +75,8 @@ access_shahtaj_expense_financial,shahtaj.expense.financial,model_shahtaj_expense
 access_shahtaj_expense_category_user,shahtaj.expense.category.user,model_shahtaj_expense_category,base.group_user,1,1,1,1
 access_shahtaj_expense_user,shahtaj.expense.user,model_shahtaj_expense,base.group_user,1,1,1,1
 access_account_account_shahtaj_distributor_financial,account.account.shahtaj.distributor.financial,account.model_account_account,group_shahtaj_distributor_financial,1,0,0,0
+access_shahtaj_gps_attempt_user,shahtaj.gps.attempt.user,model_shahtaj_gps_attempt,base.group_user,1,0,0,0
+access_shahtaj_gps_attempt_distributor,shahtaj.gps.attempt.distributor,model_shahtaj_gps_attempt,group_shahtaj_distributor,1,0,0,0
+access_shahtaj_gps_attempt_native,shahtaj.gps.attempt.native,model_shahtaj_gps_attempt,group_shahtaj_native_distributor_ui,1,0,0,0
+access_shahtaj_gps_attempt_booker,shahtaj.gps.attempt.order.booker,model_shahtaj_gps_attempt,group_shahtaj_order_booker,1,0,0,0
+
