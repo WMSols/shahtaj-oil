@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """Log every shop GPS check (success and blocked) for bookers and delivery men."""
-from odoo import api, fields, models
+import logging
+
+from odoo import SUPERUSER_ID, api, fields, models
+
+_logger = logging.getLogger(__name__)
 
 
 class ShahtajGpsAttempt(models.Model):
@@ -78,6 +82,12 @@ class ShahtajGpsAttempt(models.Model):
         ondelete='set null',
         index=True,
     )
+    sale_order_id = fields.Many2one(
+        'sale.order',
+        string='Sales Order',
+        ondelete='set null',
+        index=True,
+    )
     company_id = fields.Many2one(
         'res.company',
         string='Company',
@@ -125,9 +135,14 @@ class ShahtajGpsAttempt(models.Model):
         user=None,
         visit_task=None,
         visit=None,
+        sale_order=None,
         role=None,
     ):
-        """Create a GPS attempt row (sudo). Never raises to callers."""
+        """Create a GPS attempt row (sudo). Never raises to callers.
+
+        Blocked check-ins raise ``UserError`` afterwards. That rolls back the
+        request transaction, so the log is written on a separate cursor.
+        """
         try:
             user = user or self.env.user
             shop = shop.sudo() if shop else shop
@@ -139,7 +154,7 @@ class ShahtajGpsAttempt(models.Model):
                 'distance_m': float(distance_m or 0.0),
                 'min_distance_m': float(min_distance_m or 0.0),
                 'max_distance_m': float(max_distance_m or 0.0),
-                'message': (message or '')[:512],
+                'message': str(message or '')[:512],
                 'company_id': self.env.company.id,
             }
             if shop:
@@ -154,6 +169,157 @@ class ShahtajGpsAttempt(models.Model):
                 vals['visit_task_id'] = visit_task.id
             if visit:
                 vals['visit_id'] = visit.id
-            return self.sudo().create(vals)
+            if sale_order:
+                vals['sale_order_id'] = sale_order.id
+            rec_id = self._create_attempt_committed(vals)
+            return self.browse(rec_id) if rec_id else self.browse()
         except Exception:  # noqa: BLE001 — logging must never block check-in/deliver
+            _logger.exception('Failed to log GPS attempt')
             return self.browse()
+
+    def _create_attempt_committed(self, vals):
+        """Commit the log outside the current request so a later UserError cannot roll it back."""
+        rec_id = False
+        with self.env.registry.cursor() as cr:
+            env = api.Environment(cr, SUPERUSER_ID, dict(self.env.context))
+            rec_id = env['shahtaj.gps.attempt'].create(vals).id
+        return rec_id
+
+    def _stamp_create_date(self, when):
+        """Set create_date so historical backfill sorts with the original visit."""
+        if not self or not when:
+            return
+        self.env.cr.execute(
+            "UPDATE shahtaj_gps_attempt SET create_date = %s WHERE id IN %s",
+            (when, tuple(self.ids)),
+        )
+        self.invalidate_recordset(['create_date'])
+
+    @api.model
+    def backfill_from_existing_visits(self):
+        """Create GPS log rows for visits that predate shahtaj.gps.attempt.
+
+        Shop Check-ins only reads this model, so older successful check-ins
+        (and place-orders) would otherwise disappear after the GPS update.
+        Idempotent: skips visit+purpose pairs that already have a log row.
+        """
+        Visit = self.env['shahtaj.visit'].sudo()
+        limits = {}
+        try:
+            from .shahtaj_gps import get_shop_distance_limits
+            limits = get_shop_distance_limits(self.env) or {}
+        except Exception:  # noqa: BLE001
+            limits = {}
+        min_m = float(limits.get('min_m') or 0.0)
+        max_m = float(limits.get('max_m') or 0.0)
+
+        logged_checkin = set(
+            self.sudo().search([('purpose', '=', 'check_in'), ('visit_id', '!=', False)]).mapped('visit_id').ids
+        )
+        logged_place = set(
+            self.sudo().search([('purpose', '=', 'place_order'), ('visit_id', '!=', False)]).mapped('visit_id').ids
+        )
+        visits = Visit.search([], order='id asc')
+        created = self.browse()
+        for visit in visits:
+            try:
+                created |= self._backfill_one_visit(
+                    visit, logged_checkin, logged_place, min_m, max_m,
+                )
+            except Exception:  # noqa: BLE001 — one bad visit must not drop the rest
+                _logger.exception('GPS backfill skipped visit %s', visit.id)
+
+        created |= self._backfill_visitless_shop_orders(min_m, max_m)
+        return created
+
+    def _backfill_one_visit(self, visit, logged_checkin, logged_place, min_m, max_m):
+        created = self.browse()
+        shop = visit.shop_id.sudo()
+        user = visit.order_booker_id
+        if not user:
+            return created
+        company_id = (
+            shop.company_id.id
+            or user.company_id.id
+            or self.env.company.id
+        )
+        base_vals = {
+            'user_id': user.id,
+            'role': 'order_booker',
+            'shop_id': shop.id if shop else False,
+            'shop_latitude': shop.partner_latitude or 0.0 if shop else 0.0,
+            'shop_longitude': shop.partner_longitude or 0.0 if shop else 0.0,
+            'min_distance_m': min_m,
+            'max_distance_m': max_m,
+            'visit_task_id': visit.visit_task_id.id if visit.visit_task_id else False,
+            'visit_id': visit.id,
+            'sale_order_id': visit.sale_order_id.id if visit.sale_order_id else False,
+            'company_id': company_id,
+        }
+        if visit.id not in logged_checkin:
+            rec = self.sudo().create({
+                **base_vals,
+                'purpose': 'check_in',
+                'result': 'ok',
+                'attempt_latitude': visit.check_in_latitude or 0.0,
+                'attempt_longitude': visit.check_in_longitude or 0.0,
+                'distance_m': visit.check_in_distance_m or 0.0,
+                'message': 'Historical check-in (logged before GPS attempt tracking).',
+            })
+            rec._stamp_create_date(visit.started_at)
+            created |= rec
+        if (
+            visit.id not in logged_place
+            and (visit.place_order_latitude or visit.place_order_longitude)
+        ):
+            rec = self.sudo().create({
+                **base_vals,
+                'purpose': 'place_order',
+                'result': 'ok',
+                'attempt_latitude': visit.place_order_latitude or 0.0,
+                'attempt_longitude': visit.place_order_longitude or 0.0,
+                'distance_m': visit.place_order_distance_m or 0.0,
+                'message': 'Historical place-order GPS (logged before GPS attempt tracking).',
+            })
+            rec._stamp_create_date(visit.ended_at or visit.started_at)
+            created |= rec
+        return created
+
+    def _backfill_visitless_shop_orders(self, min_m, max_m):
+        """Portal / native shop orders have no visit, so they never got a check-in row."""
+        created = self.browse()
+        already = set(
+            self.sudo().search([('sale_order_id', '!=', False)]).mapped('sale_order_id').ids
+        )
+        orders = self.env['sale.order'].sudo().search([
+            ('partner_id.is_shahtaj_shop', '=', True),
+            ('shahtaj_visit_id', '=', False),
+        ], order='id asc')
+        for order in orders:
+            if order.id in already:
+                continue
+            shop = order.partner_id.sudo()
+            user = order.user_id or order.create_uid
+            if not user:
+                continue
+            rec = self.sudo().create({
+                'user_id': user.id,
+                'role': self._shahtaj_resolve_role(user),
+                'purpose': 'check_in',
+                'result': 'ok',
+                'shop_id': shop.id,
+                'shop_latitude': shop.partner_latitude or 0.0,
+                'shop_longitude': shop.partner_longitude or 0.0,
+                'attempt_latitude': 0.0,
+                'attempt_longitude': 0.0,
+                'distance_m': 0.0,
+                'min_distance_m': min_m,
+                'max_distance_m': max_m,
+                'sale_order_id': order.id,
+                'company_id': order.company_id.id or self.env.company.id,
+                'message': 'Order placed without a field check-in (distributor portal / backfill).',
+            })
+            rec._stamp_create_date(order.date_order or order.create_date)
+            already.add(order.id)
+            created |= rec
+        return created

@@ -678,6 +678,12 @@ class ShahtajVisit(models.Model):
         self.with_context(shahtaj_system_visit_write=True).write({
             'sale_order_id': order.id,
         })
+        gps_rows = self.env['shahtaj.gps.attempt'].sudo().search([
+            ('visit_id', '=', self.id),
+            ('sale_order_id', '=', False),
+        ])
+        if gps_rows:
+            gps_rows.write({'sale_order_id': order.id})
         self._finish_visit('order')
         self.env['shahtaj.activity.log'].log_business(
             operation='visit.place_order',

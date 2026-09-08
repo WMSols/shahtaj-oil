@@ -374,7 +374,7 @@ export class OperationsTracking extends Component {
                     'shop_id', 'shop_latitude', 'shop_longitude',
                     'attempt_latitude', 'attempt_longitude',
                     'distance_m', 'min_distance_m', 'max_distance_m',
-                    'visit_task_id', 'visit_id',
+                    'visit_task_id', 'visit_id', 'sale_order_id',
                 ];
                 if (filters.search) {
                     domain.push('|', '|',
@@ -494,10 +494,10 @@ export class OperationsTracking extends Component {
                         shop_longitude: a.shop_longitude || 0,
                         attempt_latitude: a.attempt_latitude || 0,
                         attempt_longitude: a.attempt_longitude || 0,
-                        taskRef: a.visit_task_id ? a.visit_task_id[1] : '—',
+                        taskRef: a.visit_task_id ? a.visit_task_id[1] : (a.sale_order_id ? a.sale_order_id[1] : '—'),
                         visit_id: a.visit_id || false,
                         visit_task_id: a.visit_task_id || false,
-                        sale_order_id: false,
+                        sale_order_id: a.sale_order_id || false,
                         notes: '',
                         endTime: '',
                         duration: distLabel,
