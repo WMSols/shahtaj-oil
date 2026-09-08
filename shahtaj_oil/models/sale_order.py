@@ -860,7 +860,30 @@ class SaleOrder(models.Model):
     def create(self, vals_list):
         orders = super().create(vals_list)
         orders._shahtaj_recompute_visit_targets()
+        try:
+            orders._shahtaj_ensure_gps_attempt()
+        except Exception:  # noqa: BLE001 — GPS log must never block order create
+            pass
         return orders
+
+    def _shahtaj_ensure_gps_attempt(self):
+        """Shop orders created without a visit (portal) still appear in Check-ins."""
+        Attempt = self.env['shahtaj.gps.attempt']
+        for order in self:
+            if order.shahtaj_visit_id:
+                continue
+            if not order.partner_id.is_shahtaj_shop:
+                continue
+            if Attempt.sudo().search_count([('sale_order_id', '=', order.id)]):
+                continue
+            Attempt.log_attempt(
+                purpose='check_in',
+                result='ok',
+                shop=order.partner_id,
+                user=order.user_id or order.create_uid,
+                sale_order=order,
+                message='Order placed without a field check-in (distributor portal).',
+            )
 
     def write(self, vals):
         tracked_order_fields = {'date_order'}
