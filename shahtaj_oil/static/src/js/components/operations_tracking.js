@@ -110,10 +110,13 @@ export class OperationsTracking extends Component {
         this.debouncedFetchActiveList = this.debounceSearch(() => this.fetchActiveList(), 400);
 
         onWillStart(async () => {
-            await this.loadDropdownData();
-            await this.loadSaleOrderCatalog();
-            if (hasFinancialAccess()) await this.loadTaxAndProductData();
-            await this.fetchActiveList();
+            // Catalogs are large on production; do not block Live Orders on them.
+            await Promise.all([
+                this.loadDropdownData(),
+                this.fetchActiveList(),
+            ]);
+            this.loadSaleOrderCatalog();
+            if (hasFinancialAccess()) this.loadTaxAndProductData();
         });
 
         useEffect(() => {
@@ -375,22 +378,40 @@ export class OperationsTracking extends Component {
     }
 
    async loadDropdownData() {
-        const [bookers, deliveryMen] = await Promise.all([
-            this.orm.searchRead('res.users', [['shahtaj_is_order_booker', '=', true]], ['id', 'name']),
-            this.orm.searchRead('res.users', [['shahtaj_is_delivery_man', '=', true]], ['id', 'name']),
-        ]);
-        const byId = new Map();
-        for (const user of [...bookers, ...deliveryMen]) {
-            byId.set(user.id, user);
+        try {
+            const bookers = await this.orm.searchRead(
+                'res.users',
+                [['shahtaj_is_order_booker', '=', true]],
+                ['id', 'name'],
+            );
+            let deliveryMen = [];
+            try {
+                deliveryMen = await this.orm.searchRead(
+                    'res.users',
+                    [['shahtaj_is_delivery_man', '=', true]],
+                    ['id', 'name'],
+                );
+            } catch (error) {
+                // GPS/DM filter is optional; Live Orders must still load.
+            }
+            const byId = new Map();
+            for (const user of [...bookers, ...deliveryMen]) {
+                byId.set(user.id, user);
+            }
+            this.state.lookupBookers = [...byId.values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        } catch (error) {
+            this.state.lookupBookers = [];
         }
-        this.state.lookupBookers = [...byId.values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        
-        // FIXED: Using .call() to safely execute read_group
-        const types = await this.orm.call('shahtaj.visit.target', 'read_group', [[], ['target_type'], ['target_type']]);
-        this.state.lookupTargetTypes = types.map(t => ({
-            value: t.target_type, 
-            label: t.target_type ? t.target_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown'
-        })).filter(t => t.value);
+
+        try {
+            const types = await this.orm.call('shahtaj.visit.target', 'read_group', [[], ['target_type'], ['target_type']]);
+            this.state.lookupTargetTypes = types.map(t => ({
+                value: t.target_type, 
+                label: t.target_type ? t.target_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown'
+            })).filter(t => t.value);
+        } catch (error) {
+            this.state.lookupTargetTypes = [];
+        }
     }
 
     async loadSaleOrderCatalog() {
@@ -527,12 +548,12 @@ export class OperationsTracking extends Component {
                 targetState = tab === 'deliveries' ? 'tableDeliveries' : (tab === 'verification' ? 'tableVerification' : 'tableOrders');
                 fields = ["name", "partner_id", "user_id", "date_order", "amount_total", "amount_tax", "amount_untaxed", "state", "order_line", "invoice_status"];
                 if (tab !== 'deliveries') {
+                    // Stored fields only. Credit/history snapshot fields are computed
+                    // and stall this list on a production database — load them in viewOrder.
                     fields.push(
                         "shahtaj_approval_state", "shahtaj_approval_reason_discount", "shahtaj_approval_reason_credit",
                         "shahtaj_approval_reasons_display", "shahtaj_catalog_amount_total", "shahtaj_total_discount_amount",
-                        "shahtaj_discount_reasons", "shahtaj_shop_category", "shahtaj_shop_credit_limit",
-                        "shahtaj_shop_outstanding", "shahtaj_shop_credit_remaining", "shahtaj_shop_credit_shortfall",
-                        "shahtaj_shop_effective_outstanding", "shahtaj_shop_past_discount_count",
+                        "shahtaj_discount_reasons",
                     );
                 }
                 domain.push('|', ['shahtaj_visit_id', '!=', false], ['partner_id.is_shahtaj_shop', '=', true]);
@@ -707,11 +728,15 @@ export class OperationsTracking extends Component {
                 if (tab === 'verification') {
                     this.state.verificationCount = total;
                 } else {
-                    this.state.verificationCount = await this.orm.searchCount('sale.order', [
-                        '|', ['shahtaj_visit_id', '!=', false], ['partner_id.is_shahtaj_shop', '=', true],
-                        ['shahtaj_approval_state', '=', 'to_approve'],
-                        ['state', 'in', ['draft', 'sent']],
-                    ]);
+                    try {
+                        this.state.verificationCount = await this.orm.searchCount('sale.order', [
+                            '|', ['shahtaj_visit_id', '!=', false], ['partner_id.is_shahtaj_shop', '=', true],
+                            ['shahtaj_approval_state', '=', 'to_approve'],
+                            ['state', 'in', ['draft', 'sent']],
+                        ]);
+                    } catch (error) {
+                        this.state.verificationCount = 0;
+                    }
                 }
             }
         } catch (error) {
@@ -834,21 +859,25 @@ export class OperationsTracking extends Component {
         if (!hasFinancialAccess()) {
             return;
         }
-        const [taxes, prods] = await Promise.all([
-            this.orm.searchRead(
-            "account.tax",
-            [["type_tax_use", "=", "sale"], ["active", "=", true]],
-            ["id", "name", "amount"]
-            ),
-            this.orm.searchRead("product.template", [
-                ["sale_ok", "=", true],
-                ["active", "=", true],
-                ["default_code", "!=", "SHAHTAJ-LEGACY"],
-            ], ["id", "name"]),
-        ]);
-        this.state.saleTaxes = taxes;
-        this.state.allProducts = prods;
-        this._catalogsLoaded = true;
+        try {
+            const [taxes, prods] = await Promise.all([
+                this.orm.searchRead(
+                "account.tax",
+                [["type_tax_use", "=", "sale"], ["active", "=", true]],
+                ["id", "name", "amount"]
+                ),
+                this.orm.searchRead("product.template", [
+                    ["sale_ok", "=", true],
+                    ["active", "=", true],
+                    ["default_code", "!=", "SHAHTAJ-LEGACY"],
+                ], ["id", "name"]),
+            ]);
+            this.state.saleTaxes = taxes;
+            this.state.allProducts = prods;
+            this._catalogsLoaded = true;
+        } catch (error) {
+            this.notification.add("Failed to load product catalog: " + (error.data?.message || error.message), { type: "warning" });
+        }
     }
 
     // 2. UPDATE THIS METHOD TO MAP TAX NAMES IN DELIVERIES
@@ -1222,10 +1251,13 @@ export class OperationsTracking extends Component {
         this.state.shopSnapshotOpen = false;
     }
 
-    openSaleOrderForm() {
+    async openSaleOrderForm() {
         this.state.selectedOrder = null;
         this.state.saleOrderForm = this._emptySaleOrderForm();
         this.state.showSaleOrderForm = true;
+        if (!this.state.lookupShops.length || !this.state.saleProducts.length) {
+            await this.loadSaleOrderCatalog();
+        }
     }
 
     closeSaleOrderForm() {
