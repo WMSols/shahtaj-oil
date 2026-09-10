@@ -467,27 +467,116 @@ export class OperationsTracking extends Component {
         })[state] || 'Standard';
     }
 
-    _applyShopSnapshot(snap) {
-        const order = this.state.selectedOrder;
-        if (!order || !snap) return;
-        order.shopCategory = snap.shahtaj_shop_category || '';
-        order.creditLimit = snap.shahtaj_shop_credit_limit || 0;
-        order.outstanding = snap.shahtaj_shop_outstanding || 0;
-        order.pendingExposure = snap.shahtaj_shop_pending_exposure || 0;
-        order.uninvoicedExposure = snap.shahtaj_shop_uninvoiced_exposure || 0;
-        order.effectiveOutstanding = snap.shahtaj_shop_effective_outstanding || 0;
-        order.creditRemaining = snap.shahtaj_shop_credit_remaining || 0;
-        order.creditWouldExceed = !!snap.shahtaj_shop_credit_would_exceed;
-        order.creditShortfall = snap.shahtaj_shop_credit_shortfall || 0;
-        order.lifetimeSales = snap.shahtaj_shop_lifetime_sales || 0;
-        order.confirmedOrderCount = snap.shahtaj_shop_confirmed_order_count || 0;
-        order.pastDiscountTotal = snap.shahtaj_shop_past_discount_total || 0;
-        order.pastDiscountCount = snap.shahtaj_shop_past_discount_count || 0;
-        order.lastDiscountDate = this._formatSnapshotDate(snap.shahtaj_shop_last_discount_date);
-        order.lastDiscountAmount = snap.shahtaj_shop_last_discount_amount || 0;
-        order.paymentTerms = snap.payment_term_id ? snap.payment_term_id[1] : 'Immediate';
-        order.approvalState = snap.shahtaj_approval_state || order.approvalState || 'none';
-        order.verificationLabel = this._verificationLabel(order.approvalState);
+    _m2oId(value) {
+        if (!value) return false;
+        return Array.isArray(value) ? value[0] : value;
+    }
+
+    _applyShopSnapshot(snap, target = null) {
+        const record = target || this.state.selectedOrder;
+        if (!record || !snap) return;
+        record.shopCategory = snap.shahtaj_shop_category || '';
+        record.creditLimit = snap.shahtaj_shop_credit_limit || 0;
+        record.outstanding = snap.shahtaj_shop_outstanding || 0;
+        record.pendingExposure = snap.shahtaj_shop_pending_exposure || 0;
+        record.uninvoicedExposure = snap.shahtaj_shop_uninvoiced_exposure || 0;
+        record.effectiveOutstanding = snap.shahtaj_shop_effective_outstanding || 0;
+        record.creditRemaining = snap.shahtaj_shop_credit_remaining || 0;
+        record.creditWouldExceed = !!snap.shahtaj_shop_credit_would_exceed;
+        record.creditShortfall = snap.shahtaj_shop_credit_shortfall || 0;
+        record.lifetimeSales = snap.shahtaj_shop_lifetime_sales || 0;
+        record.confirmedOrderCount = snap.shahtaj_shop_confirmed_order_count || 0;
+        record.pastDiscountTotal = snap.shahtaj_shop_past_discount_total || 0;
+        record.pastDiscountCount = snap.shahtaj_shop_past_discount_count || 0;
+        record.lastDiscountDate = this._formatSnapshotDate(snap.shahtaj_shop_last_discount_date);
+        record.lastDiscountAmount = snap.shahtaj_shop_last_discount_amount || 0;
+        record.paymentTerms = snap.payment_term_id ? snap.payment_term_id[1] : 'Immediate';
+        record.approvalState = snap.shahtaj_approval_state || record.approvalState || 'none';
+        record.verificationLabel = this._verificationLabel(record.approvalState);
+    }
+
+    async _enrichCheckinRows(records) {
+        const visitIds = [...new Set(records.map((a) => this._m2oId(a.visit_id)).filter(Boolean))];
+        const taskIds = [...new Set(records.map((a) => this._m2oId(a.visit_task_id)).filter(Boolean))];
+        const visitsById = {};
+        const tasksById = {};
+        try {
+            if (visitIds.length) {
+                const visits = await this.orm.read(
+                    'shahtaj.visit',
+                    visitIds,
+                    ['notes', 'sale_order_id', 'outcome', 'state'],
+                );
+                visits.forEach((v) => { visitsById[v.id] = v; });
+            }
+            if (taskIds.length) {
+                const tasks = await this.orm.read('shahtaj.visit.task', taskIds, ['notes']);
+                tasks.forEach((t) => { tasksById[t.id] = t; });
+            }
+        } catch (_error) {
+            // List still renders GPS rows if visit/task notes cannot be read.
+        }
+        return { visitsById, tasksById };
+    }
+
+    async _loadCheckinShopSnapshot(checkin) {
+        if (!checkin) return;
+        const orderId = this._m2oId(checkin.sale_order_id);
+        if (orderId) {
+            try {
+                const snaps = await this.orm.read(
+                    'sale.order',
+                    [orderId],
+                    [
+                        'shahtaj_shop_category', 'shahtaj_shop_credit_limit', 'shahtaj_shop_outstanding',
+                        'shahtaj_shop_pending_exposure', 'shahtaj_shop_uninvoiced_exposure',
+                        'shahtaj_shop_effective_outstanding', 'shahtaj_shop_credit_remaining',
+                        'shahtaj_shop_credit_would_exceed', 'shahtaj_shop_credit_shortfall',
+                        'shahtaj_shop_lifetime_sales', 'shahtaj_shop_confirmed_order_count',
+                        'shahtaj_shop_past_discount_total', 'shahtaj_shop_past_discount_count',
+                        'shahtaj_shop_last_discount_date', 'shahtaj_shop_last_discount_amount',
+                        'payment_term_id', 'shahtaj_approval_state',
+                    ],
+                );
+                if (snaps.length) {
+                    this._applyShopSnapshot(snaps[0], this.state.selectedCheckin);
+                    return;
+                }
+            } catch (error) {
+                this.notification.add("Could not load shop snapshot: " + (error.data?.message || error.message), { type: "warning" });
+            }
+        }
+        if (!checkin.shopId) return;
+        try {
+            const partners = await this.orm.read(
+                'res.partner',
+                [checkin.shopId],
+                ['shahtaj_shop_category', 'credit_limit', 'outstanding_balance', 'property_payment_term_id', 'shop_approval_state'],
+            );
+            if (!partners.length) return;
+            const p = partners[0];
+            this._applyShopSnapshot({
+                shahtaj_shop_category: p.shahtaj_shop_category,
+                shahtaj_shop_credit_limit: p.credit_limit,
+                shahtaj_shop_outstanding: p.outstanding_balance,
+                shahtaj_shop_pending_exposure: 0,
+                shahtaj_shop_uninvoiced_exposure: 0,
+                shahtaj_shop_effective_outstanding: p.outstanding_balance,
+                shahtaj_shop_credit_remaining: Math.max((p.credit_limit || 0) - (p.outstanding_balance || 0), 0),
+                shahtaj_shop_credit_would_exceed: false,
+                shahtaj_shop_credit_shortfall: 0,
+                shahtaj_shop_lifetime_sales: 0,
+                shahtaj_shop_confirmed_order_count: 0,
+                shahtaj_shop_past_discount_total: 0,
+                shahtaj_shop_past_discount_count: 0,
+                shahtaj_shop_last_discount_date: false,
+                shahtaj_shop_last_discount_amount: 0,
+                payment_term_id: p.property_payment_term_id,
+                shahtaj_approval_state: p.shop_approval_state === 'approved' ? 'approved' : 'none',
+            }, this.state.selectedCheckin);
+        } catch (error) {
+            this.notification.add("Could not load shop snapshot: " + (error.data?.message || error.message), { type: "warning" });
+        }
     }
 
     _mapSaleOrderRow(o, lines) {
@@ -664,6 +753,7 @@ export class OperationsTracking extends Component {
                 this.state[targetState] = records.map(o => this._mapSaleOrderRow(o, lines));
             }
             else if (tab === 'checkins') {
+                const { visitsById, tasksById } = await this._enrichCheckinRows(records);
                 this.state.tableCheckins = records.map(a => {
                     const isOk = a.result === 'ok';
                     const status = this._gpsResultLabel(a.result);
@@ -671,6 +761,11 @@ export class OperationsTracking extends Component {
                     const distLabel = a.distance_m
                         ? `${Math.round(a.distance_m)} m`
                         : (isOk ? '—' : 'n/a');
+                    const visit = visitsById[this._m2oId(a.visit_id)] || null;
+                    const task = tasksById[this._m2oId(a.visit_task_id)] || null;
+                    const saleOrder = a.sale_order_id || (visit && visit.sale_order_id) || false;
+                    const hasOrder = Boolean(this._m2oId(saleOrder));
+                    const notes = ((visit && visit.notes) || (task && task.notes) || '').trim();
                     return {
                         id: a.id,
                         shop: a.shop_id ? a.shop_id[1] : 'Unknown shop',
@@ -695,12 +790,14 @@ export class OperationsTracking extends Component {
                         shop_longitude: a.shop_longitude || 0,
                         attempt_latitude: a.attempt_latitude || 0,
                         attempt_longitude: a.attempt_longitude || 0,
-                        taskRef: a.visit_task_id ? a.visit_task_id[1] : (a.dm_delivery_id ? a.dm_delivery_id[1] : (a.sale_order_id ? a.sale_order_id[1] : '—')),
+                        taskRef: a.visit_task_id ? a.visit_task_id[1] : (a.dm_delivery_id ? a.dm_delivery_id[1] : (saleOrder ? saleOrder[1] : '—')),
                         visit_id: a.visit_id || false,
                         visit_task_id: a.visit_task_id || false,
                         dm_delivery_id: a.dm_delivery_id || false,
-                        sale_order_id: a.sale_order_id || false,
-                        notes: '',
+                        sale_order_id: saleOrder,
+                        hasOrder,
+                        orderLabel: hasOrder ? 'Order Placed' : 'No Order',
+                        notes,
                         endTime: '',
                         duration: distLabel,
                         outcome: purposeLabel,
@@ -1459,50 +1556,74 @@ export class OperationsTracking extends Component {
     }
 
     async viewCheckin(log) {
+        this.state.shopSnapshotOpen = false;
         this.state.selectedCheckin = {
             ...log,
             notes: log.notes || '',
             sale_order_id: log.sale_order_id || false,
+            hasOrder: !!log.hasOrder,
+            orderLabel: log.orderLabel || (log.hasOrder ? 'Order Placed' : 'No Order'),
             endTime: log.endTime || '',
-            visitOutcome: '',
+            visitOutcome: log.orderLabel || '',
         };
-        const visitId = log.visit_id && log.visit_id[0];
-        if (!visitId) {
-            return;
-        }
+        let visitId = this._m2oId(log.visit_id);
+        const taskId = this._m2oId(log.visit_task_id);
         try {
-            const visits = await this.orm.read(
-                'shahtaj.visit',
-                [visitId],
-                ['started_at', 'ended_at', 'outcome', 'state', 'sale_order_id', 'notes'],
-            );
-            if (!visits.length || !this.state.selectedCheckin || this.state.selectedCheckin.id !== log.id) {
-                return;
+            if (!visitId && taskId) {
+                const found = await this.orm.searchRead(
+                    'shahtaj.visit',
+                    [['visit_task_id', '=', taskId]],
+                    ['started_at', 'ended_at', 'outcome', 'state', 'sale_order_id', 'notes'],
+                    { limit: 1, order: 'id desc' },
+                );
+                if (found.length) visitId = found[0].id;
             }
-            const v = visits[0];
-            let visitOutcome = v.outcome || '';
-            if (v.state === 'in_progress') visitOutcome = 'In Progress';
-            else if (v.state === 'completed' && v.outcome === 'incomplete') visitOutcome = 'Incomplete / Auto-Skipped';
-            else if (v.state === 'completed') visitOutcome = v.outcome === 'order' ? 'Order Placed' : 'No Order';
-            else if (v.state === 'cancelled') visitOutcome = 'Cancelled';
+            if (visitId) {
+                const visits = await this.orm.read(
+                    'shahtaj.visit',
+                    [visitId],
+                    ['started_at', 'ended_at', 'outcome', 'state', 'sale_order_id', 'notes'],
+                );
+                if (visits.length && this.state.selectedCheckin && this.state.selectedCheckin.id === log.id) {
+                    const v = visits[0];
+                    let visitOutcome = v.outcome || '';
+                    if (v.state === 'in_progress') visitOutcome = 'In Progress';
+                    else if (v.state === 'completed' && v.outcome === 'incomplete') visitOutcome = 'Incomplete / Auto-Skipped';
+                    else if (v.state === 'completed') visitOutcome = v.outcome === 'order' ? 'Order Placed' : 'No Order';
+                    else if (v.state === 'cancelled') visitOutcome = 'Cancelled';
 
-            let durationStr = '';
-            if (v.started_at && v.ended_at) {
-                durationStr = `${Math.round((new Date(v.ended_at.replace(' ', 'T') + 'Z') - new Date(v.started_at.replace(' ', 'T') + 'Z')) / 60000)} mins`;
+                    let durationStr = '';
+                    if (v.started_at && v.ended_at) {
+                        durationStr = `${Math.round((new Date(v.ended_at.replace(' ', 'T') + 'Z') - new Date(v.started_at.replace(' ', 'T') + 'Z')) / 60000)} mins`;
+                    }
+
+                    const visitNotes = (v.notes || '').trim();
+                    if (visitNotes) this.state.selectedCheckin.notes = visitNotes;
+                    this.state.selectedCheckin.sale_order_id = v.sale_order_id || this.state.selectedCheckin.sale_order_id || false;
+                    this.state.selectedCheckin.hasOrder = Boolean(this._m2oId(this.state.selectedCheckin.sale_order_id));
+                    this.state.selectedCheckin.orderLabel = this.state.selectedCheckin.hasOrder ? 'Order Placed' : 'No Order';
+                    this.state.selectedCheckin.endTime = this.formatUtcToPkt(v.ended_at) || '';
+                    this.state.selectedCheckin.visitOutcome = visitOutcome;
+                    if (durationStr) {
+                        this.state.selectedCheckin.duration = durationStr;
+                    }
+                }
             }
-
-            this.state.selectedCheckin.notes = v.notes || '';
-            this.state.selectedCheckin.sale_order_id = v.sale_order_id || false;
-            this.state.selectedCheckin.endTime = this.formatUtcToPkt(v.ended_at) || '';
-            this.state.selectedCheckin.visitOutcome = visitOutcome;
-            if (durationStr) {
-                this.state.selectedCheckin.duration = durationStr;
+            if (!(this.state.selectedCheckin.notes || '').trim() && taskId) {
+                const tasks = await this.orm.read('shahtaj.visit.task', [taskId], ['notes']);
+                if (tasks.length && (tasks[0].notes || '').trim()) {
+                    this.state.selectedCheckin.notes = tasks[0].notes.trim();
+                }
             }
         } catch (error) {
             // GPS detail still useful without visit enrichment.
         }
+        await this._loadCheckinShopSnapshot(this.state.selectedCheckin);
     }
-    closeCheckin() { this.state.selectedCheckin = null; }
+    closeCheckin() {
+        this.state.selectedCheckin = null;
+        this.state.shopSnapshotOpen = false;
+    }
 
     async viewOrderFromCheckin(log) {
         if (!log.sale_order_id) return;
