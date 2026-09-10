@@ -424,6 +424,11 @@
                                         <span t-attf-class="badge #{this._gpsStatusBadgeClass(log.result)} p-2 fs-6 mb-1 d-inline-block"><t t-esc="log.status"/></span>
                                         <div class="text-muted fw-bold small"><t t-esc="log.distLabel"/></div>
                                     </div>
+                                    <div class="me-3 text-end" style="min-width: 7.5rem;">
+                                        <span t-attf-class="badge p-2 fs-6 d-inline-block #{log.hasOrder ? 'bg-success text-white' : 'bg-light text-dark border'}">
+                                            <t t-esc="log.orderLabel"/>
+                                        </span>
+                                    </div>
                                     <button class="btn btn-sm btn-outline-dark fw-bold ms-2" t-on-click="() => this.viewCheckin(log)">View Details</button>
                                 </div>
                             </div>
@@ -491,7 +496,11 @@
                         <strong>Reference:</strong>
                         <t t-esc="this.state.selectedCheckin.taskRef"/>
                     </p>
-                    <p class="bg-info text-white mb-0 p-2 small mt-3" t-if="this.state.selectedCheckin.notes" title="Linked visit notes">
+                    <p class="bg-info text-white mb-0 p-2 small mt-3" t-if="this.state.selectedCheckin.isOk" title="Linked visit notes">
+                        <strong>Notes: </strong>
+                        <t t-esc="this.state.selectedCheckin.notes || 'No notes'"/>
+                    </p>
+                    <p class="bg-info text-white mb-0 p-2 small mt-3" t-elif="this.state.selectedCheckin.notes" title="Linked visit notes">
                         <strong>Notes: </strong>
                         <t t-esc="this.state.selectedCheckin.notes"/>
                     </p>
@@ -532,16 +541,106 @@
                         </p>
                     </div>
 
-                    <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top" t-if="this.state.selectedCheckin.sale_order_id">
-                        <span class="text-muted small">Linked Order:</span>
-                        <button class="btn btn-sm btn-primary shadow-sm fw-bold" t-on-click="() => this.viewOrderFromCheckin(this.state.selectedCheckin)" title="Open the sales order linked to this visit">
-                            <t t-esc="this.state.selectedCheckin.sale_order_id[1]"/>
+                    <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                        <span class="text-muted small">Order:</span>
+                        <t t-if="this.state.selectedCheckin.sale_order_id">
+                            <button class="btn btn-sm btn-primary shadow-sm fw-bold" t-on-click="() => this.viewOrderFromCheckin(this.state.selectedCheckin)" title="Open the sales order linked to this visit">
+                                <t t-esc="this.state.selectedCheckin.sale_order_id[1]"/>
  ➔
-                        </button>
+                            </button>
+                        </t>
+                        <t t-else="">
+                            <span class="fw-bold text-muted">No orders placed</span>
+                        </t>
                     </div>
 
                 </div>
             </div>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-3 mb-4 mt-3 overflow-hidden">
+            <button type="button" class="btn w-100 text-start d-flex align-items-center justify-content-between p-3 bg-white border-0"
+                    t-on-click="toggleShopSnapshot" title="Show or hide shop credit and sales history">
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    <h6 class="mb-0 fw-bold text-dark text-uppercase small">Shop Snapshot</h6>
+                    <t t-if="this.state.selectedCheckin.shopCategory">
+                        <span t-attf-class="badge text-white #{this.state.selectedCheckin.shopCategory === 'cash' ? 'bg-success' : 'bg-info'}">
+                            <t t-esc="this.state.selectedCheckin.shopCategory === 'cash' ? 'Cash' : 'Credit'"/>
+                        </span>
+                    </t>
+                    <t t-if="this.state.selectedCheckin.verificationLabel">
+                        <span t-attf-class="badge #{this.state.selectedCheckin.approvalState === 'approved' ? 'bg-success text-white' : this.state.selectedCheckin.approvalState === 'rejected' ? 'bg-danger text-white' : 'bg-light text-dark border'}">
+                            <t t-esc="this.state.selectedCheckin.verificationLabel"/>
+                        </span>
+                    </t>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted"
+                     t-att-style="this.state.shopSnapshotOpen ? 'transform: rotate(180deg); transition: transform 0.15s ease;' : 'transition: transform 0.15s ease;'">
+                    <path d="m6 9 6 6 6-6"/>
+                </svg>
+            </button>
+            <t t-if="this.state.shopSnapshotOpen">
+                <div class="border-top p-4">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <h6 class="text-muted text-uppercase small fw-bold mb-3">Credit &amp; Balance</h6>
+                            <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                                <span class="text-muted small">Shop Category</span>
+                                <span t-attf-class="badge text-white #{this.state.selectedCheckin.shopCategory === 'cash' ? 'bg-success' : 'bg-info'}">
+                                    <t t-esc="this.state.selectedCheckin.shopCategory === 'cash' ? 'Cash' : 'Credit'"/>
+                                </span>
+                            </div>
+                            <t t-if="this.state.selectedCheckin.shopCategory === 'credit'">
+                                <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                                    <span class="text-muted small">Shop Credit Limit</span>
+                                    <span class="fw-bold"><t t-esc="this._formatRs(this.state.selectedCheckin.creditLimit)"/></span>
+                                </div>
+                            </t>
+                            <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                                <span class="text-muted small">Posted Outstanding</span>
+                                <span t-attf-class="fw-bold #{this.state.selectedCheckin.outstanding &gt; 0 ? 'text-danger' : ''}">
+                                    <t t-esc="this._formatRs(this.state.selectedCheckin.outstanding)"/>
+                                </span>
+                            </div>
+                            <t t-if="this.state.selectedCheckin.shopCategory === 'credit'">
+                                <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                                    <span class="text-muted small">Shop Credit Remaining</span>
+                                    <span t-attf-class="fw-bold #{this.state.selectedCheckin.creditWouldExceed ? 'text-warning' : ''}">
+                                        <t t-esc="this._formatRs(this.state.selectedCheckin.creditRemaining)"/>
+                                    </span>
+                                </div>
+                                <t t-if="this.state.selectedCheckin.creditWouldExceed">
+                                    <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                                        <span class="text-muted small">Over Credit Limit By</span>
+                                        <span class="fw-bold text-danger"><t t-esc="this._formatRs(this.state.selectedCheckin.creditShortfall)"/></span>
+                                    </div>
+                                </t>
+                            </t>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted small">Shop Status</span>
+                                <span t-attf-class="badge #{this.state.selectedCheckin.approvalState === 'approved' ? 'bg-success text-white' : this.state.selectedCheckin.approvalState === 'rejected' ? 'bg-danger text-white' : 'bg-light text-dark border'}">
+                                    <t t-esc="this.state.selectedCheckin.verificationLabel || 'Standard'"/>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-muted text-uppercase small fw-bold mb-3">Sales History</h6>
+                            <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                                <span class="text-muted small">Shop Lifetime Sales</span>
+                                <span class="fw-bold"><t t-esc="this._formatRs(this.state.selectedCheckin.lifetimeSales)"/></span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                                <span class="text-muted small">Shop Confirmed Orders</span>
+                                <span class="fw-bold"><t t-esc="this.state.selectedCheckin.confirmedOrderCount || 0"/></span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted small">Payment Terms</span>
+                                <span class="fw-bold text-muted"><t t-esc="this.state.selectedCheckin.paymentTerms || 'Immediate'"/></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
         </div>
 
         <div class="row mt-3">

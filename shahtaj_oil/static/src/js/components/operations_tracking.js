@@ -20,7 +20,8 @@ export class OperationsTracking extends Component {
             activeSubTab: this.props.requestedSubTab || 'orders', // 'checkins', 'orders', 'performance'
             
             selectedOrder: null,    
-            selectedCheckin: null,  
+            selectedCheckin: null,
+            shopSnapshotOpen: false,  
             
             itemsPerPage: 5,
             
@@ -189,6 +190,119 @@ export class OperationsTracking extends Component {
 
     _gpsRoleLabel(role) {
         return ({ order_booker: 'Order Booker', delivery_man: 'Delivery Man', other: 'Other' })[role] || role || '—';
+    }
+
+    _m2oId(value) {
+        if (!value) return false;
+        return Array.isArray(value) ? value[0] : value;
+    }
+
+    _formatRs(value) {
+        return `Rs. ${(parseFloat(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    _verificationLabel(state) {
+        return ({
+            none: 'Standard',
+            approved: 'Approved',
+            pending: 'Pending',
+            rejected: 'Rejected',
+        })[state] || 'Standard';
+    }
+
+    _applyShopSnapshot(snap, target = null) {
+        const record = target || this.state.selectedCheckin;
+        if (!record || !snap) return;
+        record.shopCategory = snap.shopCategory || '';
+        record.creditLimit = snap.creditLimit || 0;
+        record.outstanding = snap.outstanding || 0;
+        record.pendingExposure = snap.pendingExposure || 0;
+        record.uninvoicedExposure = snap.uninvoicedExposure || 0;
+        record.effectiveOutstanding = snap.effectiveOutstanding || snap.outstanding || 0;
+        record.creditRemaining = snap.creditRemaining || 0;
+        record.creditWouldExceed = !!snap.creditWouldExceed;
+        record.creditShortfall = snap.creditShortfall || 0;
+        record.lifetimeSales = snap.lifetimeSales || 0;
+        record.confirmedOrderCount = snap.confirmedOrderCount || 0;
+        record.pastDiscountTotal = snap.pastDiscountTotal || 0;
+        record.pastDiscountCount = snap.pastDiscountCount || 0;
+        record.lastDiscountDate = snap.lastDiscountDate || '';
+        record.lastDiscountAmount = snap.lastDiscountAmount || 0;
+        record.paymentTerms = snap.paymentTerms || 'Immediate';
+        record.approvalState = snap.approvalState || 'none';
+        record.verificationLabel = this._verificationLabel(record.approvalState);
+    }
+
+    async _enrichCheckinRows(records) {
+        const visitIds = [...new Set(records.map((a) => this._m2oId(a.visit_id)).filter(Boolean))];
+        const taskIds = [...new Set(records.map((a) => this._m2oId(a.visit_task_id)).filter(Boolean))];
+        const visitsById = {};
+        const tasksById = {};
+        try {
+            if (visitIds.length) {
+                const visits = await this.orm.read(
+                    'shahtaj.visit',
+                    visitIds,
+                    ['notes', 'sale_order_id', 'outcome', 'state'],
+                );
+                visits.forEach((v) => { visitsById[v.id] = v; });
+            }
+            if (taskIds.length) {
+                const tasks = await this.orm.read('shahtaj.visit.task', taskIds, ['notes']);
+                tasks.forEach((t) => { tasksById[t.id] = t; });
+            }
+        } catch (_error) {
+            // List still renders GPS rows if visit/task notes cannot be read.
+        }
+        return { visitsById, tasksById };
+    }
+
+    async _loadCheckinShopSnapshot(checkin) {
+        if (!checkin || !checkin.shopId) return;
+        try {
+            const partners = await this.orm.read(
+                'res.partner',
+                [checkin.shopId],
+                ['shahtaj_shop_category', 'credit_limit', 'outstanding_balance', 'property_payment_term_id', 'shop_approval_state'],
+            );
+            if (!partners.length) return;
+            const p = partners[0];
+            let lifetimeSales = 0;
+            let confirmedOrderCount = 0;
+            try {
+                const orders = await this.orm.searchRead(
+                    'sale.order',
+                    [['partner_id', '=', checkin.shopId], ['state', 'in', ['sale', 'done']]],
+                    ['amount_total'],
+                    { limit: 500 },
+                );
+                confirmedOrderCount = orders.length;
+                lifetimeSales = orders.reduce((sum, o) => sum + (o.amount_total || 0), 0);
+            } catch (_err) {
+                // Credit snapshot still useful without sales history.
+            }
+            const creditLimit = p.credit_limit || 0;
+            const outstanding = p.outstanding_balance || 0;
+            this._applyShopSnapshot({
+                shopCategory: p.shahtaj_shop_category || 'credit',
+                creditLimit,
+                outstanding,
+                effectiveOutstanding: outstanding,
+                creditRemaining: Math.max(creditLimit - outstanding, 0),
+                creditWouldExceed: p.shahtaj_shop_category === 'credit' && creditLimit > 0 && outstanding > creditLimit,
+                creditShortfall: Math.max(outstanding - creditLimit, 0),
+                lifetimeSales,
+                confirmedOrderCount,
+                paymentTerms: p.property_payment_term_id ? p.property_payment_term_id[1] : 'Immediate',
+                approvalState: p.shop_approval_state === 'approved' ? 'approved' : (p.shop_approval_state || 'none'),
+            }, this.state.selectedCheckin);
+        } catch (error) {
+            this.notification.add("Could not load shop snapshot: " + (error.data?.message || error.message), { type: "warning" });
+        }
+    }
+
+    toggleShopSnapshot() {
+        this.state.shopSnapshotOpen = !this.state.shopSnapshotOpen;
     }
     // --- UNIVERSAL PAGINATION HANDLERS ---
     onSearchInput(ev, tabName) {
@@ -463,6 +577,7 @@ export class OperationsTracking extends Component {
                 });
             }
             else if (tab === 'checkins') {
+                const { visitsById, tasksById } = await this._enrichCheckinRows(records);
                 this.state.tableCheckins = records.map(a => {
                     const isOk = a.result === 'ok';
                     const status = this._gpsResultLabel(a.result);
@@ -470,6 +585,11 @@ export class OperationsTracking extends Component {
                     const distLabel = a.distance_m
                         ? `${Math.round(a.distance_m)} m`
                         : (isOk ? '—' : 'n/a');
+                    const visit = visitsById[this._m2oId(a.visit_id)] || null;
+                    const task = tasksById[this._m2oId(a.visit_task_id)] || null;
+                    const saleOrder = a.sale_order_id || (visit && visit.sale_order_id) || false;
+                    const hasOrder = Boolean(this._m2oId(saleOrder));
+                    const notes = ((visit && visit.notes) || (task && task.notes) || '').trim();
                     return {
                         id: a.id,
                         shop: a.shop_id ? a.shop_id[1] : 'Unknown shop',
@@ -494,11 +614,13 @@ export class OperationsTracking extends Component {
                         shop_longitude: a.shop_longitude || 0,
                         attempt_latitude: a.attempt_latitude || 0,
                         attempt_longitude: a.attempt_longitude || 0,
-                        taskRef: a.visit_task_id ? a.visit_task_id[1] : (a.sale_order_id ? a.sale_order_id[1] : '—'),
+                        taskRef: a.visit_task_id ? a.visit_task_id[1] : (saleOrder ? saleOrder[1] : '—'),
                         visit_id: a.visit_id || false,
                         visit_task_id: a.visit_task_id || false,
-                        sale_order_id: a.sale_order_id || false,
-                        notes: '',
+                        sale_order_id: saleOrder,
+                        hasOrder,
+                        orderLabel: hasOrder ? 'Order Placed' : 'No Order',
+                        notes,
                         endTime: '',
                         duration: distLabel,
                         outcome: purposeLabel,
@@ -969,53 +1091,80 @@ export class OperationsTracking extends Component {
         }
     }
     
-    closeOrder() { this.state.selectedOrder = null; }
+    closeOrder() {
+        this.state.selectedOrder = null;
+        this.state.shopSnapshotOpen = false;
+    }
 
     async viewCheckin(log) {
+        this.state.shopSnapshotOpen = false;
         this.state.selectedCheckin = {
             ...log,
             notes: log.notes || '',
             sale_order_id: log.sale_order_id || false,
+            hasOrder: !!log.hasOrder,
+            orderLabel: log.orderLabel || (log.hasOrder ? 'Order Placed' : 'No Order'),
             endTime: log.endTime || '',
-            visitOutcome: '',
+            visitOutcome: log.orderLabel || '',
         };
-        const visitId = log.visit_id && log.visit_id[0];
-        if (!visitId) {
-            return;
-        }
+        let visitId = this._m2oId(log.visit_id);
+        const taskId = this._m2oId(log.visit_task_id);
         try {
-            const visits = await this.orm.read(
-                'shahtaj.visit',
-                [visitId],
-                ['started_at', 'ended_at', 'outcome', 'state', 'sale_order_id', 'notes'],
-            );
-            if (!visits.length || !this.state.selectedCheckin || this.state.selectedCheckin.id !== log.id) {
-                return;
+            if (!visitId && taskId) {
+                const found = await this.orm.searchRead(
+                    'shahtaj.visit',
+                    [['visit_task_id', '=', taskId]],
+                    ['started_at', 'ended_at', 'outcome', 'state', 'sale_order_id', 'notes'],
+                    { limit: 1, order: 'id desc' },
+                );
+                if (found.length) visitId = found[0].id;
             }
-            const v = visits[0];
-            let visitOutcome = v.outcome || '';
-            if (v.state === 'in_progress') visitOutcome = 'In Progress';
-            else if (v.state === 'completed' && v.outcome === 'incomplete') visitOutcome = 'Incomplete / Auto-Skipped';
-            else if (v.state === 'completed') visitOutcome = v.outcome === 'order' ? 'Order Placed' : 'No Order';
-            else if (v.state === 'cancelled') visitOutcome = 'Cancelled';
+            if (visitId) {
+                const visits = await this.orm.read(
+                    'shahtaj.visit',
+                    [visitId],
+                    ['started_at', 'ended_at', 'outcome', 'state', 'sale_order_id', 'notes'],
+                );
+                if (visits.length && this.state.selectedCheckin && this.state.selectedCheckin.id === log.id) {
+                    const v = visits[0];
+                    let visitOutcome = v.outcome || '';
+                    if (v.state === 'in_progress') visitOutcome = 'In Progress';
+                    else if (v.state === 'completed' && v.outcome === 'incomplete') visitOutcome = 'Incomplete / Auto-Skipped';
+                    else if (v.state === 'completed') visitOutcome = v.outcome === 'order' ? 'Order Placed' : 'No Order';
+                    else if (v.state === 'cancelled') visitOutcome = 'Cancelled';
 
-            let durationStr = '';
-            if (v.started_at && v.ended_at) {
-                durationStr = `${Math.round((new Date(v.ended_at.replace(' ', 'T') + 'Z') - new Date(v.started_at.replace(' ', 'T') + 'Z')) / 60000)} mins`;
+                    let durationStr = '';
+                    if (v.started_at && v.ended_at) {
+                        durationStr = `${Math.round((new Date(v.ended_at.replace(' ', 'T') + 'Z') - new Date(v.started_at.replace(' ', 'T') + 'Z')) / 60000)} mins`;
+                    }
+
+                    const visitNotes = (v.notes || '').trim();
+                    if (visitNotes) this.state.selectedCheckin.notes = visitNotes;
+                    this.state.selectedCheckin.sale_order_id = v.sale_order_id || this.state.selectedCheckin.sale_order_id || false;
+                    this.state.selectedCheckin.hasOrder = Boolean(this._m2oId(this.state.selectedCheckin.sale_order_id));
+                    this.state.selectedCheckin.orderLabel = this.state.selectedCheckin.hasOrder ? 'Order Placed' : 'No Order';
+                    this.state.selectedCheckin.endTime = this.formatUtcToPkt(v.ended_at) || '';
+                    this.state.selectedCheckin.visitOutcome = visitOutcome;
+                    if (durationStr) {
+                        this.state.selectedCheckin.duration = durationStr;
+                    }
+                }
             }
-
-            this.state.selectedCheckin.notes = v.notes || '';
-            this.state.selectedCheckin.sale_order_id = v.sale_order_id || false;
-            this.state.selectedCheckin.endTime = this.formatUtcToPkt(v.ended_at) || '';
-            this.state.selectedCheckin.visitOutcome = visitOutcome;
-            if (durationStr) {
-                this.state.selectedCheckin.duration = durationStr;
+            if (!(this.state.selectedCheckin.notes || '').trim() && taskId) {
+                const tasks = await this.orm.read('shahtaj.visit.task', [taskId], ['notes']);
+                if (tasks.length && (tasks[0].notes || '').trim()) {
+                    this.state.selectedCheckin.notes = tasks[0].notes.trim();
+                }
             }
         } catch (error) {
             // GPS detail still useful without visit enrichment.
         }
+        await this._loadCheckinShopSnapshot(this.state.selectedCheckin);
     }
-    closeCheckin() { this.state.selectedCheckin = null; }
+    closeCheckin() {
+        this.state.selectedCheckin = null;
+        this.state.shopSnapshotOpen = false;
+    }
 
     async viewOrderFromCheckin(log) {
         if (!log.sale_order_id) return;
