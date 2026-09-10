@@ -53,6 +53,10 @@ class ShahtajVisitCheckinWizard(models.TransientModel):
         required=True,
         digits=(10, 7),
     )
+    shop_category = fields.Selection(
+        related='shop_id.shahtaj_shop_category',
+        readonly=True,
+    )
     owner_cnic_number = fields.Char(string='Owner ID Card Number')
     shop_license_number = fields.Char(string='License Number')
     shop_exterior_photo = fields.Image(
@@ -138,16 +142,17 @@ class ShahtajVisitCheckinWizard(models.TransientModel):
                     'Shop exterior photo is required for first-visit verification.'
                 ))
             cnic = (self.owner_cnic_number or '').strip()
-            if not cnic:
+            if not cnic and shop._shahtaj_owner_cnic_required(shop.shahtaj_shop_category):
                 raise UserError(_(
-                    'Owner ID card number is required for first-visit verification.'
+                    'Owner ID card number is required for first-visit verification of credit shops.'
                 ))
             verify_vals = {
                 'latitude': self.booker_latitude,
                 'longitude': self.booker_longitude,
                 'shop_exterior_photo': self.shop_exterior_photo,
-                'owner_cnic_number': cnic,
             }
+            if cnic:
+                verify_vals['owner_cnic_number'] = cnic
             if self.owner_photo:
                 verify_vals['owner_photo'] = self.owner_photo
             if self.owner_cnic_front:
