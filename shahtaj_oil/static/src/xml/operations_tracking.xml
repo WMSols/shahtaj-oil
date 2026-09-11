@@ -723,6 +723,7 @@
                                     <tr>
                                         <th class="border-top-0 ps-4">Order Ref</th>
                                         <th class="border-top-0">Shop Details</th>
+                                        <th class="border-top-0">Date</th>
                                         <th class="border-top-0"><t t-if="this.hasFinancialAccess">Order Value</t><t t-else="">Units</t></th>
                                         <th class="border-top-0">Status</th>
                                         <th class="border-top-0 text-end pe-4">Action</th>
@@ -731,7 +732,7 @@
                                 <tbody>
                                     <t t-if="this.state.tableOrders.length === 0 and !this.state.isLoadingList">
                                         <tr>
-                                            <td colspan="5" class="text-center py-5 text-muted">
+                                            <td colspan="6" class="text-center py-5 text-muted">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shopping-cart opacity-50 mb-3"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
                                                 <p class="mb-1 fw-bold fs-5 text-dark">No live orders found.</p>
                                             </td>
@@ -744,6 +745,7 @@
                                                 <div class="text-dark fw-bold"><t t-esc="ord.shop"/></div>
                                                 <small class="text-muted">Shop ID: <t t-esc="ord.shopId"/> · Booker ID: <t t-esc="ord.bookerId"/> · <t t-esc="ord.booker"/></small>
                                             </td>
+                                            <td class="align-middle text-nowrap text-muted fw-bold"><t t-esc="ord.date"/></td>
                                             <td class="align-middle">
                                                 <div class="fw-bold fs-6">
                                                     <t t-if="this.hasFinancialAccess"><t t-esc="ord.total"/></t>
