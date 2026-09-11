@@ -593,7 +593,7 @@ export class OperationsTracking extends Component {
             odoo_id: o.id, id: o.name, shop: o.partner_id ? o.partner_id[1] : 'Unknown', partner_id: o.partner_id,
             shopId: o.partner_id ? o.partner_id[0] : false,
             booker: o.user_id ? o.user_id[1] : 'Unknown', bookerId: o.user_id ? o.user_id[0] : false,
-            date: o.date_order || 'Unknown', items: (o.order_line || []).length,
+            date: o.date_order ? String(o.date_order).split(" ")[0] : 'Unknown', items: (o.order_line || []).length,
             total: this._formatRs(o.amount_total),
             tax: this._formatRs(o.amount_tax),
             rawAmount: o.amount_total || 0,
@@ -1647,7 +1647,7 @@ export class OperationsTracking extends Component {
 
                 const targetOrder = {
                     odoo_id: o.id, id: o.name, shop: o.partner_id ? o.partner_id[1] : 'Unknown', partner_id: o.partner_id,
-                    booker: o.user_id ? o.user_id[1] : 'Unknown', date: o.date_order || 'Unknown', items: o.order_line.length,
+                    booker: o.user_id ? o.user_id[1] : 'Unknown', date: o.date_order ? String(o.date_order).split(" ")[0] : 'Unknown', items: o.order_line.length,
                     total: `Rs. ${o.amount_total.toLocaleString(undefined, {minimumFractionDigits: 2})}`,
                     tax: `Rs. ${(o.amount_tax || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`,
                     status: status, invoice_status: o.invoice_status,

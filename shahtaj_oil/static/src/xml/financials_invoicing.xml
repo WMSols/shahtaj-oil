@@ -186,7 +186,9 @@
                                     <button class="btn btn-sm btn-dark fw-bold text-white" t-on-click="() => this.openCashActivity('all')">Cash Activity</button>
                                     <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="openCreditNotesFromMoney">Credit Notes</button>
                                     <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.requestTabSwitch('financials', 'credit')">Credit Risk</button>
+                                    <!-- Hidden for now; uncomment to restore
                                     <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.requestTabSwitch('financials', 'pnl')">Profit &amp; Loss</button>
+                                    -->
                                 </div>
                                 <p class="small text-muted mt-3 mb-0">
                                     Flow: Sold (invoices) → Collected (cash in) → Still with shops → Paid back (cash out).
