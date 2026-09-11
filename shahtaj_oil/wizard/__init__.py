@@ -8,3 +8,5 @@ from . import shahtaj_quick_add_product
 from . import shahtaj_add_stock
 from . import shahtaj_mark_delivery
 from . import shahtaj_assign_shops_route
+from . import shahtaj_order_reject
+from . import shahtaj_credit_override

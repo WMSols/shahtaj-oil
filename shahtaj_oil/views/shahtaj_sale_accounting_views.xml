@@ -18,6 +18,15 @@
                 </button>
             </div>
             <header position="inside">
+                <button name="action_shahtaj_approve_order" type="object"
+                        string="Approve Order"
+                        class="oe_highlight"
+                        invisible="shahtaj_approval_state != 'to_approve' or state not in ('draft', 'sent')"
+                        groups="shahtaj_oil.group_shahtaj_distributor_financial"/>
+                <button name="action_shahtaj_open_reject_wizard" type="object"
+                        string="Reject Order"
+                        invisible="shahtaj_approval_state != 'to_approve' or state not in ('draft', 'sent')"
+                        groups="shahtaj_oil.group_shahtaj_distributor_financial"/>
                 <button name="action_shahtaj_mark_delivery" type="object"
                         string="Mark Delivery"
                         class="oe_highlight"
@@ -42,6 +51,17 @@
                 <field name="shahtaj_qty_to_deliver" readonly="1"
                        groups="shahtaj_oil.group_shahtaj_distributor_financial"
                        invisible="shahtaj_delivery_status in ('done', 'no_stock')"/>
+                <field name="shahtaj_approval_state" widget="badge" readonly="1"
+                       groups="shahtaj_oil.group_shahtaj_distributor_financial"
+                       decoration-warning="shahtaj_approval_state == 'to_approve'"
+                       decoration-success="shahtaj_approval_state == 'approved'"
+                       decoration-danger="shahtaj_approval_state == 'rejected'"/>
+                <field name="shahtaj_approval_reasons_display" readonly="1"
+                       groups="shahtaj_oil.group_shahtaj_distributor_financial"
+                       invisible="shahtaj_approval_state == 'none'"/>
+                <field name="shahtaj_rejection_reason" readonly="1"
+                       groups="shahtaj_oil.group_shahtaj_distributor_financial"
+                       invisible="shahtaj_approval_state != 'rejected'"/>
             </field>
         </field>
     </record>

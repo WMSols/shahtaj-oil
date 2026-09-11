@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Shahtaj Oil',
-    'version': '19.0.1.1.50',
+    'version': '19.0.1.1.51',
     'post_init_hook': 'post_init_hook',
     'category': 'Sales/Distribution',
     'summary': 'Unified Command Center for Shahtaj Oil distributions, field booking, and SPA frontend',
@@ -76,6 +76,8 @@
         'wizard/shahtaj_add_stock_views.xml',
         'wizard/shahtaj_mark_delivery_views.xml',
         'wizard/shahtaj_assign_shops_route_views.xml',
+        'wizard/shahtaj_credit_override_views.xml',
+        'views/shahtaj_order_reject_views.xml',
 
         'report/shahtaj_manufacturer_summary_report.xml',
 

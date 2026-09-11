@@ -5,6 +5,7 @@ from . import shahtaj_territory_sync
 from . import shahtaj_zone
 from . import shahtaj_route
 from . import res_partner
+from . import shahtaj_shop_credit
 from . import shahtaj_weekly_schedule
 from . import shahtaj_visit_task
 from . import shahtaj_visit

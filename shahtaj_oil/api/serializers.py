@@ -96,11 +96,22 @@ def visit_line_dict(line):
     bookable = line.product_id._get_shahtaj_bookable_qty(
         exclude_visit_line_ids=line.visit_id.line_ids.ids,
     )
+    catalog_price = line.product_id.lst_price if line.product_id else 0.0
+    price_unit = line.price_unit or 0.0
+    unit_discount = max(0.0, catalog_price - price_unit) if (price_unit < catalog_price - 0.001) else 0.0
+    total_discount = unit_discount * line.product_uom_qty
+    discount_pct = round(((catalog_price - price_unit) / catalog_price * 100.0), 2) if (unit_discount > 0 and catalog_price > 0) else 0.0
     return {
         'id': line.id,
         'product': product_brief(line.product_id, bookable_qty=bookable),
         'quantity': line.product_uom_qty,
+        'catalog_price': catalog_price,
         'price_unit': line.price_unit,
+        'has_discount': unit_discount > 0,
+        'unit_discount': unit_discount,
+        'total_discount': total_discount,
+        'discount_percent': discount_pct,
+        'discount_reason': line.discount_reason or '',
         'subtotal': line.subtotal,
     }
 

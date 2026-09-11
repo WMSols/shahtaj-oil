@@ -651,30 +651,62 @@ class ShahtajVisit(models.Model):
         self._check_visit_line_stock()
         order_lines = []
         order_total = 0.0
+        has_any_discount = False
+        total_discount = 0.0
+
         for line in self.line_ids:
             if line.product_uom_qty <= 0:
                 raise UserError(_('Quantity must be greater than zero for all lines.'))
-            subtotal = line.product_uom_qty * line.price_unit
+            catalog_price = line.product_id.lst_price if line.product_id else 0.0
+            price_unit = line.price_unit or 0.0
+            is_discounted = float_compare(price_unit, catalog_price, precision_rounding=0.01) < 0
+            unit_disc = max(0.0, catalog_price - price_unit) if is_discounted else 0.0
+            total_disc = unit_disc * line.product_uom_qty
+
+            if is_discounted:
+                has_any_discount = True
+                total_discount += total_disc
+
+            subtotal = line.product_uom_qty * price_unit
             order_total += subtotal
             order_lines.append((0, 0, {
                 'product_id': line.product_id.id,
                 'product_uom_qty': line.product_uom_qty,
-                'price_unit': line.price_unit,
+                'price_unit': price_unit,
+                'discount': 0.0,
+                'shahtaj_catalog_price': catalog_price,
+                'shahtaj_unit_discount': unit_disc,
+                'shahtaj_total_discount': total_disc,
+                'shahtaj_discount_reason': line.discount_reason or False,
             }))
-        self._check_credit_limit(order_total)
+        SaleOrder = self.env['sale.order']
+        approval_req = SaleOrder._shahtaj_evaluate_field_order_approval(
+            self.shop_id,
+            order_total,
+            has_any_discount,
+        )
         # sudo: booker has no Sales app rights; order is linked to visit and booker.
-        order = self.env['sale.order'].sudo().create({
+        order = SaleOrder.sudo().with_context(
+            shahtaj_skip_approval_sync=True,
+        ).create({
             'partner_id': self.shop_id.id,
             'user_id': self.order_booker_id.id,
             'origin': _('Shop visit %s', self.display_name),
             'shahtaj_visit_id': self.id,
             'shahtaj_visit_task_id': self.visit_task_id.id,
+            'shahtaj_approval_state': approval_req['approval_state'],
+            'shahtaj_approval_reason_discount': approval_req['needs_discount'],
+            'shahtaj_approval_reason_credit': approval_req['needs_credit'],
             'order_line': order_lines,
         })
-        order.sudo().action_confirm()
-        # Confirm path refreshes targets; call again so place-order always
-        # leaves stored progress current for API/UI reads in this request.
-        order.sudo()._shahtaj_recompute_visit_targets()
+        order._shahtaj_sync_approval_state_from_lines()
+        approval_state = order.shahtaj_approval_state
+
+        if order.shahtaj_approval_state == 'none':
+            order.sudo().with_context(shahtaj_skip_credit_check=True).action_confirm()
+            # Confirm path refreshes targets; call again so place-order always
+            # leaves stored progress current for API/UI reads in this request.
+            order.sudo()._shahtaj_recompute_visit_targets()
         self.with_context(shahtaj_system_visit_write=True).write({
             'sale_order_id': order.id,
         })
@@ -685,13 +717,20 @@ class ShahtajVisit(models.Model):
         if gps_rows:
             gps_rows.write({'sale_order_id': order.id})
         self._finish_visit('order')
+        reasons_label = order.shahtaj_approval_reasons_display or _('none')
+        log_msg = _(
+            'Order %(order)s for %(shop)s (Verification: %(state)s, Reasons: %(reasons)s, Discount: %(disc)s)',
+            order=order.display_name,
+            shop=self.shop_id.display_name,
+            state=approval_state,
+            reasons=reasons_label,
+            disc=total_discount,
+        )
         self.env['shahtaj.activity.log'].log_business(
             operation='visit.place_order',
             name='Place order from visit',
             related_record=self,
-            message=_('Order %(order)s for %(shop)s',
-                      order=order.display_name,
-                      shop=self.shop_id.display_name),
+            message=log_msg,
         )
         # Bookers see completed visit; distributors can open the sales order form.
         if self._is_booker_only_user():
@@ -898,6 +937,9 @@ class ShahtajVisitLine(models.Model):
     price_unit = fields.Float(
         string='Unit Price',
         digits='Product Price',
+    )
+    discount_reason = fields.Char(
+        string='Discount Reason',
     )
     subtotal = fields.Float(
         string='Subtotal',
