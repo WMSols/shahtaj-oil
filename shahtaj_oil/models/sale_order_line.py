@@ -53,9 +53,6 @@ class SaleOrderLine(models.Model):
                 line.shahtaj_has_discount = True
                 line.shahtaj_unit_discount = unit_disc
                 line.shahtaj_total_discount = unit_disc * line.product_uom_qty
-                # Auto-fill discount percentage if not already filled
-                if not line.discount and catalog > 0:
-                    line.discount = ((catalog - price) / catalog) * 100.0
             else:
                 line.shahtaj_has_discount = False
                 line.shahtaj_unit_discount = 0.0

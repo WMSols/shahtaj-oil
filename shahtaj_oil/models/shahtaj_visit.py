@@ -843,7 +843,7 @@ class ShahtajVisit(models.Model):
                 'product_id': line.product_id.id,
                 'product_uom_qty': line.product_uom_qty,
                 'price_unit': price_unit,
-                'discount': disc_pct if is_discounted else 0.0,
+                'discount': 0.0,
                 'shahtaj_catalog_price': catalog_price,
                 'shahtaj_unit_discount': unit_disc,
                 'shahtaj_total_discount': total_disc,
