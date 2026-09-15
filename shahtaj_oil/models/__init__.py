@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Model load order: territory → shops → schedules → visits → targets → Odoo extensions.
 
+from . import shahtaj_gps
+from . import shahtaj_gps_attempt
 from . import shahtaj_territory_sync
 from . import shahtaj_zone
 from . import shahtaj_route
@@ -9,7 +11,6 @@ from . import shahtaj_shop_credit
 from . import shahtaj_weekly_schedule
 from . import shahtaj_visit_task
 from . import shahtaj_visit
-from . import shahtaj_gps_attempt
 from . import shahtaj_visit_target
 from . import sale_order
 from . import sale_order_line
@@ -35,5 +36,8 @@ from . import shahtaj_manufacturer_summary
 from . import ir_http
 from . import ir_ui_menu
 from . import shahtaj_dm_delivery
+from . import shahtaj_dm_day_session
+from . import shahtaj_dm_recovery
+from . import shahtaj_dm_api
 from . import shahtaj_activity_log
 from . import stock_picking

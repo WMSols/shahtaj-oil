@@ -9,6 +9,8 @@
                 <field name="needs_shop_setup" invisible="1"/>
                 <field name="shop_category" invisible="1"/>
                 <field name="show_legacy_balance" invisible="1"/>
+                <field name="cnic_required" invisible="1"/>
+                <field name="shop_category" invisible="1"/>
                 <field name="currency_id" invisible="1"/>
                 <group>
                     <field name="visit_task_id" invisible="1"/>
@@ -22,9 +24,9 @@
                 <div class="alert alert-warning" role="alert"
                      invisible="not needs_shop_setup">
                     This shop is <b>Not Visited</b>. Capture GPS with the exterior photo,
-                    then confirm. Owner CNIC is required for <b>credit</b> shops and
-                    optional for <b>cash</b> shops. That verifies the shop
-                    and starts the visit (same as Flutter <code>shops/verify-on-site</code>).
+                    then confirm. Owner CNIC is required for <b>credit</b> shops only
+                    (optional for cash). That verifies the shop and starts the visit
+                    (same as Flutter <code>shops/verify-on-site</code>).
                     License number and legacy / opening balance are optional if empty.
                 </div>
                 <div class="alert alert-info" role="alert"
@@ -40,8 +42,7 @@
                 </group>
                 <group string="First-Visit Verification" invisible="not needs_shop_setup">
                     <group>
-                        <field name="owner_cnic_number"
-                               required="needs_shop_setup and shop_category != 'cash'"
+                        <field name="owner_cnic_number" required="cnic_required"
                                placeholder="Required for credit shops"/>
                         <field name="shop_license_number"
                                placeholder="Optional license number"/>

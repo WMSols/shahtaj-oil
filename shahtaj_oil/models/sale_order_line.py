@@ -53,6 +53,8 @@ class SaleOrderLine(models.Model):
                 line.shahtaj_has_discount = True
                 line.shahtaj_unit_discount = unit_disc
                 line.shahtaj_total_discount = unit_disc * line.product_uom_qty
+                # Keep Odoo discount % at 0 when price_unit is already reduced.
+                # Writing discount % here double-applies: qty * price * (1-%).
             else:
                 line.shahtaj_has_discount = False
                 line.shahtaj_unit_discount = 0.0

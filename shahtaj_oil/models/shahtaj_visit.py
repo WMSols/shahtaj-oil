@@ -696,6 +696,7 @@ class ShahtajVisit(models.Model):
             'state': 'in_progress',
             'outcome': 'none',
         })
+        # Link latest OK check-in attempt to this visit (best-effort).
         attempt = self.env['shahtaj.gps.attempt'].sudo().search([
             ('purpose', '=', 'check_in'),
             ('result', '=', 'ok'),
@@ -831,12 +832,13 @@ class ShahtajVisit(models.Model):
             is_discounted = float_compare(price_unit, catalog_price, precision_rounding=0.01) < 0
             unit_disc = max(0.0, catalog_price - price_unit) if is_discounted else 0.0
             total_disc = unit_disc * line.product_uom_qty
-            disc_pct = ((catalog_price - price_unit) / catalog_price * 100.0) if (is_discounted and catalog_price > 0) else 0.0
 
             if is_discounted:
                 has_any_discount = True
                 total_discount += total_disc
 
+            # Charged price lives in price_unit only. Do NOT also set Odoo
+            # discount % — that would double-apply (qty * price * (1-% )).
             subtotal = line.product_uom_qty * price_unit
             order_total += subtotal
             order_lines.append((0, 0, {
