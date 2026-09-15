@@ -220,6 +220,7 @@ class ShahtajDmAssignWizard(models.TransientModel):
         self.ensure_one()
         if self.sale_order_id.state not in ('sale', 'done'):
             raise UserError(_('Only confirmed sales orders can be assigned.'))
+        self.sale_order_id._shahtaj_require_posted_invoice_for_dm()
         if not self.job_ids:
             raise UserError(_('Add at least one delivery man.'))
 

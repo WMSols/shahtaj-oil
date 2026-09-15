@@ -7,6 +7,7 @@ import { loadBundle, loadJS } from "@web/core/assets";
 import { hasFinancialAccess } from "../shahtaj_access";
 import { StaffManagement } from "./staff_management";
 import { OperationsTracking } from "./operations_tracking";
+import { DeliveryManPerformance } from "./delivery_man_performance";
 import { TerritoryRoutes } from "./territory_routes";
 import { WarehouseInventory } from "./warehouse_inventory";
 import { FinancialsInvoicing } from "./financials_invoicing";
@@ -17,7 +18,7 @@ import { Accounting } from "./accounting";
 import { ConfirmModal } from "./confirm_modal";
 
 export class ShahtajDashboard extends Component {
-    static components = { StaffManagement, OperationsTracking, TerritoryRoutes, WarehouseInventory, FinancialsInvoicing, PortalSettings, SchedulesTargets, BankTransactions, Accounting, ConfirmModal }; 
+    static components = { StaffManagement, OperationsTracking, DeliveryManPerformance, TerritoryRoutes, WarehouseInventory, FinancialsInvoicing, PortalSettings, SchedulesTargets, BankTransactions, Accounting, ConfirmModal }; 
 
     setup() {
         this.orm = useService("orm");
@@ -31,7 +32,11 @@ export class ShahtajDashboard extends Component {
 
         this.state = useState({
             activeTab: 'overview', // Default to the new Master Overview
-            activeSubTab: '', 
+            activeSubTab: '',
+            staffRole: 'order_booker',
+            deliveriesSubTab: '',
+            checkinPurpose: 'all',
+            checkinRole: 'all', 
             isSidebarOpen: false, 
             isSwitchingTab: false,
             isLoadingKpis: false,
@@ -47,6 +52,12 @@ export class ShahtajDashboard extends Component {
                 todayCheckins: 0,
                 todayOrders: 0,
                 pendingDeliveries: 0,
+                totalDeliveryMen: 0,
+                onlineDeliveryMen: 0,
+                dmJobsToday: 0,
+                dmJobsActive: 0,
+                dmInTransit: 0,
+                ordersToDispatch: 0,
                 totalProducts: 0,
                 outOfStockProducts: 0,
                 activeSchedules: 0,
@@ -74,6 +85,14 @@ export class ShahtajDashboard extends Component {
         });
         // Global Event listnere to sync child component tab switches with the main dashboard state
         window.addEventListener('shahtaj-dashboard-switch', (ev) => {
+            if (ev.detail.staffRole) {
+                this.state.staffRole = ev.detail.staffRole;
+            }
+            if (ev.detail.deliveriesSubTab) {
+                this.state.deliveriesSubTab = ev.detail.deliveriesSubTab;
+            }
+            this.state.checkinPurpose = ev.detail.checkinPurpose || 'all';
+            this.state.checkinRole = ev.detail.checkinRole || 'all';
             this.switchTab(ev.detail.tab, ev.detail.subTab);
         });
         onWillStart(async () => {
@@ -169,6 +188,12 @@ export class ShahtajDashboard extends Component {
                 this.orm.searchCount("product.template", [...productBaseDomain, ["qty_available", "<=", 0]]),
                 this.orm.searchCount("shahtaj.weekly.schedule", [["active", "=", true]]),
                 this.orm.searchCount("shahtaj.visit.target", [["active", "=", true]]),
+                this.orm.searchCount("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true]]),
+                this.orm.searchCount("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
+                this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.todayStr], ["state", "!=", "not_ready"]]),
+                this.orm.searchCount("shahtaj.dm.delivery", [["state", "in", ["ready", "picked", "partial"]]]),
+                this.orm.searchCount("shahtaj.dm.delivery", [["field_state", "=", "in_transit"]]),
+                this.orm.searchCount("sale.order", [["state", "in", ["sale", "done"]], ["shahtaj_delivery_status", "in", ["pending", "partial"]]]),
             ]);
 
             const financialPromise = this.hasFinancialAccess
@@ -194,6 +219,8 @@ export class ShahtajDashboard extends Component {
                 todayCheckins, todayOrders, pendingDeliveries,
                 totalProducts, outOfStockProducts,
                 activeSchedules, activeTargets,
+                totalDeliveryMen, onlineDeliveryMen,
+                dmJobsToday, dmJobsActive, dmInTransit, ordersToDispatch,
             ] = coreCounts;
 
             Object.assign(this.state.kpis, {
@@ -210,6 +237,12 @@ export class ShahtajDashboard extends Component {
                 outOfStockProducts,
                 activeSchedules,
                 activeTargets,
+                totalDeliveryMen,
+                onlineDeliveryMen,
+                dmJobsToday,
+                dmJobsActive,
+                dmInTransit,
+                ordersToDispatch,
                 ...financial,
             });
         } catch (error) {
@@ -411,6 +444,14 @@ export class ShahtajDashboard extends Component {
         return Math.round((this.state.kpis.onlineBookers / total) * 100);
     }
 
+    get onlineFieldPct() {
+        const total = this.state.kpis.totalBookers + this.state.kpis.totalDeliveryMen;
+        if (!total) {
+            return 0;
+        }
+        return Math.round(((this.state.kpis.onlineBookers + this.state.kpis.onlineDeliveryMen) / total) * 100);
+    }
+
     get inStockProducts() {
         return Math.max(0, this.state.kpis.totalProducts - this.state.kpis.outOfStockProducts);
     }
@@ -419,8 +460,26 @@ export class ShahtajDashboard extends Component {
         const kpis = this.state.kpis;
         return kpis.pendingShops > 0
             || kpis.pendingDeliveries > 0
+            || kpis.ordersToDispatch > 0
+            || kpis.dmInTransit > 0
             || kpis.outOfStockProducts > 0
             || (this.hasFinancialAccess && kpis.toInvoice > 0);
+    }
+
+    openStaff(role = 'order_booker') {
+        this.state.staffRole = role;
+        this.switchTab('staff');
+    }
+
+    openDeliveries(subTab = 'dispatch') {
+        this.state.deliveriesSubTab = subTab;
+        this.switchTab('operations', 'deliveries');
+    }
+
+    openCheckins() {
+        this.state.checkinPurpose = 'all';
+        this.state.checkinRole = 'all';
+        this.switchTab('operations', 'checkins');
     }
 
     async toggleMenu(menuName, defaultSubTab = '') {
@@ -441,6 +500,12 @@ export class ShahtajDashboard extends Component {
         }
     }
     async switchTab(tabName, subTabName = '') {
+        if (tabName === 'staff' && !this.state.staffRole) {
+            this.state.staffRole = 'order_booker';
+        }
+        if (tabName === 'operations' && subTabName === 'deliveries' && !this.state.deliveriesSubTab) {
+            this.state.deliveriesSubTab = 'dispatch';
+        }
         if (!this.hasFinancialAccess && (tabName === 'financials' || tabName === 'transactions' || tabName === 'accounting')) {
             tabName = 'operations';
             subTabName = 'checkins';

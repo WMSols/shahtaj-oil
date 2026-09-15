@@ -7,6 +7,9 @@ import { hasFinancialAccess } from "../shahtaj_access";
 export class OperationsTracking extends Component {
      static props = {
         requestedSubTab: { type: String, optional: true },
+        requestedDeliveriesSubTab: { type: String, optional: true },
+        requestedCheckinPurpose: { type: String, optional: true },
+        requestedCheckinRole: { type: String, optional: true },
     };
     setup() {
         this.orm = useService("orm");
@@ -28,6 +31,26 @@ export class OperationsTracking extends Component {
             
             
             selectedDelivery: null,
+            deliveriesSubTab: this.props.requestedDeliveriesSubTab || 'dispatch',
+            selectedDmJob: null,
+            tableDispatch: [],
+            tableDmJobs: [],
+            lookupDeliveryMen: [],
+            assignModal: {
+                open: false,
+                wizardId: null,
+                orderName: '',
+                shop: '',
+                allocationHtml: '',
+                jobs: [],
+                saving: false,
+            },
+            pickModal: {
+                open: false,
+                wizardId: null,
+                lines: [],
+                saving: false,
+            },
 
             isCreatingInvoice: false,
             isConfirmingOrder: false,
@@ -79,6 +102,8 @@ export class OperationsTracking extends Component {
             
             pagination: {
                 deliveries: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                dispatch: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                dm_jobs: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 checkins: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 orders: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 verification: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
@@ -87,7 +112,9 @@ export class OperationsTracking extends Component {
             },
             filters: {
                 deliveries: { search: '', status: '' },
-                checkins: { search: '', status: '', purpose: 'all', booker: 'all', date: '' },
+                dispatch: { search: '' },
+                dm_jobs: { search: '', dm: 'all', date: this.todayStr, state: 'all', field_state: 'all' },
+                checkins: { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: '', role: this.props.requestedCheckinRole || 'all' },
                 orders: { search: '', status: '', booker: 'all' },
                 verification: { search: '', booker: 'all', reason: 'all' },
                 schedules: { booker: 'all', day: 'all' },
@@ -98,6 +125,21 @@ export class OperationsTracking extends Component {
         onWillUpdateProps((nextProps) => {
             if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.state.activeSubTab) {
                 this.setSubTab(nextProps.requestedSubTab);
+            }
+            if (nextProps.requestedDeliveriesSubTab && nextProps.requestedDeliveriesSubTab !== this.state.deliveriesSubTab) {
+                this.setDeliveriesSubTab(nextProps.requestedDeliveriesSubTab);
+            }
+            const purpose = nextProps.requestedCheckinPurpose || 'all';
+            const role = nextProps.requestedCheckinRole || 'all';
+            const prevPurpose = this.props.requestedCheckinPurpose || 'all';
+            const prevRole = this.props.requestedCheckinRole || 'all';
+            if (purpose !== prevPurpose || role !== prevRole) {
+                this.state.filters.checkins.purpose = purpose;
+                this.state.filters.checkins.role = role;
+                if (this.state.activeSubTab === 'checkins' || nextProps.requestedSubTab === 'checkins') {
+                    this.state.pagination.checkins.page = 1;
+                    this.fetchActiveList();
+                }
             }
         })
 
@@ -399,8 +441,10 @@ export class OperationsTracking extends Component {
                 byId.set(user.id, user);
             }
             this.state.lookupBookers = [...byId.values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            this.state.lookupDeliveryMen = deliveryMen.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         } catch (error) {
             this.state.lookupBookers = [];
+            this.state.lookupDeliveryMen = [];
         }
 
         try {
@@ -579,6 +623,54 @@ export class OperationsTracking extends Component {
         }
     }
 
+    async _ordersWithPostedInvoices(records) {
+        const invoiceIds = [...new Set((records || []).flatMap((o) => o.invoice_ids || []))];
+        if (!invoiceIds.length) return new Set();
+        const posted = await this.orm.searchRead(
+            "account.move",
+            [["id", "in", invoiceIds], ["state", "=", "posted"], ["move_type", "=", "out_invoice"]],
+            ["id"],
+        );
+        const postedIds = new Set(posted.map((m) => m.id));
+        const orderIds = new Set();
+        for (const order of records) {
+            if ((order.invoice_ids || []).some((id) => postedIds.has(id))) {
+                orderIds.add(order.id);
+            }
+        }
+        return orderIds;
+    }
+
+    async _refreshPostedInvoiceFlag(row, orderId) {
+        if (!row || !orderId) return;
+        const [so] = await this.orm.read("sale.order", [orderId], ["invoice_ids", "invoice_status", "state"]);
+        if (!so) return;
+        row.invoiceIds = so.invoice_ids || [];
+        row.invoice_status = so.invoice_status;
+        row.orderState = so.state;
+        const posted = await this._ordersWithPostedInvoices([so]);
+        row.hasPostedInvoice = posted.has(orderId);
+        if (row.hasPostedInvoice) {
+            row.status = "Invoiced";
+        } else if (so.state === "sale") {
+            row.status = "To Invoice";
+        }
+    }
+
+    canCreateInvoice(row) {
+        if (!this.hasFinancialAccess || !row || row.hasPostedInvoice) return false;
+        if (["Draft", "Needs Verification", "Rejected", "Cancelled"].includes(row.status)) return false;
+        return true;
+    }
+
+    canAssignDeliveryMan(row) {
+        return !!(row && row.hasPostedInvoice);
+    }
+
+    async invoiceSaleOrder(orderId) {
+        await this.orm.call("sale.order", "action_shahtaj_create_and_post_invoice", [[orderId]]);
+    }
+
     _mapSaleOrderRow(o, lines) {
         const myLines = (lines || []).filter(l => l.order_id && l.order_id[0] === o.id);
         const totalOrd = myLines.reduce((sum, l) => sum + l.product_uom_qty, 0);
@@ -614,7 +706,11 @@ export class OperationsTracking extends Component {
             creditShortfall: o.shahtaj_shop_credit_shortfall || 0,
             effectiveOutstanding: o.shahtaj_shop_effective_outstanding || 0,
             pastDiscountCount: o.shahtaj_shop_past_discount_count || 0,
-            status: status, invoice_status: o.invoice_status,
+            status: status,
+            invoice_status: o.invoice_status,
+            orderState: o.state,
+            hasPostedInvoice: false,
+            invoiceIds: o.invoice_ids || [],
             is_fully_delivered: totalOrd > 0 && totalDel >= totalOrd, line_ids: o.order_line, lines: []
         };
     }
@@ -624,6 +720,11 @@ export class OperationsTracking extends Component {
         let tab = this.state.activeSubTab;
         if (tab === 'performance') tab = this.state.perfSubTab;
         if (tab === 'orders' && this.state.ordersSubTab === 'verification') tab = 'verification';
+        if (tab === 'deliveries') {
+            if (this.state.deliveriesSubTab === 'jobs') tab = 'dm_jobs';
+            else if (this.state.deliveriesSubTab === 'dispatch') tab = 'dispatch';
+            else tab = 'deliveries';
+        }
         
         this.state.isLoadingList = true;
         try {
@@ -632,11 +733,14 @@ export class OperationsTracking extends Component {
             let domain = []; let model = ''; let fields = []; let targetState = '';
 
             // 1. DOMAIN MAPPINGS
-            if (tab === 'deliveries' || tab === 'orders' || tab === 'verification') {
+            if (tab === 'deliveries' || tab === 'dispatch' || tab === 'orders' || tab === 'verification') {
                 model = 'sale.order';
-                targetState = tab === 'deliveries' ? 'tableDeliveries' : (tab === 'verification' ? 'tableVerification' : 'tableOrders');
-                fields = ["name", "partner_id", "user_id", "date_order", "amount_total", "amount_tax", "amount_untaxed", "state", "order_line", "invoice_status"];
-                if (tab !== 'deliveries') {
+                targetState = tab === 'deliveries' ? 'tableDeliveries' : (tab === 'dispatch' ? 'tableDispatch' : (tab === 'verification' ? 'tableVerification' : 'tableOrders'));
+                fields = ["name", "partner_id", "user_id", "date_order", "amount_total", "amount_tax", "amount_untaxed", "state", "order_line", "invoice_status", "invoice_ids"];
+                if (tab === 'dispatch') {
+                    fields.push("shahtaj_delivery_status", "shahtaj_qty_to_deliver", "shahtaj_dm_delivery_count");
+                }
+                if (tab !== 'deliveries' && tab !== 'dispatch') {
                     // Stored fields only. Credit/history snapshot fields are computed
                     // and stall this list on a production database — load them in viewOrder.
                     fields.push(
@@ -648,6 +752,10 @@ export class OperationsTracking extends Component {
                 domain.push('|', ['shahtaj_visit_id', '!=', false], ['partner_id.is_shahtaj_shop', '=', true]);
                 
                 if (tab === 'deliveries') domain.push(['state', 'in', ['sale', 'done']]);
+                if (tab === 'dispatch') {
+                    domain.push(['state', 'in', ['sale', 'done']]);
+                    domain.push(['shahtaj_delivery_status', 'in', ['pending', 'partial']]);
+                }
                 if (tab === 'verification') {
                     domain.push(['shahtaj_approval_state', '=', 'to_approve']);
                     domain.push(['state', 'in', ['draft', 'sent']]);
@@ -672,6 +780,22 @@ export class OperationsTracking extends Component {
                     else if (filters.status === 'Invoiced') domain.push(['invoice_status', '=', 'invoiced']);
                 }
             } 
+            else if (tab === 'dm_jobs') {
+                model = 'shahtaj.dm.delivery';
+                targetState = 'tableDmJobs';
+                fields = ['id', 'display_name', 'delivery_man_id', 'partner_id', 'sale_order_id', 'scheduled_date', 'state', 'field_state', 'gps_verified'];
+                if (filters.search) {
+                    domain.push('|', '|',
+                        ['display_name', 'ilike', filters.search],
+                        ['partner_id.name', 'ilike', filters.search],
+                        ['sale_order_id.name', 'ilike', filters.search],
+                    );
+                }
+                if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
+                if (filters.date) domain.push(['scheduled_date', '=', filters.date]);
+                if (filters.state && filters.state !== 'all') domain.push(['state', '=', filters.state]);
+                if (filters.field_state && filters.field_state !== 'all') domain.push(['field_state', '=', filters.field_state]);
+            }
             else if (tab === 'checkins') {
                 model = 'shahtaj.gps.attempt'; targetState = 'tableCheckins';
                 fields = [
@@ -695,6 +819,7 @@ export class OperationsTracking extends Component {
                     domain.push(['create_date', '<=', bounds.end]);
                 }
                 if (filters.purpose && filters.purpose !== 'all') domain.push(['purpose', '=', filters.purpose]);
+                if (filters.role && filters.role !== 'all') domain.push(['role', '=', filters.role]);
                 if (filters.status === 'ok') domain.push(['result', '=', 'ok']);
                 else if (filters.status === 'blocked') domain.push(['result', '!=', 'ok']);
                 else if (filters.status === 'blocked_too_far') domain.push(['result', '=', 'blocked_too_far']);
@@ -729,6 +854,9 @@ export class OperationsTracking extends Component {
             if (tab === 'checkins') {
                 queryKwargs.order = 'create_date desc, id desc';
             }
+            if (tab === 'dm_jobs') {
+                queryKwargs.order = 'scheduled_date desc, id desc';
+            }
             let total;
             let records;
             if (tab === 'schedules') {
@@ -747,10 +875,39 @@ export class OperationsTracking extends Component {
             this.state.pagination[tab].total = total;
 
             // 3. MAP RESULTS
-            if (tab === 'deliveries' || tab === 'orders' || tab === 'verification') {
+            if (tab === 'deliveries' || tab === 'dispatch' || tab === 'orders' || tab === 'verification') {
                 const orderIds = records.map(o => o.id);
-                const lines = orderIds.length ? await this.orm.searchRead("sale.order.line", [["order_id", "in", orderIds]], ["order_id", "product_uom_qty", "qty_delivered"]) : [];
-                this.state[targetState] = records.map(o => this._mapSaleOrderRow(o, lines));
+                const [lines, postedOrderIds] = await Promise.all([
+                    orderIds.length ? this.orm.searchRead("sale.order.line", [["order_id", "in", orderIds]], ["order_id", "product_uom_qty", "qty_delivered"]) : Promise.resolve([]),
+                    this._ordersWithPostedInvoices(records),
+                ]);
+                this.state[targetState] = records.map(o => {
+                    const row = this._mapSaleOrderRow(o, lines);
+                    row.hasPostedInvoice = postedOrderIds.has(o.id);
+                    if (tab === 'dispatch') {
+                        row.deliveryStatus = o.shahtaj_delivery_status || '';
+                        row.qtyToDeliver = o.shahtaj_qty_to_deliver || 0;
+                        row.dmJobCount = o.shahtaj_dm_delivery_count || 0;
+                    }
+                    return row;
+                });
+            }
+            else if (tab === 'dm_jobs') {
+                this.state.tableDmJobs = records.map((j) => ({
+                    id: j.id,
+                    name: j.display_name || (j.sale_order_id ? j.sale_order_id[1] : `Job ${j.id}`),
+                    dm: j.delivery_man_id ? j.delivery_man_id[1] : '—',
+                    dmId: j.delivery_man_id ? j.delivery_man_id[0] : false,
+                    shop: j.partner_id ? j.partner_id[1] : '—',
+                    shopId: j.partner_id ? j.partner_id[0] : false,
+                    order: j.sale_order_id ? j.sale_order_id[1] : '—',
+                    orderId: j.sale_order_id ? j.sale_order_id[0] : false,
+                    date: j.scheduled_date || '—',
+                    state: j.state,
+                    fieldState: j.field_state,
+                    gpsVerified: j.gps_verified,
+                    lines: [],
+                }));
             }
             else if (tab === 'checkins') {
                 const { visitsById, tasksById } = await this._enrichCheckinRows(records);
@@ -942,14 +1099,31 @@ export class OperationsTracking extends Component {
             return;
         }
         if (!this.state.selectedDelivery || this.state.isCreatingInvoice) return;
-        
-        // Temporarily hijack the selectedOrder state so we can reuse your existing createInvoice function
-        this.state.selectedOrder = this.state.selectedDelivery;
-        await this.createInvoice();
-        
-        // Refresh the delivery view to hide the invoice button
-        await this.viewDelivery(this.state.selectedDelivery);
-        this.state.selectedOrder = null; // Clean up
+        this.state.isCreatingInvoice = true;
+        try {
+            await this.invoiceSaleOrder(this.state.selectedDelivery.odoo_id);
+            this.notification.add("Invoice created and posted. You can assign a delivery man.", { type: "success" });
+            await this.viewDelivery(this.state.selectedDelivery);
+            await this.fetchActiveList();
+        } catch (error) {
+            this.notification.add(error.data?.message || "Failed to create invoice.", { type: "danger" });
+        } finally {
+            this.state.isCreatingInvoice = false;
+        }
+    }
+
+    async createInvoiceFromDispatch(row) {
+        if (!this.canCreateInvoice(row) || this.state.isCreatingInvoice) return;
+        this.state.isCreatingInvoice = true;
+        try {
+            await this.invoiceSaleOrder(row.odoo_id);
+            this.notification.add("Invoice created and posted. You can assign a delivery man.", { type: "success" });
+            await this.fetchActiveList();
+        } catch (error) {
+            this.notification.add(error.data?.message || "Failed to create invoice.", { type: "danger" });
+        } finally {
+            this.state.isCreatingInvoice = false;
+        }
     }
 
    async loadTaxAndProductData() {
@@ -1015,12 +1189,16 @@ export class OperationsTracking extends Component {
                 };
             });
 
-            const orderData = await this.orm.read("sale.order", [dlv.odoo_id], ["amount_untaxed", "amount_tax", "amount_total", "invoice_status"]);
+            const orderData = await this.orm.read("sale.order", [dlv.odoo_id], ["amount_untaxed", "amount_tax", "amount_total", "invoice_status", "invoice_ids", "state"]);
             if (orderData.length > 0) {
                 dlv.amount_untaxed = orderData[0].amount_untaxed;
                 dlv.amount_tax = orderData[0].amount_tax;
                 dlv.amount_total = orderData[0].amount_total;
                 dlv.invoice_status = orderData[0].invoice_status;
+                dlv.invoiceIds = orderData[0].invoice_ids || [];
+                dlv.orderState = orderData[0].state;
+                const posted = await this._ordersWithPostedInvoices(orderData);
+                dlv.hasPostedInvoice = posted.has(dlv.odoo_id);
             }
         } catch (error) {
              this.notification.add(error.data?.message || error.message, { type: "danger" });
@@ -1178,6 +1356,274 @@ export class OperationsTracking extends Component {
             this.notification.add("Failed to confirm delivery: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
+
+    setDeliveriesSubTab(tabName) {
+        this.state.deliveriesSubTab = tabName;
+        this.state.selectedDelivery = null;
+        this.state.selectedDmJob = null;
+        this.state.isEditingDelivery = false;
+        this.fetchActiveList();
+    }
+
+    stockStateLabel(state) {
+        const map = {
+            not_ready: "Not ready", ready: "Ready", picked: "Picked",
+            partial: "Partial", delivered: "Delivered", returned: "Returned",
+        };
+        return map[state] || state || "—";
+    }
+
+    fieldStateLabel(state) {
+        const map = {
+            pending: "Pending", in_transit: "In transit", done: "Done",
+            not_attended: "Shop closed", failed: "Failed",
+        };
+        return map[state] || state || "—";
+    }
+
+    async openAssignModal(orderId) {
+        const rows = [...this.state.tableDispatch, ...this.state.tableDeliveries, ...this.state.tableOrders];
+        const row = rows.find((r) => r.odoo_id === orderId) || this.state.selectedDelivery;
+        if (row && !this.canAssignDeliveryMan(row)) {
+            this.notification.add("Invoice and post this order before assigning a delivery man.", { type: "warning" });
+            return;
+        }
+        this.state.assignModal.saving = true;
+        try {
+            const wizardIds = await this.orm.create(
+                "shahtaj.dm.assign.wizard",
+                [{}],
+                { context: { active_id: orderId, active_model: "sale.order" } },
+            );
+            const wizardId = Array.isArray(wizardIds) ? wizardIds[0] : wizardIds;
+            await this._loadAssignWizard(wizardId);
+            this.state.assignModal.open = true;
+        } catch (error) {
+            this.notification.add("Failed to open assign: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.assignModal.saving = false;
+        }
+    }
+
+    async _loadAssignWizard(wizardId) {
+        const [wiz] = await this.orm.read(
+            "shahtaj.dm.assign.wizard",
+            [wizardId],
+            ["sale_order_id", "partner_id", "job_ids", "allocation_html"],
+        );
+        const jobs = wiz.job_ids?.length
+            ? await this.orm.read(
+                "shahtaj.dm.assign.wizard.job",
+                wiz.job_ids,
+                ["id", "delivery_man_id", "scheduled_date", "line_ids"],
+            )
+            : [];
+        const allLineIds = jobs.flatMap((j) => j.line_ids || []);
+        const lineRecs = allLineIds.length
+            ? await this.orm.read(
+                "shahtaj.dm.assign.wizard.line",
+                allLineIds,
+                ["id", "sale_order_line_id", "product_id", "qty_ordered", "qty_assigned"],
+            )
+            : [];
+        const linesById = Object.fromEntries(lineRecs.map((l) => [l.id, l]));
+        this.state.assignModal.wizardId = wizardId;
+        this.state.assignModal.orderName = wiz.sale_order_id ? wiz.sale_order_id[1] : "";
+        this.state.assignModal.shop = wiz.partner_id ? wiz.partner_id[1] : "";
+        this.state.assignModal.allocationHtml = wiz.allocation_html || "";
+        this.state.assignModal.jobs = jobs.map((j) => ({
+            id: j.id,
+            deliveryManId: j.delivery_man_id ? String(j.delivery_man_id[0]) : "",
+            scheduledDate: j.scheduled_date || this.todayStr,
+            lines: (j.line_ids || []).map((lid) => {
+                const l = linesById[lid] || {};
+                return {
+                    id: lid,
+                    product: l.product_id ? l.product_id[1] : "Product",
+                    qtyOrdered: l.qty_ordered || 0,
+                    qtyAssigned: l.qty_assigned || 0,
+                };
+            }),
+        }));
+    }
+
+    closeAssignModal() {
+        this.state.assignModal.open = false;
+        this.state.assignModal.wizardId = null;
+        this.state.assignModal.jobs = [];
+    }
+
+    async persistAssignEdits() {
+        const jobs = this.state.assignModal.jobs;
+        for (const job of jobs) {
+            await this.orm.write("shahtaj.dm.assign.wizard.job", [job.id], {
+                delivery_man_id: job.deliveryManId ? parseInt(job.deliveryManId, 10) : false,
+                scheduled_date: job.scheduledDate || this.todayStr,
+            });
+            for (const line of job.lines) {
+                await this.orm.write("shahtaj.dm.assign.wizard.line", [line.id], {
+                    qty_assigned: Number(line.qtyAssigned) || 0,
+                });
+            }
+        }
+    }
+
+    async addAssignDeliveryMan() {
+        if (!this.state.assignModal.wizardId) return;
+        this.state.assignModal.saving = true;
+        try {
+            await this.persistAssignEdits();
+            await this.orm.call("shahtaj.dm.assign.wizard", "action_add_delivery_man", [[this.state.assignModal.wizardId]]);
+            await this._loadAssignWizard(this.state.assignModal.wizardId);
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        } finally {
+            this.state.assignModal.saving = false;
+        }
+    }
+
+    async confirmAssign() {
+        if (!this.state.assignModal.wizardId) return;
+        this.state.assignModal.saving = true;
+        try {
+            await this.persistAssignEdits();
+            await this.orm.call("shahtaj.dm.assign.wizard", "action_confirm_assign", [[this.state.assignModal.wizardId]]);
+            this.notification.add("Delivery men assigned.", { type: "success" });
+            this.closeAssignModal();
+            await this.fetchActiveList();
+        } catch (error) {
+            this.notification.add("Assign failed: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.assignModal.saving = false;
+        }
+    }
+
+    async viewDmJob(job) {
+        const lines = await this.orm.searchRead(
+            "shahtaj.dm.delivery.line",
+            [["delivery_id", "=", job.id]],
+            ["id", "product_id", "qty_ordered", "qty_assigned", "qty_picked", "qty_delivered"],
+        );
+        this.state.selectedDmJob = {
+            ...job,
+            lines: lines.map((l) => ({
+                id: l.id,
+                product: l.product_id ? l.product_id[1] : "Product",
+                qtyOrdered: l.qty_ordered || 0,
+                qtyAssigned: l.qty_assigned || 0,
+                qtyPicked: l.qty_picked || 0,
+                qtyDelivered: l.qty_delivered || 0,
+            })),
+        };
+    }
+
+    closeDmJob() {
+        this.state.selectedDmJob = null;
+    }
+
+    async resetDmJobField(jobId) {
+        try {
+            await this.orm.call("shahtaj.dm.delivery", "action_field_reset_pending", [[jobId]]);
+            this.notification.add("Field status reset to pending.", { type: "success" });
+            await this.fetchActiveList();
+            if (this.state.selectedDmJob && this.state.selectedDmJob.id === jobId) {
+                const row = this.state.tableDmJobs.find((j) => j.id === jobId);
+                if (row) await this.viewDmJob(row);
+            }
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        }
+    }
+
+    async returnDmJobWarehouse(jobId) {
+        try {
+            await this.orm.call("shahtaj.dm.delivery", "action_return_to_warehouse", [[jobId]]);
+            this.notification.add("Undelivered stock returned to warehouse.", { type: "success" });
+            this.state.selectedDmJob = null;
+            await this.fetchActiveList();
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        }
+    }
+
+    async openPickModal(jobId) {
+        this.state.pickModal.saving = true;
+        try {
+            const wizardIds = await this.orm.create(
+                "shahtaj.dm.pick.wizard",
+                [{}],
+                { context: { active_id: jobId, active_model: "shahtaj.dm.delivery" } },
+            );
+            const wizardId = Array.isArray(wizardIds) ? wizardIds[0] : wizardIds;
+            const [wiz] = await this.orm.read("shahtaj.dm.pick.wizard", [wizardId], ["line_ids"]);
+            const lines = wiz.line_ids?.length
+                ? await this.orm.read(
+                    "shahtaj.dm.pick.wizard.line",
+                    wiz.line_ids,
+                    ["id", "product_id", "qty_assigned", "qty_required", "qty_already_picked", "qty_to_pick"],
+                )
+                : [];
+            this.state.pickModal = {
+                open: true,
+                wizardId,
+                lines: lines.map((l) => ({
+                    id: l.id,
+                    product: l.product_id ? l.product_id[1] : "Product",
+                    qtyAssigned: l.qty_assigned || 0,
+                    qtyRequired: l.qty_required || 0,
+                    qtyPicked: l.qty_already_picked || 0,
+                    qtyToPick: l.qty_to_pick || 0,
+                })),
+                saving: false,
+            };
+        } catch (error) {
+            this.notification.add("Pick wizard failed: " + (error.data?.message || error.message), { type: "danger" });
+            this.state.pickModal.saving = false;
+        }
+    }
+
+    closePickModal() {
+        this.state.pickModal.open = false;
+        this.state.pickModal.wizardId = null;
+        this.state.pickModal.lines = [];
+    }
+
+    async confirmPick() {
+        if (!this.state.pickModal.wizardId) return;
+        this.state.pickModal.saving = true;
+        try {
+            for (const line of this.state.pickModal.lines) {
+                await this.orm.write("shahtaj.dm.pick.wizard.line", [line.id], {
+                    qty_to_pick: Number(line.qtyToPick) || 0,
+                });
+            }
+            await this.orm.call("shahtaj.dm.pick.wizard", "action_confirm_pick", [[this.state.pickModal.wizardId]]);
+            this.notification.add("Stock picked to van.", { type: "success" });
+            this.closePickModal();
+            await this.fetchActiveList();
+            if (this.state.selectedDmJob) {
+                const row = this.state.tableDmJobs.find((j) => j.id === this.state.selectedDmJob.id);
+                if (row) await this.viewDmJob(row);
+            }
+        } catch (error) {
+            this.notification.add("Pick failed: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.pickModal.saving = false;
+        }
+    }
+
+    canResetField(job) {
+        return job && ["in_transit", "not_attended", "failed"].includes(job.fieldState);
+    }
+
+    canReturnWarehouse(job) {
+        return job && ["picked", "partial"].includes(job.state);
+    }
+
+    canPickJob(job) {
+        return job && ["ready", "picked", "partial"].includes(job.state);
+    }
+
     // --- NAVIGATION & FILTERS ---
 
     setSubTab(tabName) {
@@ -1191,6 +1637,7 @@ export class OperationsTracking extends Component {
             this.state.selectedCheckin = null;
             this.state.selectedSchedule = null;
             this.state.selectedTarget = null;
+            this.state.selectedDmJob = null;
             this.state.showSaleOrderForm = false;
             this.state.showRejectModal = false;
             this.state.showCreditOverride = false;
@@ -1213,7 +1660,9 @@ export class OperationsTracking extends Component {
     _resetTabFilters(tabName) {
         const defaultFilters = {
             deliveries: { search: '', status: '' },
-            checkins:   { search: '', status: '', purpose: 'all', booker: 'all', date: '' },
+            dispatch:   { search: '' },
+            dm_jobs:    { search: '', dm: 'all', date: this.todayStr, state: 'all', field_state: 'all' },
+            checkins:   { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: '', role: this.props.requestedCheckinRole || 'all' },
             orders:     { search: '', status: '', booker: 'all' },
             verification: { search: '', booker: 'all', reason: 'all' },
             schedules:  { booker: 'all', day: 'all' },
@@ -1231,6 +1680,15 @@ export class OperationsTracking extends Component {
             this.state.pagination.schedules.page = 1;
             this.state.pagination.targets.page   = 1;
             this.state.perfSubTab = 'schedules';
+        }
+        if (tabName === 'deliveries') {
+            this.state.selectedDelivery = null;
+            this.state.selectedDmJob = null;
+            this.state.deliveriesSubTab = this.props.requestedDeliveriesSubTab || 'dispatch';
+            this.state.filters.dispatch = { search: '' };
+            this.state.filters.dm_jobs = { search: '', dm: 'all', date: this.todayStr, state: 'all', field_state: 'all' };
+            this.state.pagination.dispatch.page = 1;
+            this.state.pagination.dm_jobs.page = 1;
         }
         if (tabName === 'orders') {
             this.state.ordersSubTab = 'live';
@@ -1261,6 +1719,7 @@ export class OperationsTracking extends Component {
         // 1. Assign to state FIRST to wrap it in Owl's reactive proxy
         this.state.selectedOrder = order;
         this.state.shopSnapshotOpen = false;
+        await this._refreshPostedInvoiceFlag(this.state.selectedOrder, order.odoo_id);
         
         // FIX: Initialize the contact fields so the "Loading..." check triggers the DB fetch
         if (!this.state.selectedOrder.phone) {
@@ -1678,21 +2137,12 @@ export class OperationsTracking extends Component {
         this.state.isCreatingInvoice = true;
         
         try {
-            // Use Odoo's native invoice generation wizard
-            const context = { active_model: 'sale.order', active_ids: [this.state.selectedOrder.odoo_id] };
-            const wizardIds = await this.orm.create("sale.advance.payment.inv", [{ advance_payment_method: 'delivered' }], { context });
-            await this.orm.call("sale.advance.payment.inv", "create_invoices", [wizardIds], { context });
-            
-            this.notification.add(`Draft invoice generated successfully.`, {
+            await this.invoiceSaleOrder(this.state.selectedOrder.odoo_id);
+            this.notification.add("Invoice created and posted. You can assign a delivery man.", {
                 title: "Success",
                 type: "success",
             });
-
-            // Update local state to reflect the new status
-            this.state.selectedOrder.invoice_status = 'invoiced';
-            this.state.selectedOrder.status = 'Invoiced'; 
-            
-            // Refresh the background data
+            await this._refreshPostedInvoiceFlag(this.state.selectedOrder, this.state.selectedOrder.odoo_id);
             await this.fetchActiveList();
 
         } catch (error) {

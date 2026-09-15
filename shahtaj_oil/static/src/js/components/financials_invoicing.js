@@ -1179,9 +1179,7 @@ export class FinancialsInvoicing extends Component {
     async triggerCreateInvoice(order) {
         this.state.isCreatingInvoice = true;
         try {
-            const context = { active_model: 'sale.order', active_ids: [order.id] };
-            const wizardIds = await this.orm.create("sale.advance.payment.inv", [{ advance_payment_method: 'delivered' }], { context });
-            await this.orm.call("sale.advance.payment.inv", "create_invoices", [wizardIds], { context });
+            await this.orm.call("sale.order", "action_shahtaj_create_and_post_invoice", [[order.id]]);
             await this.refreshFinancialLists();
             this.setInvoiceSubTab('customer_invoices');
         } catch (error) { 
@@ -1473,9 +1471,7 @@ export class FinancialsInvoicing extends Component {
     async triggerCreateInvoice(order) {
         this.state.isCreatingInvoice = true;
         try {
-            const context = { active_model: 'sale.order', active_ids: [order.id] };
-            const wizardIds = await this.orm.create("sale.advance.payment.inv", [{ advance_payment_method: 'delivered' }], { context });
-            await this.orm.call("sale.advance.payment.inv", "create_invoices", [wizardIds], { context });
+            await this.orm.call("sale.order", "action_shahtaj_create_and_post_invoice", [[order.id]]);
             await this.refreshFinancialLists();
             this.setInvoiceSubTab('customer_invoices');
         } catch (error) { 

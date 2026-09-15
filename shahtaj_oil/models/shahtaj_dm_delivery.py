@@ -996,6 +996,7 @@ class ShahtajDmDelivery(models.Model):
         sale_order = sale_order.sudo()
         if not sale_order or sale_order.state not in ('sale', 'done'):
             raise UserError(_('Only confirmed sales orders can be assigned.'))
+        sale_order._shahtaj_require_posted_invoice_for_dm()
         if not assignments:
             raise UserError(_('Add at least one delivery man assignment.'))
 

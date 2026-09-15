@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+    <t t-name="shahtaj_oil.DeliveryManPerformance" owl="1">
+        <div class="card border-0 shadow-sm bg-white p-3 p-md-4 rounded-3">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 border-bottom pb-3 gap-3">
+                <div>
+                    <h2 class="h4 fw-bold text-dark mb-0">Delivery Men Performance</h2>
+                    <small class="text-muted">Jobs, day sessions, and wallet recovery — GPS stays on Shop Check-ins.</small>
+                </div>
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <input type="date" class="form-control form-control-sm" style="max-width: 160px;" t-model="this.state.dateFrom" t-on-change="refreshActive"/>
+                    <span class="text-muted small">to</span>
+                    <input type="date" class="form-control form-control-sm" style="max-width: 160px;" t-model="this.state.dateTo" t-on-change="refreshActive"/>
+                    <button class="btn btn-outline-secondary fw-bold" t-on-click="refreshActive" t-att-disabled="this.state.isLoading">
+                        <i class="fa fa-refresh me-1" t-att-class="{'fa-spin': this.state.isLoading}"/> Refresh
+                    </button>
+                    <button class="btn btn-outline-dark fw-bold" t-on-click="openGpsDeliveries">GPS deliveries</button>
+                </div>
+            </div>
+
+            <ul class="nav nav-pills mb-4 gap-2">
+                <li class="nav-item">
+                    <button t-on-click="() => this.setPerfSubTab('jobs')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.perfSubTab === 'jobs' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Jobs</button>
+                </li>
+                <li class="nav-item">
+                    <button t-on-click="() => this.setPerfSubTab('sessions')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.perfSubTab === 'sessions' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Day sessions</button>
+                </li>
+                <li class="nav-item" t-if="this.hasFinancialAccess">
+                    <button t-on-click="() => this.setPerfSubTab('recovery')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.perfSubTab === 'recovery' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Recovery</button>
+                </li>
+            </ul>
+
+            <t t-if="this.state.perfSubTab === 'jobs' and !this.state.selectedDm">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="bg-light text-uppercase small fw-bold text-muted">
+                            <tr>
+                                <th class="ps-3 border-top-0">Delivery man</th>
+                                <th class="text-center border-top-0">Jobs</th>
+                                <th class="text-center border-top-0">Delivered</th>
+                                <th class="text-center border-top-0">Picked</th>
+                                <th class="text-center border-top-0">Partial</th>
+                                <th class="text-center border-top-0">In transit</th>
+                                <th class="text-center border-top-0">Failed</th>
+                                <th class="text-center border-top-0">Shop closed</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-if="!this.state.jobRows.length and !this.state.isLoading">
+                                <tr><td colspan="8" class="text-center py-5 text-muted fw-bold">No delivery jobs in this date range.</td></tr>
+                            </t>
+                            <t t-foreach="this.state.jobRows" t-as="row" t-key="row.id">
+                                <tr class="cursor-pointer" style="cursor: pointer;" t-on-click="() => this.openDmJobs(row)">
+                                    <td class="ps-3 fw-bold"><t t-esc="row.name"/></td>
+                                    <td class="text-center"><t t-esc="row.total"/></td>
+                                    <td class="text-center"><t t-esc="row.delivered"/></td>
+                                    <td class="text-center"><t t-esc="row.picked"/></td>
+                                    <td class="text-center"><t t-esc="row.partial"/></td>
+                                    <td class="text-center"><t t-esc="row.inTransit"/></td>
+                                    <td class="text-center"><t t-esc="row.failed"/></td>
+                                    <td class="text-center"><t t-esc="row.shopClosed"/></td>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+                </div>
+            </t>
+
+            <t t-if="this.state.perfSubTab === 'jobs' and this.state.selectedDm">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary me-2" t-on-click="closeDmJobs">← Back</button>
+                        <span class="fw-bold"><t t-esc="this.state.selectedDm.name"/></span>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="bg-light text-uppercase small fw-bold text-muted">
+                            <tr>
+                                <th class="ps-3 border-top-0">Job</th>
+                                <th class="border-top-0">Shop</th>
+                                <th class="border-top-0">Order</th>
+                                <th class="border-top-0">Date</th>
+                                <th class="border-top-0">Stock</th>
+                                <th class="border-top-0">Stop</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-if="!this.state.drillJobs.length">
+                                <tr><td colspan="6" class="text-center py-4 text-muted">No jobs.</td></tr>
+                            </t>
+                            <t t-foreach="this.state.drillJobs" t-as="job" t-key="job.id">
+                                <tr>
+                                    <td class="ps-3 fw-bold"><t t-esc="job.name"/></td>
+                                    <td><t t-esc="job.shop"/></td>
+                                    <td><t t-esc="job.order"/></td>
+                                    <td><t t-esc="job.date"/></td>
+                                    <td><t t-esc="this.stockLabel(job.state)"/></td>
+                                    <td><t t-esc="this.fieldLabel(job.fieldState)"/></td>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                    <small class="text-muted fw-bold">
+                        Showing <t t-esc="this.state.pagination.drill.total === 0 ? 0 : ((this.state.pagination.drill.page - 1) * this.state.pagination.drill.limit) + 1"/>
+                        to <t t-esc="Math.min(this.state.pagination.drill.page * this.state.pagination.drill.limit, this.state.pagination.drill.total)"/>
+                        of <t t-esc="this.state.pagination.drill.total"/>
+                    </small>
+                    <div class="btn-group shadow-sm">
+                        <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('drill', -1)" t-att-disabled="this.state.pagination.drill.page === 1">Prev</button>
+                        <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.drill.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.drill.total / this.state.pagination.drill.limit))"/></button>
+                        <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('drill', 1)" t-att-disabled="this.state.pagination.drill.page &gt;= Math.ceil(this.state.pagination.drill.total / this.state.pagination.drill.limit)">Next</button>
+                    </div>
+                </div>
+            </t>
+
+            <t t-if="this.state.perfSubTab === 'sessions'">
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <select class="form-select form-select-sm" style="max-width: 220px;" t-model="this.state.filters.sessions.dm" t-on-change="() => this.onFilterChange('sessions')">
+                        <option value="all">All delivery men</option>
+                        <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="dm.id">
+                            <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
+                        </t>
+                    </select>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="bg-light text-uppercase small fw-bold text-muted">
+                            <tr>
+                                <th class="ps-3 border-top-0">Delivery man</th>
+                                <th class="border-top-0">Date</th>
+                                <th class="border-top-0">Status</th>
+                                <th class="border-top-0">Departed</th>
+                                <th class="border-top-0">Ended</th>
+                                <th class="text-end pe-3 border-top-0">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-if="!this.state.sessions.length and !this.state.isLoading">
+                                <tr><td colspan="6" class="text-center py-5 text-muted fw-bold">No day sessions in this range.</td></tr>
+                            </t>
+                            <t t-foreach="this.state.sessions" t-as="sess" t-key="sess.id">
+                                <tr>
+                                    <td class="ps-3 fw-bold"><t t-esc="sess.dm"/></td>
+                                    <td><t t-esc="sess.date"/></td>
+                                    <td><t t-esc="this.sessionLabel(sess.state)"/></td>
+                                    <td><t t-esc="sess.departed"/></td>
+                                    <td><t t-esc="sess.ended"/></td>
+                                    <td class="text-end pe-3">
+                                        <button t-if="sess.state !== 'office'" class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.resetSession(sess.id)">Reset to office</button>
+                                    </td>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                    <small class="text-muted fw-bold">
+                        Showing <t t-esc="this.state.pagination.sessions.total === 0 ? 0 : ((this.state.pagination.sessions.page - 1) * this.state.pagination.sessions.limit) + 1"/>
+                        to <t t-esc="Math.min(this.state.pagination.sessions.page * this.state.pagination.sessions.limit, this.state.pagination.sessions.total)"/>
+                        of <t t-esc="this.state.pagination.sessions.total"/>
+                    </small>
+                    <div class="btn-group shadow-sm">
+                        <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('sessions', -1)" t-att-disabled="this.state.pagination.sessions.page === 1">Prev</button>
+                        <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.sessions.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.sessions.total / this.state.pagination.sessions.limit))"/></button>
+                        <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('sessions', 1)" t-att-disabled="this.state.pagination.sessions.page &gt;= Math.ceil(this.state.pagination.sessions.total / this.state.pagination.sessions.limit)">Next</button>
+                    </div>
+                </div>
+            </t>
+
+            <t t-if="this.state.perfSubTab === 'recovery' and this.hasFinancialAccess">
+                <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+                    <select class="form-select form-select-sm" style="max-width: 220px;" t-model="this.state.filters.collections.dm" t-on-change="() => this.onFilterChange('collections')">
+                        <option value="all">Collections: all DMs</option>
+                        <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="'c-' + dm.id">
+                            <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
+                        </t>
+                    </select>
+                    <select class="form-select form-select-sm" style="max-width: 220px;" t-model="this.state.filters.settlements.dm" t-on-change="() => this.onFilterChange('settlements')">
+                        <option value="all">Settlements: all DMs</option>
+                        <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="'s-' + dm.id">
+                            <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
+                        </t>
+                    </select>
+                    <select class="form-select form-select-sm" style="max-width: 220px;" t-model="this.state.settleDmId">
+                        <option value="">Settle wallet for…</option>
+                        <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="'w-' + dm.id">
+                            <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
+                        </t>
+                    </select>
+                    <button class="btn btn-sm btn-dark text-white fw-bold" t-on-click="openSettleFromPicker" t-att-disabled="!this.state.settleDmId">Settle wallet</button>
+                </div>
+
+                <h6 class="fw-bold mt-2">Wallet collections</h6>
+                <div class="table-responsive mb-4">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="bg-light text-uppercase small fw-bold text-muted">
+                            <tr>
+                                <th class="ps-3 border-top-0">Payment</th>
+                                <th class="border-top-0">Date</th>
+                                <th class="border-top-0">Shop</th>
+                                <th class="border-top-0">Delivery man</th>
+                                <th class="text-end pe-3 border-top-0">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-if="!this.state.collections.length and !this.state.isLoading">
+                                <tr><td colspan="5" class="text-center py-4 text-muted">No collections in this range.</td></tr>
+                            </t>
+                            <t t-foreach="this.state.collections" t-as="pay" t-key="pay.id">
+                                <tr>
+                                    <td class="ps-3 fw-bold"><t t-esc="pay.name"/></td>
+                                    <td><t t-esc="pay.date"/></td>
+                                    <td><t t-esc="pay.shop"/></td>
+                                    <td><t t-esc="pay.dm"/></td>
+                                    <td class="text-end pe-3">Rs. <t t-esc="this.formatMoney(pay.amount)"/></td>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light mb-4">
+                    <small class="text-muted fw-bold">
+                        Showing <t t-esc="this.state.pagination.collections.total === 0 ? 0 : ((this.state.pagination.collections.page - 1) * this.state.pagination.collections.limit) + 1"/>
+                        to <t t-esc="Math.min(this.state.pagination.collections.page * this.state.pagination.collections.limit, this.state.pagination.collections.total)"/>
+                        of <t t-esc="this.state.pagination.collections.total"/>
+                    </small>
+                    <div class="btn-group shadow-sm">
+                        <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('collections', -1)" t-att-disabled="this.state.pagination.collections.page === 1">Prev</button>
+                        <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.collections.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.collections.total / this.state.pagination.collections.limit))"/></button>
+                        <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('collections', 1)" t-att-disabled="this.state.pagination.collections.page &gt;= Math.ceil(this.state.pagination.collections.total / this.state.pagination.collections.limit)">Next</button>
+                    </div>
+                </div>
+
+                <h6 class="fw-bold">Wallet settlements</h6>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="bg-light text-uppercase small fw-bold text-muted">
+                            <tr>
+                                <th class="ps-3 border-top-0">Delivery man</th>
+                                <th class="border-top-0">Date</th>
+                                <th class="text-end pe-3 border-top-0">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-if="!this.state.settlements.length and !this.state.isLoading">
+                                <tr><td colspan="3" class="text-center py-4 text-muted">No settlements in this range.</td></tr>
+                            </t>
+                            <t t-foreach="this.state.settlements" t-as="setl" t-key="setl.id">
+                                <tr>
+                                    <td class="ps-3 fw-bold"><t t-esc="setl.dm"/></td>
+                                    <td><t t-esc="setl.date"/></td>
+                                    <td class="text-end pe-3">Rs. <t t-esc="this.formatMoney(setl.amount)"/></td>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                    <small class="text-muted fw-bold">
+                        Showing <t t-esc="this.state.pagination.settlements.total === 0 ? 0 : ((this.state.pagination.settlements.page - 1) * this.state.pagination.settlements.limit) + 1"/>
+                        to <t t-esc="Math.min(this.state.pagination.settlements.page * this.state.pagination.settlements.limit, this.state.pagination.settlements.total)"/>
+                        of <t t-esc="this.state.pagination.settlements.total"/>
+                    </small>
+                    <div class="btn-group shadow-sm">
+                        <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('settlements', -1)" t-att-disabled="this.state.pagination.settlements.page === 1">Prev</button>
+                        <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.settlements.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.settlements.total / this.state.pagination.settlements.limit))"/></button>
+                        <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('settlements', 1)" t-att-disabled="this.state.pagination.settlements.page &gt;= Math.ceil(this.state.pagination.settlements.total / this.state.pagination.settlements.limit)">Next</button>
+                    </div>
+                </div>
+            </t>
+
+            <t t-if="this.state.settleModal.open">
+                <div class="modal d-block" style="background: rgba(15,23,42,0.45);" tabindex="-1">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title fw-bold">Settle Wallet to Bank</h5>
+                                <button type="button" class="btn-close" t-on-click="closeSettle"/>
+                            </div>
+                            <div class="modal-body">
+                                <p class="text-muted">Available: Rs. <t t-esc="this.formatMoney(this.state.settleModal.walletBalance)"/></p>
+                                <label class="small fw-bold">Amount</label>
+                                <input type="number" class="form-control mb-3" t-model.number="this.state.settleModal.amount" min="0"/>
+                                <label class="small fw-bold">Deposit to</label>
+                                <select class="form-select mb-3" t-model="this.state.settleModal.bankJournalId">
+                                    <option value="">Select journal</option>
+                                    <t t-foreach="this.state.settleModal.journals" t-as="jnl" t-key="jnl.id">
+                                        <option t-att-value="jnl.id"><t t-esc="jnl.name"/></option>
+                                    </t>
+                                </select>
+                                <label class="small fw-bold">Notes</label>
+                                <textarea class="form-control" rows="2" t-model="this.state.settleModal.notes"/>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="btn btn-outline-secondary" t-on-click="closeSettle">Cancel</button>
+                                <button class="btn btn-dark text-white" t-on-click="confirmSettle" t-att-disabled="this.state.settleModal.saving">Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
+        </div>
+    </t>
+</templates>

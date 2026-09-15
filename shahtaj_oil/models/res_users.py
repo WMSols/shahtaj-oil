@@ -792,14 +792,18 @@ class ResUsers(models.Model):
                 continue
             user.shahtaj_dm_wallet_balance = Service.wallet_balance(user)
 
-    @api.depends('shahtaj_last_seen_at', 'shahtaj_is_order_booker')
+    @api.depends(
+        'shahtaj_last_seen_at',
+        'shahtaj_is_order_booker',
+        'shahtaj_is_delivery_man',
+    )
     def _compute_shahtaj_online_status(self):
         """Presence from Flutter heartbeat only (not Odoo Discuss im_status)."""
         now = fields.Datetime.now()
         online_after = now - timedelta(minutes=ONLINE_THRESHOLD_MINUTES)
         away_after = now - timedelta(minutes=AWAY_THRESHOLD_MINUTES)
         for user in self:
-            if not user.shahtaj_is_order_booker:
+            if not user.shahtaj_is_order_booker and not user.shahtaj_is_delivery_man:
                 user.shahtaj_online_status = False
                 continue
             last_seen = user.shahtaj_last_seen_at
@@ -811,7 +815,7 @@ class ResUsers(models.Model):
                 user.shahtaj_online_status = 'offline'
 
     def action_shahtaj_touch_presence(self):
-        """Update last-seen timestamp so distributors see this booker as online.
+        """Update last-seen timestamp so distributors see this field user as online.
 
         Called from the mobile heartbeat API, login, and /auth/me.
         Online window is ONLINE_THRESHOLD_MINUTES (default 5).
@@ -830,16 +834,18 @@ class ResUsers(models.Model):
 
     @api.model
     def _cron_refresh_order_booker_presence(self):
-        """Light job: flip stale online/away bookers when heartbeat window expires.
+        """Light job: flip stale online/away field users when heartbeat expires.
 
-        Only loads bookers still marked online/away that are past their window
-        (usually a few rows). Does not scan the full user table.
+        Only loads bookers and delivery men still marked online/away that are
+        past their window (usually a few rows). Does not scan the full user table.
         """
         now = fields.Datetime.now()
         online_cut = now - timedelta(minutes=ONLINE_THRESHOLD_MINUTES)
         away_cut = now - timedelta(minutes=AWAY_THRESHOLD_MINUTES)
         candidates = self.sudo().search([
+            '|',
             ('shahtaj_is_order_booker', '=', True),
+            ('shahtaj_is_delivery_man', '=', True),
             '|',
             '&',
             ('shahtaj_online_status', '=', 'online'),

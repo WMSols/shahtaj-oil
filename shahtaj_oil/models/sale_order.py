@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Link confirmed sales orders back to the shop visit and daily task."""
 from odoo import _, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 from odoo.tools import float_compare
 
 
@@ -669,6 +669,74 @@ class SaleOrder(models.Model):
     def _compute_shahtaj_dm_delivery_count(self):
         for order in self:
             order.shahtaj_dm_delivery_count = len(order.shahtaj_dm_delivery_ids)
+
+    def _shahtaj_posted_customer_invoices(self):
+        self.ensure_one()
+        return self.invoice_ids.filtered(
+            lambda move: move.state == 'posted' and move.move_type == 'out_invoice'
+        )
+
+    def _shahtaj_require_posted_invoice_for_dm(self):
+        """Jobs stay Waiting Invoice until a customer invoice is posted."""
+        self.ensure_one()
+        if not self._shahtaj_posted_customer_invoices():
+            raise UserError(_(
+                'Invoice and post %(order)s before assigning a delivery man. '
+                'Stock cannot be picked until a customer invoice is posted.',
+                order=self.display_name,
+            ))
+
+    def _shahtaj_prepare_lines_for_order_invoice(self):
+        """Force ordered-qty policy and refresh stored qty_to_invoice on this SO."""
+        self.ensure_one()
+        templates = self.order_line.product_id.product_tmpl_id
+        if templates:
+            templates.sudo().write({'invoice_policy': 'order'})
+        lines = self.order_line.filtered(lambda line: not line.display_type and line.product_id)
+        if not lines:
+            return lines
+        if hasattr(lines, '_compute_qty_to_invoice'):
+            lines._compute_qty_to_invoice()
+            lines.flush_recordset(['qty_to_invoice'])
+        else:
+            for line in lines:
+                if line.state in ('sale', 'done'):
+                    line.qty_to_invoice = line.product_uom_qty - line.qty_invoiced
+        return lines
+
+    def action_shahtaj_create_and_post_invoice(self):
+        """Invoice ordered quantities and post — required before DM assign."""
+        self.ensure_one()
+        user = self.env.user
+        if not (
+            user.has_group('shahtaj_oil.group_shahtaj_distributor_financial')
+            or user.has_group('account.group_account_invoice')
+            or user.has_group('base.group_system')
+        ):
+            raise AccessError(_('You need financial access to create invoices.'))
+        if self.state not in ('sale', 'done'):
+            raise UserError(_('Confirm the sales order before invoicing.'))
+
+        posted = self._shahtaj_posted_customer_invoices()
+        if posted:
+            return posted.ids
+
+        drafts = self.invoice_ids.filtered(
+            lambda move: move.state == 'draft' and move.move_type == 'out_invoice'
+        )
+        if drafts:
+            drafts.action_post()
+            return drafts.ids
+
+        self._shahtaj_prepare_lines_for_order_invoice()
+        invoices = self._create_invoices(final=False)
+        if not invoices:
+            raise UserError(_(
+                'No invoiceable quantity on %(order)s after switching to ordered quantities.',
+                order=self.display_name,
+            ))
+        invoices.action_post()
+        return invoices.ids
 
     @api.depends(
         'shahtaj_dm_delivery_ids.delivery_man_id',

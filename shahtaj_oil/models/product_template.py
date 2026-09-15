@@ -378,6 +378,8 @@ class ProductTemplate(models.Model):
             uom = self._shahtaj_uom_for_sale_uom(vals['shahtaj_sale_uom'])
             if uom:
                 vals['uom_id'] = uom.id
+        # DM flow invoices confirmed orders before physical delivery.
+        vals['invoice_policy'] = 'order'
         # Custom-portal distributors have product write ACL but not stock.move /
         # orderpoint ACL. Archive/edit still touch those via stock/product hooks.
         needs_sudo = self._shahtaj_distributor_needs_stock_sudo()
