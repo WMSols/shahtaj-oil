@@ -235,6 +235,13 @@
               sequence="23"
               groups="shahtaj_oil.group_shahtaj_native_distributor_ui"/>
 
+    <menuitem id="menu_shahtaj_dm_day_sessions"
+              name="DM Day Sessions"
+              parent="menu_shahtaj_delivery_man_ops"
+              action="action_shahtaj_dm_day_session"
+              sequence="25"
+              groups="shahtaj_oil.group_shahtaj_distributor,shahtaj_oil.group_shahtaj_native_distributor_ui"/>
+
     <!-- Parent is a folder; Overview restores the hub screen that child menus had hidden. -->
     <menuitem id="menu_shahtaj_accounting"
               name="8. Shop Accounting"
@@ -465,6 +472,14 @@
               sequence="33"
               groups="shahtaj_oil.group_shahtaj_delivery_man"/>
 
+    <!-- Intentionally after My Deliveries (seq 28) so that is still the DM app home -->
+    <menuitem id="menu_shahtaj_dm_my_day_session"
+              name="My Day Session"
+              parent="menu_shahtaj_root"
+              action="action_shahtaj_dm_my_day_session"
+              sequence="34"
+              groups="shahtaj_oil.group_shahtaj_delivery_man"/>
+
     <menuitem id="menu_shahtaj_dm_collect_payment"
               name="Collect Payment"
               parent="menu_shahtaj_root"
@@ -479,11 +494,19 @@
               sequence="36"
               groups="shahtaj_oil.group_shahtaj_delivery_man"/>
 
+    <menuitem id="menu_shahtaj_gps_attempts"
+              name="Shop GPS Attempts"
+              parent="menu_shahtaj_root"
+              action="action_shahtaj_gps_attempt"
+              sequence="95"
+              groups="shahtaj_oil.group_shahtaj_distributor,shahtaj_oil.group_shahtaj_native_distributor_ui"/>
+
     <!-- Legacy top-level Orders &amp; Dispatch folder (replaced by OB/DM parents) -->
     <delete model="ir.ui.menu" id="menu_shahtaj_orders"/>
     <delete model="ir.ui.menu" id="menu_shahtaj_orders_overview"/>
     <delete model="ir.ui.menu" id="menu_shahtaj_orders_needing_verification"/>
     <delete model="ir.ui.menu" id="menu_shahtaj_orders_all"/>
     <delete model="ir.ui.menu" id="menu_shahtaj_orders_rejected_menu"/>
+    <delete model="ir.ui.menu" id="menu_shahtaj_dm_start_on_the_way"/>
 
 </odoo>
