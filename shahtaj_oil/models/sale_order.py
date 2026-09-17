@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Link confirmed sales orders back to the shop visit and daily task."""
 from odoo import _, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 from odoo.tools import float_compare
 
 
@@ -36,6 +36,44 @@ class SaleOrder(models.Model):
         store=True,
         readonly=True,
     )
+    shahtaj_delivery_man_id = fields.Many2one(
+        'res.users',
+        string='Delivery Man (booker link)',
+        compute='_compute_shahtaj_delivery_man_id',
+        store=True,
+        index=True,
+        help='Suggested DM from order booker assignment (auto). '
+             'Manual dispatch uses the delivery job instead.',
+    )
+    shahtaj_dm_delivery_ids = fields.One2many(
+        'shahtaj.dm.delivery',
+        'sale_order_id',
+        string='DM Delivery Jobs',
+    )
+    shahtaj_dm_delivery_count = fields.Integer(
+        string='DM Jobs',
+        compute='_compute_shahtaj_dm_delivery_count',
+    )
+    shahtaj_assigned_dm_id = fields.Many2one(
+        'res.users',
+        string='Assigned Delivery Man',
+        compute='_compute_shahtaj_assigned_dm_id',
+        help='Delivery man on the active DM job for this sales order.',
+    )
+    shahtaj_dm_scheduled_date = fields.Date(
+        string='DM Delivery Day',
+        compute='_compute_shahtaj_assigned_dm_id',
+    )
+    shahtaj_planned_delivery_date = fields.Date(
+        string='Planned Delivery Date',
+        compute='_compute_shahtaj_planned_delivery_date',
+        inverse='_inverse_shahtaj_planned_delivery_date',
+        help='Editable while no delivery stock has been picked. Updates open DM jobs.',
+    )
+    shahtaj_can_edit_delivery_plan = fields.Boolean(
+        compute='_compute_shahtaj_can_edit_delivery_plan',
+    )
+
     shahtaj_delivery_status = fields.Selection(
         [
             ('no_stock', 'No Stock Moves'),
@@ -195,68 +233,6 @@ class SaleOrder(models.Model):
     )
 
     @api.depends(
-        'order_line.product_uom_qty',
-        'order_line.qty_delivered',
-        'order_line.product_id',
-        'order_line.product_id.is_storable',
-        'state',
-    )
-    def _compute_shahtaj_delivery_status(self):
-        # Intentionally do not depend on picking_ids: custom-portal distributors
-        # lack stock.picking ACL, and qty_delivered already updates on validate.
-        for order in self:
-            storable_lines = order.order_line.filtered(
-                lambda l: l.product_id and l.product_id.is_storable and not l.display_type
-            )
-            if not storable_lines:
-                order.shahtaj_delivery_status = 'no_stock'
-                order.shahtaj_qty_to_deliver = 0.0
-                continue
-            ordered = sum(storable_lines.mapped('product_uom_qty'))
-            delivered = sum(storable_lines.mapped('qty_delivered'))
-            remaining = ordered - delivered
-            order.shahtaj_qty_to_deliver = max(remaining, 0.0)
-            if float_compare(delivered, 0.0, precision_digits=2) <= 0:
-                order.shahtaj_delivery_status = 'pending'
-            elif float_compare(remaining, 0.0, precision_digits=2) <= 0:
-                order.shahtaj_delivery_status = 'done'
-            else:
-                order.shahtaj_delivery_status = 'partial'
-
-    def action_shahtaj_mark_delivery(self):
-        """Open wizard so distributor can validate full/partial delivery."""
-        self.ensure_one()
-        if self.state not in ('sale', 'done'):
-            return False
-        return {
-            'type': 'ir.actions.act_window',
-            'name': _('Mark Delivery — %s', self.name),
-            'res_model': 'shahtaj.mark.delivery.wizard',
-            'view_mode': 'form',
-            'target': 'new',
-            'context': {
-                'active_id': self.id,
-                'default_sale_order_id': self.id,
-            },
-        }
-
-    def action_shahtaj_view_visit(self):
-        self.ensure_one()
-        if not self.shahtaj_visit_id:
-            return False
-        return {
-            'type': 'ir.actions.act_window',
-            'name': _('Shop Visit'),
-            'res_model': 'shahtaj.visit',
-            'res_id': self.shahtaj_visit_id.id,
-            'view_mode': 'form',
-            'target': 'current',
-        }
-
-    def _shahtaj_recompute_visit_targets(self):
-        self.env['shahtaj.visit.target']._recompute_for_orders(self)
-
-    @api.depends(
         'partner_id',
         'partner_id.credit_limit',
         'partner_id.outstanding_balance',
@@ -391,6 +367,54 @@ class SaleOrder(models.Model):
 
         return stats
 
+    def action_shahtaj_open_shop(self):
+        """Open native shop form for credit/account review."""
+        self.ensure_one()
+        if not self.partner_id:
+            return False
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Shop — %s', self.partner_id.name),
+            'res_model': 'res.partner',
+            'res_id': self.partner_id.id,
+            'view_mode': 'form',
+            'target': 'current',
+            'views': [
+                (self.env.ref('shahtaj_oil.view_shahtaj_shop_form').id, 'form'),
+            ],
+        }
+
+    def action_shahtaj_view_shop_orders(self):
+        """Open confirmed sales history for this shop."""
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Shop Orders — %s', self.partner_id.display_name),
+            'res_model': 'sale.order',
+            'view_mode': 'list,form',
+            'domain': [
+                ('partner_id', '=', self.partner_id.id),
+                ('state', 'in', ('sale', 'done')),
+            ],
+            'context': {'create': False},
+        }
+
+    def action_shahtaj_view_shop_discounted_orders(self):
+        """Open past discounted orders for this shop."""
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Past Discounts — %s', self.partner_id.display_name),
+            'res_model': 'sale.order',
+            'view_mode': 'list,form',
+            'domain': [
+                ('partner_id', '=', self.partner_id.id),
+                ('state', 'in', ('sale', 'done')),
+                ('shahtaj_has_discount', '=', True),
+            ],
+            'context': {'create': False},
+        }
+
     @api.depends('shahtaj_approval_reason_discount', 'shahtaj_approval_reason_credit')
     def _compute_shahtaj_approval_reasons_display(self):
         reason_labels = {
@@ -439,6 +463,15 @@ class SaleOrder(models.Model):
             'approval_reasons': reasons,
         }
 
+    def _shahtaj_get_approval_reasons_list(self):
+        self.ensure_one()
+        reasons = []
+        if self.shahtaj_approval_reason_discount:
+            reasons.append('discount')
+        if self.shahtaj_approval_reason_credit:
+            reasons.append('credit')
+        return reasons
+
     def _shahtaj_field_order_approval_vals(self):
         """Recompute verification flags for a draft field sales order."""
         self.ensure_one()
@@ -477,10 +510,9 @@ class SaleOrder(models.Model):
             has_disc = any(l.shahtaj_has_discount for l in lines)
             order.shahtaj_has_discount = has_disc
             order.shahtaj_total_discount_amount = sum(lines.mapped('shahtaj_total_discount'))
-            order.shahtaj_catalog_amount_total = sum(
-                (l.shahtaj_catalog_price or l.price_unit) * l.product_uom_qty for l in lines
-            )
+            order.shahtaj_catalog_amount_total = sum((l.shahtaj_catalog_price or l.price_unit) * l.product_uom_qty for l in lines)
             reasons = [l.shahtaj_discount_reason for l in lines if l.shahtaj_discount_reason]
+            # Unique non-empty reasons preserved in order
             seen = set()
             unique_reasons = [r for r in reasons if not (r in seen or seen.add(r))]
             order.shahtaj_discount_reasons = ', '.join(unique_reasons) if unique_reasons else False
@@ -569,6 +601,84 @@ class SaleOrder(models.Model):
             )
         return True
 
+    def _shahtaj_assert_not_cancelled(self):
+        """Cancelled orders cannot be invoiced or delivered."""
+        for order in self:
+            if order.state == 'cancel':
+                raise UserError(_(
+                    'Cancelled order "%(order)s" cannot be invoiced or delivered.',
+                    order=order.display_name,
+                ))
+
+    def action_shahtaj_cancel_order(self):
+        """Distributor cancels a live order that is not invoiced or delivered."""
+        for order in self:
+            if order.state == 'cancel':
+                raise UserError(_(
+                    'Order "%(order)s" is already cancelled.',
+                    order=order.display_name,
+                ))
+            if order.state not in ('draft', 'sent', 'sale'):
+                raise UserError(_(
+                    'Cannot cancel "%(order)s" in its current state.',
+                    order=order.display_name,
+                ))
+            posted = order._shahtaj_posted_customer_invoices()
+            if posted:
+                raise UserError(_(
+                    'Cannot cancel "%(order)s": it already has posted invoice(s) %(invoices)s.',
+                    order=order.display_name,
+                    invoices=', '.join(posted.mapped('display_name')),
+                ))
+            delivered = order.order_line.filtered(
+                lambda l: not l.display_type and l.qty_delivered > 0
+            )
+            if delivered:
+                raise UserError(_(
+                    'Cannot cancel "%(order)s": stock has already been delivered.',
+                    order=order.display_name,
+                ))
+            jobs = order.shahtaj_dm_delivery_ids
+            busy_jobs = jobs.filtered(
+                lambda j: j.state in ('picked', 'partial', 'delivered', 'returned')
+            )
+            if busy_jobs:
+                raise UserError(_(
+                    'Cannot cancel "%(order)s": delivery is already in progress or completed.',
+                    order=order.display_name,
+                ))
+            pending_jobs = jobs - busy_jobs
+            tasks = pending_jobs.mapped('visit_task_id').filtered(
+                lambda t: t.state not in ('completed', 'cancelled')
+            )
+            if tasks:
+                tasks.with_context(shahtaj_system_visit_write=True).write({
+                    'state': 'cancelled',
+                })
+            if pending_jobs:
+                try:
+                    with self.env.cr.savepoint():
+                        pending_jobs.sudo().unlink()
+                except Exception:
+                    pass
+            drafts = order.invoice_ids.filtered(
+                lambda m: m.state == 'draft' and m.move_type == 'out_invoice'
+            )
+            if drafts:
+                drafts.sudo().button_cancel()
+            order.with_context(disable_cancel_warning=True).action_cancel()
+            self.env['shahtaj.activity.log'].log_business(
+                operation='order.cancelled',
+                name='Cancel order',
+                related_record=order,
+                message=_(
+                    'Distributor %(user)s cancelled order %(order)s.',
+                    user=self.env.user.name,
+                    order=order.name,
+                ),
+            )
+        return True
+
     def action_shahtaj_open_reject_wizard(self):
         """Open wizard to enter rejection reason before cancelling."""
         self.ensure_one()
@@ -582,6 +692,275 @@ class SaleOrder(models.Model):
                 'default_sale_order_id': self.id,
             },
         }
+
+    @api.depends('shahtaj_order_booker_id')
+    def _compute_shahtaj_delivery_man_id(self):
+        Users = self.env['res.users'].sudo()
+        booker_ids = self.mapped('shahtaj_order_booker_id').ids
+        if not booker_ids:
+            for order in self:
+                order.shahtaj_delivery_man_id = False
+            return
+        delivery_men = Users.search([
+            ('shahtaj_is_delivery_man', '=', True),
+            ('shahtaj_assigned_booker_ids', 'in', booker_ids),
+        ])
+        booker_to_dm = {}
+        for dm in delivery_men:
+            for booker in dm.shahtaj_assigned_booker_ids:
+                booker_to_dm.setdefault(booker.id, dm.id)
+        for order in self:
+            order.shahtaj_delivery_man_id = booker_to_dm.get(
+                order.shahtaj_order_booker_id.id, False
+            )
+
+    @api.depends(
+        'order_line.product_uom_qty',
+        'order_line.qty_delivered',
+        'order_line.product_id',
+        'order_line.product_id.type',
+        'state',
+    )
+    def _compute_shahtaj_delivery_status(self):
+        # Intentionally do not depend on picking_ids: custom-portal distributors
+        # lack stock.picking ACL, and qty_delivered already updates on validate.
+        for order in self:
+            storable_lines = order.order_line.filtered(
+                lambda l: l.product_id and l.product_id.type == 'consu' and not l.display_type
+            )
+            if not storable_lines:
+                order.shahtaj_delivery_status = 'no_stock'
+                order.shahtaj_qty_to_deliver = 0.0
+                continue
+            ordered = sum(storable_lines.mapped('product_uom_qty'))
+            delivered = sum(storable_lines.mapped('qty_delivered'))
+            remaining = ordered - delivered
+            order.shahtaj_qty_to_deliver = max(remaining, 0.0)
+            if float_compare(delivered, 0.0, precision_digits=2) <= 0:
+                order.shahtaj_delivery_status = 'pending'
+            elif float_compare(remaining, 0.0, precision_digits=2) <= 0:
+                order.shahtaj_delivery_status = 'done'
+            else:
+                order.shahtaj_delivery_status = 'partial'
+
+    @api.depends('shahtaj_dm_delivery_ids')
+    def _compute_shahtaj_dm_delivery_count(self):
+        for order in self:
+            order.shahtaj_dm_delivery_count = len(order.shahtaj_dm_delivery_ids)
+
+    def _shahtaj_posted_customer_invoices(self):
+        self.ensure_one()
+        return self.invoice_ids.filtered(
+            lambda move: move.state == 'posted' and move.move_type == 'out_invoice'
+        )
+
+    def _shahtaj_require_posted_invoice_for_dm(self):
+        """Jobs stay Waiting Invoice until a customer invoice is posted."""
+        self.ensure_one()
+        if not self._shahtaj_posted_customer_invoices():
+            raise UserError(_(
+                'Invoice and post %(order)s before assigning a delivery man. '
+                'Stock cannot be picked until a customer invoice is posted.',
+                order=self.display_name,
+            ))
+
+    def _shahtaj_prepare_lines_for_order_invoice(self):
+        """Force ordered-qty policy and refresh stored qty_to_invoice on this SO."""
+        self.ensure_one()
+        templates = self.order_line.product_id.product_tmpl_id
+        if templates:
+            templates.sudo().write({'invoice_policy': 'order'})
+        lines = self.order_line.filtered(lambda line: not line.display_type and line.product_id)
+        if not lines:
+            return lines
+        if hasattr(lines, '_compute_qty_to_invoice'):
+            lines._compute_qty_to_invoice()
+            lines.flush_recordset(['qty_to_invoice'])
+        else:
+            for line in lines:
+                if line.state in ('sale', 'done'):
+                    line.qty_to_invoice = line.product_uom_qty - line.qty_invoiced
+        return lines
+
+    def action_shahtaj_create_and_post_invoice(self):
+        """Invoice ordered quantities and post — required before DM assign."""
+        self.ensure_one()
+        self._shahtaj_assert_not_cancelled()
+        user = self.env.user
+        if not (
+            user.has_group('shahtaj_oil.group_shahtaj_distributor_financial')
+            or user.has_group('account.group_account_invoice')
+            or user.has_group('base.group_system')
+        ):
+            raise AccessError(_('You need financial access to create invoices.'))
+        if self.state not in ('sale', 'done'):
+            raise UserError(_('Confirm the sales order before invoicing.'))
+
+        posted = self._shahtaj_posted_customer_invoices()
+        if posted:
+            return posted.ids
+
+        drafts = self.invoice_ids.filtered(
+            lambda move: move.state == 'draft' and move.move_type == 'out_invoice'
+        )
+        if drafts:
+            drafts.action_post()
+            return drafts.ids
+
+        self._shahtaj_prepare_lines_for_order_invoice()
+        invoices = self._create_invoices(final=False)
+        if not invoices:
+            raise UserError(_(
+                'No invoiceable quantity on %(order)s after switching to ordered quantities.',
+                order=self.display_name,
+            ))
+        invoices.action_post()
+        return invoices.ids
+
+    @api.depends(
+        'shahtaj_dm_delivery_ids.delivery_man_id',
+        'shahtaj_dm_delivery_ids.scheduled_date',
+        'shahtaj_dm_delivery_ids.state',
+    )
+    def _compute_shahtaj_assigned_dm_id(self):
+        for order in self:
+            jobs = order.shahtaj_dm_delivery_ids.sorted('id')
+            job = jobs[:1]
+            order.shahtaj_assigned_dm_id = job.delivery_man_id if job else False
+            order.shahtaj_dm_scheduled_date = job.scheduled_date if job else False
+
+    @api.depends(
+        'shahtaj_dm_delivery_ids.scheduled_date',
+        'shahtaj_dm_delivery_ids.state',
+        'state',
+        'shahtaj_delivery_status',
+    )
+    def _compute_shahtaj_planned_delivery_date(self):
+        for order in self:
+            open_jobs = order.shahtaj_dm_delivery_ids.filtered(
+                lambda j: j.state not in ('picked', 'partial', 'delivered', 'returned'),
+            ).sorted('id')
+            jobs = open_jobs or order.shahtaj_dm_delivery_ids.sorted('id')
+            order.shahtaj_planned_delivery_date = jobs[:1].scheduled_date if jobs else False
+
+    @api.depends(
+        'state',
+        'shahtaj_delivery_status',
+        'shahtaj_dm_delivery_ids.state',
+    )
+    def _compute_shahtaj_can_edit_delivery_plan(self):
+        for order in self:
+            if order.state not in ('sale', 'done'):
+                order.shahtaj_can_edit_delivery_plan = False
+                continue
+            open_jobs = order.shahtaj_dm_delivery_ids.filtered(
+                lambda j: j.state not in ('picked', 'partial', 'delivered', 'returned'),
+            )
+            order.shahtaj_can_edit_delivery_plan = bool(open_jobs)
+
+    def _inverse_shahtaj_planned_delivery_date(self):
+        for order in self:
+            if not order.shahtaj_can_edit_delivery_plan:
+                raise UserError(_(
+                    'Cannot change the planned delivery date for %(order)s — '
+                    'confirm the order and assign delivery men first, or stock may '
+                    'already be picked.',
+                    order=order.display_name,
+                ))
+            open_jobs = order.shahtaj_dm_delivery_ids.filtered(
+                lambda j: j.state not in ('picked', 'partial', 'delivered', 'returned'),
+            )
+            if not open_jobs:
+                raise UserError(_(
+                    'No open delivery jobs to reschedule for %(order)s.',
+                    order=order.display_name,
+                ))
+            old_dates = ', '.join({
+                str(d) for d in open_jobs.mapped('scheduled_date') if d
+            }) or '—'
+            open_jobs.with_context(shahtaj_skip_planning_log=True).write({
+                'scheduled_date': order.shahtaj_planned_delivery_date,
+            })
+            self.env['shahtaj.activity.log'].log_business(
+                operation='order.update',
+                name='Order delivery date updated',
+                related_record=order,
+                message=(
+                    f'{order.display_name}: Planned delivery '
+                    f'{old_dates} → {order.shahtaj_planned_delivery_date or "—"}'
+                ),
+            )
+
+    def action_shahtaj_assign_dm(self):
+        """Open distributor wizard to assign or split this SO across DMs."""
+        self.ensure_one()
+        self._shahtaj_assert_not_cancelled()
+        if self.state not in ('sale', 'done'):
+            raise UserError(_(
+                'Confirm the sales order before assigning a delivery man.'
+            ))
+        ctx = {
+            'active_id': self.id,
+            'active_ids': self.ids,
+            'active_model': 'sale.order',
+            'default_sale_order_id': self.id,
+        }
+        default_dm = self.env.context.get('shahtaj_default_delivery_man_id')
+        if default_dm:
+            ctx['shahtaj_default_delivery_man_id'] = default_dm
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Assign / Split Delivery — %s', self.name),
+            'res_model': 'shahtaj.dm.assign.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': ctx,
+        }
+
+    def action_shahtaj_view_dm_deliveries(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('DM Jobs — %s', self.name),
+            'res_model': 'shahtaj.dm.delivery',
+            'view_mode': 'list,form',
+            'domain': [('sale_order_id', '=', self.id)],
+            'context': {'default_sale_order_id': self.id},
+        }
+
+    def action_shahtaj_mark_delivery(self):
+        """Open wizard so distributor can validate full/partial delivery."""
+        self.ensure_one()
+        self._shahtaj_assert_not_cancelled()
+        if self.state not in ('sale', 'done'):
+            return False
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Mark Delivery — %s', self.name),
+            'res_model': 'shahtaj.mark.delivery.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'active_id': self.id,
+                'default_sale_order_id': self.id,
+            },
+        }
+
+    def action_shahtaj_view_visit(self):
+        self.ensure_one()
+        if not self.shahtaj_visit_id:
+            return False
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Shop Visit'),
+            'res_model': 'shahtaj.visit',
+            'res_id': self.shahtaj_visit_id.id,
+            'view_mode': 'form',
+            'target': 'current',
+        }
+
+    def _shahtaj_recompute_visit_targets(self):
+        self.env['shahtaj.visit.target']._recompute_for_orders(self)
 
     def _shahtaj_sync_approval_state_from_lines(self):
         """Keep verification status aligned with discounts and credit on draft field orders."""
@@ -660,6 +1039,26 @@ class SaleOrder(models.Model):
             )
 
     def write(self, vals):
+        tracked_order_fields = {'date_order'}
+        user = self.env.user
+        is_distributor = (
+            user.has_group('shahtaj_oil.group_shahtaj_distributor')
+            and not user._is_public()
+        )
+        if tracked_order_fields.intersection(vals) and is_distributor:
+            for order in self:
+                if order.state not in ('draft', 'sent'):
+                    raise UserError(_(
+                        'Cannot change the order date on %(order)s after it is confirmed.',
+                        order=order.display_name,
+                    ))
+            self.env['shahtaj.activity.log'].log_model_field_changes(
+                self,
+                operation='order.update',
+                title='Sales order date updated',
+                vals={k: vals[k] for k in tracked_order_fields if k in vals},
+                field_labels={'date_order': 'Order Date'},
+            )
         res = super().write(vals)
         if any(k in vals for k in (
             'state', 'date_order', 'create_uid', 'amount_total',
@@ -718,3 +1117,5 @@ class SaleOrder(models.Model):
             if targets:
                 targets._force_recompute_progress()
         return res
+
+

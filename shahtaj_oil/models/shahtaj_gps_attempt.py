@@ -3,6 +3,7 @@
 import logging
 
 from odoo import SUPERUSER_ID, api, fields, models
+from odoo.modules.registry import Registry
 
 _logger = logging.getLogger(__name__)
 
@@ -88,6 +89,12 @@ class ShahtajGpsAttempt(models.Model):
         ondelete='set null',
         index=True,
     )
+    dm_delivery_id = fields.Many2one(
+        'shahtaj.dm.delivery',
+        string='Delivery Job',
+        ondelete='set null',
+        index=True,
+    )
     company_id = fields.Many2one(
         'res.company',
         string='Company',
@@ -120,6 +127,57 @@ class ShahtajGpsAttempt(models.Model):
         return 'other'
 
     @api.model
+    def _prepare_attempt_vals(
+        self,
+        *,
+        purpose,
+        result,
+        shop=None,
+        latitude=None,
+        longitude=None,
+        distance_m=0.0,
+        min_distance_m=0.0,
+        max_distance_m=0.0,
+        message='',
+        user=None,
+        visit_task=None,
+        visit=None,
+        sale_order=None,
+        dm_delivery=None,
+        role=None,
+    ):
+        user = user or self.env.user
+        shop = shop.sudo() if shop else shop
+        vals = {
+            'user_id': user.id,
+            'role': role or self._shahtaj_resolve_role(user),
+            'purpose': purpose,
+            'result': result,
+            'distance_m': float(distance_m or 0.0),
+            'min_distance_m': float(min_distance_m or 0.0),
+            'max_distance_m': float(max_distance_m or 0.0),
+            'message': str(message or '')[:512],
+            'company_id': self.env.company.id,
+        }
+        if shop:
+            vals['shop_id'] = shop.id
+            vals['shop_latitude'] = shop.partner_latitude or 0.0
+            vals['shop_longitude'] = shop.partner_longitude or 0.0
+        if latitude is not None:
+            vals['attempt_latitude'] = float(latitude)
+        if longitude is not None:
+            vals['attempt_longitude'] = float(longitude)
+        if visit_task:
+            vals['visit_task_id'] = visit_task.id
+        if visit:
+            vals['visit_id'] = visit.id
+        if sale_order:
+            vals['sale_order_id'] = sale_order.id
+        if dm_delivery:
+            vals['dm_delivery_id'] = dm_delivery.id
+        return vals
+
+    @api.model
     def log_attempt(
         self,
         *,
@@ -136,54 +194,47 @@ class ShahtajGpsAttempt(models.Model):
         visit_task=None,
         visit=None,
         sale_order=None,
+        dm_delivery=None,
         role=None,
     ):
-        """Create a GPS attempt row (sudo). Never raises to callers.
+        """Create a GPS attempt row. Never raises to callers.
 
-        Blocked check-ins raise ``UserError`` afterwards. That rolls back the
-        request transaction, so the log is written on a separate cursor.
+        Blocked attempts are committed on a separate DB cursor so they survive
+        the UserError rollback from native OB / API / DM GPS rejection.
+        Successful attempts stay in the current transaction (with the visit).
         """
         try:
-            user = user or self.env.user
-            shop = shop.sudo() if shop else shop
-            vals = {
-                'user_id': user.id,
-                'role': role or self._shahtaj_resolve_role(user),
-                'purpose': purpose,
-                'result': result,
-                'distance_m': float(distance_m or 0.0),
-                'min_distance_m': float(min_distance_m or 0.0),
-                'max_distance_m': float(max_distance_m or 0.0),
-                'message': str(message or '')[:512],
-                'company_id': self.env.company.id,
-            }
-            if shop:
-                vals['shop_id'] = shop.id
-                vals['shop_latitude'] = shop.partner_latitude or 0.0
-                vals['shop_longitude'] = shop.partner_longitude or 0.0
-            if latitude is not None:
-                vals['attempt_latitude'] = float(latitude)
-            if longitude is not None:
-                vals['attempt_longitude'] = float(longitude)
-            if visit_task:
-                vals['visit_task_id'] = visit_task.id
-            if visit:
-                vals['visit_id'] = visit.id
-            if sale_order:
-                vals['sale_order_id'] = sale_order.id
-            rec_id = self._create_attempt_committed(vals)
-            return self.browse(rec_id) if rec_id else self.browse()
-        except Exception:  # noqa: BLE001 — logging must never block check-in/deliver
-            _logger.exception('Failed to log GPS attempt')
-            return self.browse()
+            vals = self._prepare_attempt_vals(
+                purpose=purpose,
+                result=result,
+                shop=shop,
+                latitude=latitude,
+                longitude=longitude,
+                distance_m=distance_m,
+                min_distance_m=min_distance_m,
+                max_distance_m=max_distance_m,
+                message=message,
+                user=user,
+                visit_task=visit_task,
+                visit=visit,
+                sale_order=sale_order,
+                dm_delivery=dm_delivery,
+                role=role,
+            )
+            if result == 'ok':
+                return self.sudo().create(vals)
 
-    def _create_attempt_committed(self, vals):
-        """Commit the log outside the current request so a later UserError cannot roll it back."""
-        rec_id = False
-        with self.env.registry.cursor() as cr:
-            env = api.Environment(cr, SUPERUSER_ID, dict(self.env.context))
-            rec_id = env['shahtaj.gps.attempt'].create(vals).id
-        return rec_id
+            # Survive rollback of the failed check-in / deliver transaction.
+            attempt_id = False
+            with Registry(self.env.cr.dbname).cursor() as cr:
+                env = api.Environment(cr, SUPERUSER_ID, dict(self.env.context))
+                attempt_id = env['shahtaj.gps.attempt'].create(vals).id
+            return self.browse(attempt_id)
+        except Exception:  # noqa: BLE001 — logging must never block check-in/deliver
+            _logger.exception(
+                'Failed to persist shahtaj.gps.attempt (%s / %s)', purpose, result,
+            )
+            return self.browse()
 
     def _stamp_create_date(self, when):
         """Set create_date so historical backfill sorts with the original visit."""
@@ -236,6 +287,10 @@ class ShahtajGpsAttempt(models.Model):
         created = self.browse()
         shop = visit.shop_id.sudo()
         user = visit.order_booker_id
+        role = 'order_booker'
+        if visit.visit_kind == 'delivery_man' and visit.delivery_man_id:
+            user = visit.delivery_man_id
+            role = 'delivery_man'
         if not user:
             return created
         company_id = (
@@ -245,7 +300,7 @@ class ShahtajGpsAttempt(models.Model):
         )
         base_vals = {
             'user_id': user.id,
-            'role': 'order_booker',
+            'role': role,
             'shop_id': shop.id if shop else False,
             'shop_latitude': shop.partner_latitude or 0.0 if shop else 0.0,
             'shop_longitude': shop.partner_longitude or 0.0 if shop else 0.0,
@@ -254,6 +309,7 @@ class ShahtajGpsAttempt(models.Model):
             'visit_task_id': visit.visit_task_id.id if visit.visit_task_id else False,
             'visit_id': visit.id,
             'sale_order_id': visit.sale_order_id.id if visit.sale_order_id else False,
+            'dm_delivery_id': visit.dm_delivery_id.id if visit.dm_delivery_id else False,
             'company_id': company_id,
         }
         if visit.id not in logged_checkin:

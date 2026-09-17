@@ -49,6 +49,30 @@ def _sync_distributor_booker_user_rule(env):
     })
 
 
+def ensure_res_users_delivery_man_column(cr):
+    """Create res_users.shahtaj_is_delivery_man before ORM SELECTs it.
+
+    Stored fields on res.users are loaded on every cron/HTTP user fetch. If
+    Python defines the field before the module is upgraded, PostgreSQL raises
+    UndefinedColumn and every cron dies.
+    """
+    from odoo.tools.sql import (
+        column_exists,
+        create_column,
+        create_index,
+        index_exists,
+        make_index_name,
+    )
+    if not column_exists(cr, 'res_users', 'shahtaj_is_delivery_man'):
+        create_column(
+            cr, 'res_users', 'shahtaj_is_delivery_man', 'boolean',
+            comment='Is Delivery Man',
+        )
+    index_name = make_index_name('res_users', 'shahtaj_is_delivery_man')
+    if not index_exists(cr, index_name):
+        create_index(cr, index_name, 'res_users', ['shahtaj_is_delivery_man'])
+
+
 def _recompute_shahtaj_order_booker_flags(env):
     """Keep shahtaj_is_order_booker aligned with group membership."""
     Users = env['res.users'].with_context(active_test=False)
@@ -60,6 +84,24 @@ def _recompute_shahtaj_order_booker_flags(env):
     ])
     if candidates:
         candidates._recompute_recordset()
+
+
+def _recompute_shahtaj_delivery_man_flags(env):
+    """Keep shahtaj_is_delivery_man aligned with group membership."""
+    Users = env['res.users'].with_context(active_test=False)
+    dm_group = env.ref(
+        'shahtaj_oil.group_shahtaj_delivery_man',
+        raise_if_not_found=False,
+    )
+    if not dm_group:
+        return
+    candidates = Users.search([
+        '|',
+        ('group_ids', 'in', dm_group.ids),
+        ('shahtaj_is_delivery_man', '=', True),
+    ])
+    if candidates:
+        candidates._recompute_recordset(['shahtaj_is_delivery_man'])
 
 
 def _sync_distributor_partner_rules(env):
@@ -124,19 +166,15 @@ def _enable_purchase_ok_on_storable_products(env):
         templates.write({'purchase_ok': True})
 
 
+def _sync_dm_accounting(env):
+    for company in env['res.company'].sudo().search([]):
+        company._shahtaj_ensure_dm_accounting()
+
+
 def post_init_hook(env):
-    env['ir.config_parameter'].sudo().set_param(
-        'base.enable_programmatic_api_keys', '1'
-    )
-    _sync_distributor_partner_rules(env)
-    _sync_distributor_booker_user_rule(env)
-    _recompute_shahtaj_order_booker_flags(env)
-    _enable_purchase_ok_on_storable_products(env)
-    env['res.users']._shahtaj_fix_financial_group_privilege()
-    env['res.users']._sync_all_shahtaj_ui_groups()
-    env['res.users']._clear_shahtaj_distributor_flags_on_non_distributors()
-    env['res.users']._sync_all_shahtaj_financial_groups()
-    env.registry.clear_cache('templates')
+    """Unified module installation/upgrade entry point."""
+    from .setup import run_all_setup_checks
+    run_all_setup_checks(env)
 
 
 def migrate_distributor_partner_rules(cr):

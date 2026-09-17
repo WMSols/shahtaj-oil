@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Shahtaj Oil',
-    'version': '19.0.1.1.51',
+    'version': '19.0.1.1.130',
     'post_init_hook': 'post_init_hook',
     'category': 'Sales/Distribution',
     'summary': 'Unified Command Center for Shahtaj Oil distributions, field booking, and SPA frontend',
@@ -32,6 +32,7 @@
         'data/shahtaj_api_data.xml',
         'data/shahtaj_cron.xml',
         'data/shahtaj_expense_data.xml',
+        'data/shahtaj_dm_data.xml',
 
         # ── 3. CORE VIEWS + ACTIONS (no inherit from other module views) ──
         'views/shahtaj_route_views.xml',
@@ -41,6 +42,7 @@
         'views/shahtaj_visit_task_views.xml',
         'views/shahtaj_target_views.xml',
         'views/shahtaj_activity_log_views.xml',
+        'views/shahtaj_gps_attempt_views.xml',
         'data/shahtaj_activity_log_data.xml',
 
         # ── 4. VISIT VIEWS (before sale_accounting which inherits visit views) ──
@@ -53,6 +55,9 @@
         'views/shahtaj_accounting_views.xml',
         'views/shahtaj_sale_accounting_views.xml',
         'views/shahtaj_accounting_hub_views.xml',
+        'views/shahtaj_orders_hub_views.xml',
+        'views/shahtaj_order_booker_hub_views.xml',
+        'views/shahtaj_delivery_man_hub_views.xml',
         'views/shahtaj_purchase_views.xml',
         'views/shahtaj_expense_views.xml',
         'views/shahtaj_pnl_dashboard_views.xml',
@@ -65,19 +70,29 @@
         # ── 6. HUB + USER MANAGEMENT VIEWS ──
         'views/shahtaj_schedule_hub_views.xml',
         'views/shahtaj_visit_hub_views.xml',
+        'views/shahtaj_visit_day_progress_views.xml',
         'views/shahtaj_order_booker_users_views.xml',
+        'views/shahtaj_delivery_man_users_views.xml',
+        'views/shahtaj_dm_delivery_views.xml',
+        'views/shahtaj_dm_day_session_views.xml',
         'views/res_users_views.xml',
         'views/res_config_settings_views.xml',
 
         # ── 7. WIZARDS (actions used by menus) ──
         'wizard/shahtaj_generate_tasks_views.xml',
         'wizard/shahtaj_create_order_booker_views.xml',
+        'wizard/shahtaj_create_delivery_man_views.xml',
         'wizard/shahtaj_quick_add_product_views.xml',
         'wizard/shahtaj_add_stock_views.xml',
         'wizard/shahtaj_mark_delivery_views.xml',
         'wizard/shahtaj_assign_shops_route_views.xml',
-        'wizard/shahtaj_credit_override_views.xml',
+        'wizard/shahtaj_dm_pick_deliver_views.xml',
+        'wizard/shahtaj_dm_today_load_views.xml',
+        'wizard/shahtaj_dm_van_transfer_views.xml',
+        'wizard/shahtaj_dm_assign_views.xml',
+        'wizard/shahtaj_dm_collect_payment_views.xml',
         'views/shahtaj_order_reject_views.xml',
+        'wizard/shahtaj_credit_override_views.xml',
 
         'report/shahtaj_manufacturer_summary_report.xml',
 

@@ -55,9 +55,9 @@ class ShahtajApiShops(http.Controller):
         )
         if shop_category not in ('credit', 'cash'):
             raise UserError(_('shop_category must be "credit" or "cash".'))
-        if not owner_cnic_number and shop_category != 'cash':
+        if shop_category == 'credit' and not owner_cnic_number:
             raise UserError(_(
-                'owner_cnic_number is required for on-site registration of credit shops.'
+                'owner_cnic_number is required when registering a credit shop.'
             ))
         if not photo_vals.get('shop_exterior_photo'):
             raise UserError(_(
@@ -120,7 +120,7 @@ class ShahtajApiShops(http.Controller):
             ('active', '=', True),
         ], order='create_date desc', limit=50)
         return api_success({
-            'shops': [serializers.shop_brief(shop) for shop in shops],
+            'shops': serializers.shop_briefs(shops),
         })
 
     @http.route('/api/shahtaj/v1/shops/get', **API_ROUTE)
@@ -159,10 +159,10 @@ class ShahtajApiShops(http.Controller):
 
         Required: shop_id, task_id, latitude, longitude, shop_exterior_photo,
                   owner_cnic_number for credit shops (unless already on the shop)
-        Optional: owner_cnic_number for cash shops, shop_license_number
-                  (alias license_number), owner_photo, owner_cnic_front/back,
-                  owner_name, owner_phone, shop_category, legacy_balance
-                  (if distributor left empty)
+        Optional: shop_license_number (alias license_number), owner_photo,
+                  owner_cnic_front/back, owner_name, owner_phone,
+                  shop_category, legacy_balance (if distributor left empty);
+                  owner_cnic_number for cash shops
         """
         shop_id = kwargs.get('shop_id')
         task_id = kwargs.get('task_id')

@@ -1,12 +1,26 @@
 # -*- coding: utf-8 -*-
 """Bookable quantity for order bookers: on-hand minus open carts and undelivered SOs."""
-from odoo import _, api, models
+from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 from odoo.tools import float_compare
 
 
 class ProductProduct(models.Model):
     _inherit = 'product.product'
+
+    shahtaj_vendor_id = fields.Many2one(
+        'res.partner',
+        string='Primary Vendor',
+        related='product_tmpl_id.shahtaj_vendor_id',
+        readonly=True,
+        store=True,
+        index=True,
+    )
+    shahtaj_vendor_name = fields.Char(
+        string='Vendor',
+        related='product_tmpl_id.shahtaj_vendor_name',
+        readonly=True,
+    )
 
     def _shahtaj_needs_stock_qty_sudo(self):
         """Custom-portal distributors / bookers lack stock.move ACL for qty fields."""
@@ -116,22 +130,45 @@ class ProductProduct(models.Model):
           − undelivered qty on confirmed sales orders (until delivered or cancelled)
         """
         self.ensure_one()
-        if not self.is_storable:
-            return None
+        return self._get_shahtaj_bookable_qty_map(
+            self,
+            exclude_visit_line_ids=exclude_visit_line_ids,
+        ).get(self.id)
+
+    @api.model
+    def _get_shahtaj_bookable_qty_map(self, products, exclude_visit_line_ids=None):
+        """Batch bookable qty for many products (same formula as single).
+
+        Returns ``{product_id: float|None}`` where ``None`` means non-storable /
+        unlimited.
+        """
+        products = products.exists()
+        if not products:
+            return {}
+        result = {p.id: None for p in products}
+        storable = products.filtered('is_storable')
+        if not storable:
+            return result
+
         cart_map = self._get_shahtaj_cart_committed_qty(
-            self.ids,
+            storable.ids,
             exclude_visit_line_ids=exclude_visit_line_ids,
         )
-        so_map = self._get_shahtaj_so_committed_qty(self.ids)
-        cart_committed = cart_map.get(self.id, 0.0)
-        so_committed = so_map.get(self.id, 0.0)
-        rounding = self.uom_id.rounding
-        # Order bookers / portal distributors lack stock.move ACL; elevate qty read.
-        qty_on_hand = self.sudo().qty_available
-        bookable = qty_on_hand - cart_committed - so_committed
-        if float_compare(bookable, 0.0, precision_rounding=rounding) < 0:
-            return 0.0
-        return bookable
+        so_map = self._get_shahtaj_so_committed_qty(storable.ids)
+        # One qty_available compute pass for the page.
+        storable.sudo().mapped('qty_available')
+        for product in storable:
+            rounding = product.uom_id.rounding
+            qty_on_hand = product.sudo().qty_available
+            bookable = (
+                qty_on_hand
+                - cart_map.get(product.id, 0.0)
+                - so_map.get(product.id, 0.0)
+            )
+            if float_compare(bookable, 0.0, precision_rounding=rounding) < 0:
+                bookable = 0.0
+            result[product.id] = bookable
+        return result
 
     def _check_shahtaj_bookable_qty(self, qty, exclude_visit_line_ids=None):
         """Raise UserError if qty exceeds bookable stock for storable products."""

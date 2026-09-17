@@ -71,6 +71,7 @@ class ShahtajMarkDeliveryWizard(models.TransientModel):
 
     def action_confirm_delivery(self):
         self.ensure_one()
+        self.sale_order_id._shahtaj_assert_not_cancelled()
         if not self.line_ids:
             raise UserError(_(
                 'No open delivery for this order. '

@@ -48,10 +48,7 @@ class ShahtajApiVisits(http.Controller):
             'total': Visit.search_count(domain),
             'offset': offset,
             'limit': limit,
-            'visits': [
-                serializers.visit_dict(visit, include_lines=False)
-                for visit in visits
-            ],
+            'visits': serializers.visits_list_dict(visits),
         })
 
     @http.route('/api/shahtaj/v1/visits/active', **API_ROUTE)

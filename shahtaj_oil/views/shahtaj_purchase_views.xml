@@ -174,19 +174,21 @@
     </record>
 
     <record id="action_shahtaj_incoming_receipts" model="ir.actions.act_window">
-        <field name="name">Incoming Receipts</field>
+        <field name="name">Receipts &amp; Returns</field>
         <field name="res_model">stock.picking</field>
         <field name="view_mode">list,form,kanban</field>
-        <field name="domain">[('picking_type_code', '=', 'incoming')]</field>
+        <!-- Incoming receipts + vendor returns (outgoing back to supplier). -->
+        <field name="domain">['|', ('picking_type_code', '=', 'incoming'), '&amp;', ('location_dest_id.usage', '=', 'supplier'), '|', ('purchase_id', '!=', False), ('return_id', '!=', False)]</field>
         <field name="context">{'default_picking_type_code': 'incoming'}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
-                No incoming receipts
+                No receipts or returns
             </p>
             <p>
                 Confirm a purchase order first. Open the receipt, set done
                 quantities, and <b>Validate</b> to add stock to the warehouse.
                 A draft vendor bill is created from the purchase order.
+                Vendor returns (warehouse → supplier) also appear here.
             </p>
         </field>
     </record>
@@ -247,7 +249,15 @@
         <field name="priority">60</field>
         <field name="arch" type="xml">
             <form string="Vendor">
+                <header>
+                    <button name="action_create_purchase_order" type="object" string="New Purchase Order" class="btn-primary"/>
+                </header>
                 <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_supplied_products" type="object" class="oe_stat_button" icon="fa-cubes">
+                            <field name="shahtaj_supplied_product_count" widget="statinfo" string="Products"/>
+                        </button>
+                    </div>
                     <div class="oe_title">
                         <label for="name"/>
                         <h1><field name="name" placeholder="e.g. Shahtaj Industry"/></h1>
@@ -264,6 +274,19 @@
                             <field name="zip"/>
                         </group>
                     </group>
+                    <notebook>
+                        <page string="Supplied Products" name="supplied_products">
+                            <field name="shahtaj_supplied_product_ids" readonly="1">
+                                <list string="Products">
+                                    <field name="name"/>
+                                    <field name="shahtaj_sale_uom" string="Unit"/>
+                                    <field name="standard_price" string="Avg Cost"/>
+                                    <field name="list_price" string="Sales Price"/>
+                                    <field name="qty_available" string="On Hand"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
                     <field name="company_type" invisible="1"/>
                     <field name="is_shahtaj_shop" invisible="1"/>
                     <field name="supplier_rank" invisible="1"/>
