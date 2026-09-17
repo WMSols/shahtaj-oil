@@ -2,7 +2,7 @@
 
 import { Component, useState, onWillStart } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { hasFinancialAccess } from "../shahtaj_access";
+import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
 
 export class DeliveryManPerformance extends Component {
     setup() {
@@ -86,6 +86,7 @@ export class DeliveryManPerformance extends Component {
 
     async fetchJobAggregates() {
         this.state.isLoading = true;
+        notifyPortalBusy(true);
         try {
             const base = this.dateDomain("scheduled_date");
             const groupArgs = (extra) => [base.concat(extra), ["delivery_man_id"], ["delivery_man_id"]];
@@ -130,6 +131,7 @@ export class DeliveryManPerformance extends Component {
             this.state.jobRows = [];
         } finally {
             this.state.isLoading = false;
+            notifyPortalBusy(false);
         }
     }
 

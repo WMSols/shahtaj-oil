@@ -159,7 +159,7 @@
                                                 </span>
                                             </td>
                                             <td class="text-center">
-                                                <span t-attf-class="badge #{t.state === 'posted' or t.state === 'paid' or t.state === 'in_process' ? 'bg-success text-white' : (t.state === 'draft' ? 'bg-warning text-dark' : 'bg-secondary')}">
+                                                <span t-attf-class="badge #{t.state === 'posted' or t.state === 'paid' or t.state === 'in_process' ? 'bg-success text-white' : (t.state === 'draft' ? 'bg-warning text-dark' : 'bg-secondary text-dark')}">
                                                    <t t-esc="t.state === 'posted' ? 'PAID' : t.state.toUpperCase()"/>
                                                 </span>
                                             </td>

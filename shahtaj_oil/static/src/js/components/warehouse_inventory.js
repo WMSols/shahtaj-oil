@@ -3,7 +3,7 @@
 import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { ConfirmModal } from "./confirm_modal";
-import { hasFinancialAccess } from "../shahtaj_access";
+import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
 
 export class WarehouseInventory extends Component {
     static props = {
@@ -151,6 +151,7 @@ export class WarehouseInventory extends Component {
         if (!['inventory', 'management', 'taxes'].includes(tab)) return;
 
         this.state.isLoadingList = true;
+        notifyPortalBusy(true);
         try {
             const pag = this.state.pagination[tab];
             const filters = this.state.filters[tab];
@@ -201,6 +202,7 @@ export class WarehouseInventory extends Component {
             this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isLoadingList = false;
+            notifyPortalBusy(false);
         }
     }
     

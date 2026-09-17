@@ -307,7 +307,7 @@
                                                     <td><span class="badge "><i class="fa fa-user me-1"></i><t t-esc="ord.booker"/></span></td>
                                                     <td class="text-muted"><t t-esc="ord.date"/></td>
                                                     <td class="text-end fw-bold text-dark">Rs. <t t-esc="ord.amount"/></td>
-                                                    <td class="text-center pe-4"><span t-attf-class="badge #{ord.status === 'Confirmed' ? 'bg-primary' : ord.status === 'Cancelled' ? 'bg-danger' : 'bg-secondary'} text-white px-2 py-1 shadow-sm"><t t-esc="ord.status"/></span></td>
+                                                    <td class="text-center pe-4"><span t-attf-class="badge #{ord.status === 'Confirmed' ? 'bg-primary text-white' : ord.status === 'Cancelled' ? 'bg-danger text-white' : 'bg-secondary text-dark'} px-2 py-1 shadow-sm"><t t-esc="ord.status"/></span></td>
                                         </tr>
                                             </t>
                                     </t>
@@ -504,7 +504,7 @@
                                                 <tr>
                                                     <td class="ps-4 fw-bold text-primary"><t t-esc="ord.display_name"/></td>
                                                     <td class="fw-bold"><t t-esc="ord.shop"/><small class="d-block text-muted fw-normal">Shop ID: <t t-esc="ord.shopId"/></small></td>
-                                                    <td><span class="badge bg-secondary"><i class="fa fa-user me-1"></i><t t-esc="ord.booker"/></span><small class="d-block text-muted mt-1">Booker ID: <t t-esc="ord.bookerId"/></small></td>
+                                                    <td><span class="badge bg-secondary text-dark"><i class="fa fa-user me-1"></i><t t-esc="ord.booker"/></span><small class="d-block text-muted mt-1">Booker ID: <t t-esc="ord.bookerId"/></small></td>
                                                     <td class="text-muted"><t t-esc="ord.date"/></td>
                                                     <td class="text-end fw-bold text-dark">Rs. <t t-esc="ord.amount"/></td>
                                                     <td class="text-end pe-4"><button class="btn btn-sm btn-dark fw-bold px-3" t-on-click="() => this.viewOrder(ord)" title="Open this order to verify items and generate a bill">View &amp; Invoice</button></td>
@@ -716,7 +716,7 @@
                                                 <td class="text-end fw-bold">Rs. <t t-esc="inv.amount"/></td>
                                                 <td class="text-end fw-bold text-danger">Rs. <t t-esc="inv.residual"/></td>
                                             <td class="text-center pe-4">
-                                                    <span t-attf-class="badge text-white #{inv.status === 'Paid' ? 'bg-success' : inv.status === 'Posted' ? 'bg-info ' : inv.status === 'Partial' ? 'bg-warning text-dark' : inv.status === 'Cancelled' ? 'bg-danger' : 'bg-secondary text-black'} px-2 py-1 shadow-sm">
+                                                    <span t-attf-class="badge #{inv.status === 'Paid' ? 'bg-success text-white' : inv.status === 'Posted' ? 'bg-info text-white' : inv.status === 'Partial' ? 'bg-warning text-dark' : inv.status === 'Cancelled' ? 'bg-danger text-white' : 'bg-secondary text-dark'} px-2 py-1 shadow-sm">
                                                     <t t-esc="inv.status"/>
                                                 </span>
                                             </td>
@@ -811,7 +811,7 @@
                                     <div class="d-flex justify-content-between align-items-center mb-3">
                                         <h4 class="text-dark fw-bold mb-0">Invoice: <t t-esc="this.state.selectedInvoice.display_name"/>
                                         </h4>
-                                        <span t-attf-class="badge fs-6 #{this.state.selectedInvoice.status === 'Paid' ? 'bg-success' : this.state.selectedInvoice.status === 'Posted' ? 'bg-info' : this.state.selectedInvoice.status === 'Partial' ? 'bg-warning text-dark' : this.state.selectedInvoice.status === 'Cancelled' ? 'bg-danger' : 'bg-secondary text-black'} px-3 py-2 text-white shadow-sm">
+                                        <span t-attf-class="badge fs-6 #{this.state.selectedInvoice.status === 'Paid' ? 'bg-success text-white' : this.state.selectedInvoice.status === 'Posted' ? 'bg-info text-white' : this.state.selectedInvoice.status === 'Partial' ? 'bg-warning text-dark' : this.state.selectedInvoice.status === 'Cancelled' ? 'bg-danger text-white' : 'bg-secondary text-dark'} px-3 py-2 shadow-sm">
                                             <t t-esc="this.state.selectedInvoice.status"/>
                                         </span>
                                     </div>
@@ -1365,7 +1365,7 @@
                                                 <td><t t-esc="cn.date"/></td>
                                                 <td class="text-end fw-bold">Rs. <t t-esc="cn.amount"/></td>
                                             <td class="text-center pe-4">
-                                                    <span t-attf-class="badge text-white #{cn.status === 'Paid/Reconciled' ? 'bg-success' : cn.status === 'Posted' ? 'bg-info ' : cn.status === 'Cancelled' ? 'bg-danger' : 'bg-secondary text-black'} px-2 py-1 shadow-sm">
+                                                    <span t-attf-class="badge #{cn.status === 'Paid/Reconciled' ? 'bg-success text-white' : cn.status === 'Posted' ? 'bg-info text-white' : cn.status === 'Cancelled' ? 'bg-danger text-white' : 'bg-secondary text-dark'} px-2 py-1 shadow-sm">
                                                     <t t-esc="cn.status"/>
                                                 </span>
                                             </td>
@@ -2762,8 +2762,13 @@
                             <option value="Healthy">Healthy</option>
                             <option value="Critical">Critical</option>
                             <option value="Exceeded">Exceeded</option>
-                            <option value="Cash">Cash Only</option>
                         </select>
+                        <div t-if="this.state.creditSubView === 'balances'" class="form-check form-switch mb-0 d-flex align-items-center">
+                            <input class="form-check-input mt-0" type="checkbox" role="switch" id="filterCreditLimitGtZero"
+                                   t-att-checked="this.state.filters.credits.hasCreditLimit"
+                                   t-on-change="onHasCreditLimitFilterChange"/>
+                            <label class="form-check-label small fw-bold text-nowrap ms-2" for="filterCreditLimitGtZero">Credit Limit &gt; 0</label>
+                        </div>
                             </div>
                         </div>
 
@@ -2780,7 +2785,7 @@
                                 </thead>
                                 <tbody>
                                     <t t-if="this.state.credits.length === 0 and !this.state.isLoadingList">
-                                        <tr><td colspan="4" class="text-center py-5 text-muted fw-bold"><i class="fa fa-shield fs-1 mb-3 opacity-50"></i><p class="mb-1 fs-5 text-dark">No shops found.</p></td></tr>
+                                        <tr><td colspan="4" class="text-center py-5 text-muted fw-bold"><i class="fa fa-shield fs-1 mb-3 opacity-50"></i><p class="mb-1 fs-5 text-dark">No credit shops found.</p></td></tr>
                                     </t>
                                     <t t-foreach="this.state.credits" t-as="credit" t-key="credit.id">
                                         <tr>
@@ -2817,18 +2822,23 @@
                             <div class="table-responsive">
                                 <table class="table table-hover align-middle mb-0">
                                     <thead class="bg-light text-uppercase small fw-bold text-muted">
-                                        <tr><th class="ps-4 py-3">Shop Name</th><th>Shop Owner</th><th class="text-end">Credit Limit</th><th class="text-end pe-4">Outstanding (Receivable)</th></tr>
+                                        <tr><th class="ps-4 py-3">Shop Name</th><th>Shop Owner</th><th class="text-end">Credit Limit</th><th class="text-end">Outstanding (Receivable)</th><th class="text-end pe-4">Action</th></tr>
                                     </thead>
                                     <tbody>
                                         <t t-if="this.state.credits.length === 0 and !this.state.isLoadingList">
-                                            <tr><td colspan="4" class="text-center py-5 text-muted fw-bold"><i class="fa fa-balance-scale fs-1 mb-3 opacity-50"></i><p class="mb-1 fs-5 text-dark">No shops found.</p></td></tr>
+                                            <tr><td colspan="5" class="text-center py-5 text-muted fw-bold"><i class="fa fa-balance-scale fs-1 mb-3 opacity-50"></i><p class="mb-1 fs-5 text-dark">No shops found.</p></td></tr>
                                         </t>
                                         <t t-foreach="this.state.credits" t-as="bal" t-key="bal.id">
                                             <tr style="cursor:pointer;" t-on-click="() => this.viewShopBalance(bal)">
                                                 <td class="ps-4 fw-bold text-dark"><t t-esc="bal.shop"/><small class="d-block text-muted fw-normal">ID: <t t-esc="bal.shopId"/></small></td>
                                                 <td><t t-esc="bal.owner"/></td>
                                                 <td class="text-end fw-bold">Rs. <t t-esc="bal.limit"/></td>
-                                                <td class="text-end text-danger fw-bold pe-4">Rs. <t t-esc="bal.outstanding"/></td>
+                                                <td class="text-end text-danger fw-bold">Rs. <t t-esc="bal.outstanding"/></td>
+                                                <td class="text-end pe-4">
+                                                    <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click.stop="() => this.viewShopBalance(bal)">
+                                                        <i class="fa fa-pencil me-1"></i> Edit Limit
+                                                    </button>
+                                                </td>
                                             </tr>
                                         </t>
                                     </tbody>
@@ -3018,7 +3028,7 @@
                                             <td class="text-end">Rs. <t t-esc="sum.base_credited.toLocaleString(undefined, {minimumFractionDigits: 2})"/></td>
                                             <td class="text-end fw-bold text-danger">Rs. <t t-esc="sum.tax_credited.toLocaleString(undefined, {minimumFractionDigits: 2})"/></td>
                                             <td t-attf-class="text-end fw-bold #{sum.tax_net &lt; 0 ? 'text-danger' : 'text-success'}">Rs. <t t-esc="sum.tax_net.toLocaleString(undefined, {minimumFractionDigits: 2})"/></td>
-                                            <td class="text-center pe-4"><span class="badge bg-secondary"><t t-esc="sum.line_count"/></span></td>
+                                            <td class="text-center pe-4"><span class="badge bg-secondary text-dark"><t t-esc="sum.line_count"/></span></td>
                                         </tr>
                                     </t>
                                 </tbody>
@@ -3148,7 +3158,7 @@
                                             <!-- Make row clickable -->
                                             <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewExpense(exp)">
                                                 <td class="ps-4 fw-bold"><t t-esc="exp.date"/></td>
-                                                <td><span class="badge bg-secondary me-2"><t t-esc="exp.category"/></span><t t-esc="exp.description"/></td>
+                                                <td><span class="badge bg-secondary text-dark me-2"><t t-esc="exp.category"/></span><t t-esc="exp.description"/></td>
                                                 <td class="text-muted"><t t-esc="exp.partner"/></td>
                                                 <td><t t-esc="exp.journal"/></td>
                                                 <td class="text-end fw-bold text-dark">Rs. <t t-esc="exp.amount"/></td>
@@ -3327,7 +3337,7 @@
                                             <tr>
                                                 <td class="ps-4 fw-bold text-dark"><t t-esc="cat.name"/></td>
                                                 <td class="text-muted"><t t-esc="cat.sequence"/></td>
-                                                <td><span t-attf-class="badge #{cat.active ? 'bg-success' : 'bg-secondary'} text-white shadow-sm"><t t-esc="cat.active ? 'Active' : 'Archived'"/></span></td>
+                                                <td><span t-attf-class="badge #{cat.active ? 'bg-success text-white' : 'bg-secondary text-dark'} shadow-sm"><t t-esc="cat.active ? 'Active' : 'Archived'"/></span></td>
                                                 <td class="text-end pe-4"><button class="btn btn-sm btn-outline-primary fw-bold" t-on-click="() => this.openCategoryForm(cat)">Edit</button></td>
                                             </tr>
                                         </t>
@@ -3696,7 +3706,7 @@
                                 </h5>
                                 <small class="text-muted">Detailed view of the double-entry accounting record.</small>
                     </div>
-                            <span t-attf-class="badge #{this.state.selectedExpenseMove.state === 'Posted' ? 'bg-success' : 'bg-secondary'} text-white px-3 py-2 shadow-sm fs-6">
+                            <span t-attf-class="badge #{this.state.selectedExpenseMove.state === 'Posted' ? 'bg-success text-white' : 'bg-secondary text-dark'} px-3 py-2 shadow-sm fs-6">
                                 <t t-esc="this.state.selectedExpenseMove.state"/>
                             </span>
                         </div>

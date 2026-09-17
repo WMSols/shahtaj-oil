@@ -601,6 +601,84 @@ class SaleOrder(models.Model):
             )
         return True
 
+    def _shahtaj_assert_not_cancelled(self):
+        """Cancelled orders cannot be invoiced or delivered."""
+        for order in self:
+            if order.state == 'cancel':
+                raise UserError(_(
+                    'Cancelled order "%(order)s" cannot be invoiced or delivered.',
+                    order=order.display_name,
+                ))
+
+    def action_shahtaj_cancel_order(self):
+        """Distributor cancels a live order that is not invoiced or delivered."""
+        for order in self:
+            if order.state == 'cancel':
+                raise UserError(_(
+                    'Order "%(order)s" is already cancelled.',
+                    order=order.display_name,
+                ))
+            if order.state not in ('draft', 'sent', 'sale'):
+                raise UserError(_(
+                    'Cannot cancel "%(order)s" in its current state.',
+                    order=order.display_name,
+                ))
+            posted = order._shahtaj_posted_customer_invoices()
+            if posted:
+                raise UserError(_(
+                    'Cannot cancel "%(order)s": it already has posted invoice(s) %(invoices)s.',
+                    order=order.display_name,
+                    invoices=', '.join(posted.mapped('display_name')),
+                ))
+            delivered = order.order_line.filtered(
+                lambda l: not l.display_type and l.qty_delivered > 0
+            )
+            if delivered:
+                raise UserError(_(
+                    'Cannot cancel "%(order)s": stock has already been delivered.',
+                    order=order.display_name,
+                ))
+            jobs = order.shahtaj_dm_delivery_ids
+            busy_jobs = jobs.filtered(
+                lambda j: j.state in ('picked', 'partial', 'delivered', 'returned')
+            )
+            if busy_jobs:
+                raise UserError(_(
+                    'Cannot cancel "%(order)s": delivery is already in progress or completed.',
+                    order=order.display_name,
+                ))
+            pending_jobs = jobs - busy_jobs
+            tasks = pending_jobs.mapped('visit_task_id').filtered(
+                lambda t: t.state not in ('completed', 'cancelled')
+            )
+            if tasks:
+                tasks.with_context(shahtaj_system_visit_write=True).write({
+                    'state': 'cancelled',
+                })
+            if pending_jobs:
+                try:
+                    with self.env.cr.savepoint():
+                        pending_jobs.sudo().unlink()
+                except Exception:
+                    pass
+            drafts = order.invoice_ids.filtered(
+                lambda m: m.state == 'draft' and m.move_type == 'out_invoice'
+            )
+            if drafts:
+                drafts.sudo().button_cancel()
+            order.with_context(disable_cancel_warning=True).action_cancel()
+            self.env['shahtaj.activity.log'].log_business(
+                operation='order.cancelled',
+                name='Cancel order',
+                related_record=order,
+                message=_(
+                    'Distributor %(user)s cancelled order %(order)s.',
+                    user=self.env.user.name,
+                    order=order.name,
+                ),
+            )
+        return True
+
     def action_shahtaj_open_reject_wizard(self):
         """Open wizard to enter rejection reason before cancelling."""
         self.ensure_one()
@@ -707,6 +785,7 @@ class SaleOrder(models.Model):
     def action_shahtaj_create_and_post_invoice(self):
         """Invoice ordered quantities and post — required before DM assign."""
         self.ensure_one()
+        self._shahtaj_assert_not_cancelled()
         user = self.env.user
         if not (
             user.has_group('shahtaj_oil.group_shahtaj_distributor_financial')
@@ -815,6 +894,7 @@ class SaleOrder(models.Model):
     def action_shahtaj_assign_dm(self):
         """Open distributor wizard to assign or split this SO across DMs."""
         self.ensure_one()
+        self._shahtaj_assert_not_cancelled()
         if self.state not in ('sale', 'done'):
             raise UserError(_(
                 'Confirm the sales order before assigning a delivery man.'
@@ -851,6 +931,7 @@ class SaleOrder(models.Model):
     def action_shahtaj_mark_delivery(self):
         """Open wizard so distributor can validate full/partial delivery."""
         self.ensure_one()
+        self._shahtaj_assert_not_cancelled()
         if self.state not in ('sale', 'done'):
             return False
         return {

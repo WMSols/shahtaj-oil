@@ -4,7 +4,7 @@ import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { session } from "@web/session";
 import { ConfirmModal } from "./confirm_modal";
-import { hasFinancialAccess } from "../shahtaj_access";
+import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -447,11 +447,11 @@ export class Accounting extends Component {
     entryStateBadgeClass(state) {
         if (state === "posted") return "bg-success text-white";
         if (state === "cancel") return "bg-danger text-white";
-        return "bg-secondary text-white";
+        return "bg-secondary text-dark";
     }
 
     get journalActiveBadgeClass() {
-        return this.state.journalForm.active === false ? "bg-secondary text-white" : "bg-success text-white";
+        return this.state.journalForm.active === false ? "bg-secondary text-dark" : "bg-success text-white";
     }
 
     moveTypeLabel(type) {
@@ -618,6 +618,7 @@ export class Accounting extends Component {
         }
         const tab = this.state.activeSubTab;
         this.state.isLoadingList = true;
+        notifyPortalBusy(true);
         try {
             if (tab === "journals") {
                 if (this.state.journalPanel === "entries") {
@@ -632,6 +633,7 @@ export class Accounting extends Component {
             this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isLoadingList = false;
+            notifyPortalBusy(false);
         }
     }
 

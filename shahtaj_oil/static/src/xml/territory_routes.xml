@@ -144,6 +144,9 @@
                         <div>
                             <h2 class="fw-bold mb-0">Route Configurations</h2>
                             <small class="text-muted">Routes are specific paths within a Zone.</small>
+                            <small class="text-muted d-block mt-1">
+                                Total assigned shops: <strong class="text-dark" t-esc="this.state.totalAssignedShops"/>
+                            </small>
                         </div>
                         <div class="d-flex align-items-center gap-2">
                            <div class="input-group input-group-sm shadow-sm" style="width: 250px;">
@@ -216,7 +219,7 @@
                                 <thead class="bg-light text-uppercase small fw-bold text-muted">
                                     <tr>
                                         <th class="border-top-0 ps-4">Route Info</th>
-                                        <th class="border-top-0 text-center" title="Total number of shops assigned to this route">Mapped Shops</th>
+                                        <th class="border-top-0 text-center" title="Total number of shops assigned to this route">Assigned Shops</th>
                                         <th class="border-top-0 text-center">Status</th>
                                         <th class="border-top-0 text-end pe-4">Actions</th>
                                     </tr>

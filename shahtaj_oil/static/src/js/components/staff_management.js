@@ -3,7 +3,7 @@
 import { Component, useState, onWillStart, onWillUpdateProps, onMounted, onWillUnmount } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { ConfirmModal } from "./confirm_modal";
-import { hasFinancialAccess } from "../shahtaj_access";
+import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
 
 export class StaffManagement extends Component {
     static components = { ConfirmModal };
@@ -228,7 +228,10 @@ export class StaffManagement extends Component {
     }
 
     async fetchStaffData(isBackgroundPoll = false) {
-        if (!isBackgroundPoll) this.state.loading.fetch = true;
+        if (!isBackgroundPoll) {
+            this.state.loading.fetch = true;
+            notifyPortalBusy(true);
+        }
         try {
             const tab = this.state.viewMode === "archive" ? "archive" : "staff";
             const pag = this.state.pagination[tab];
@@ -273,7 +276,10 @@ export class StaffManagement extends Component {
                 this.notification.add("Failed to fetch data: " + (error.data?.message || error.message), { type: "danger" });
             }
         } finally {
-            if (!isBackgroundPoll) this.state.loading.fetch = false;
+            if (!isBackgroundPoll) {
+                this.state.loading.fetch = false;
+                notifyPortalBusy(false);
+            }
         }
     }
 

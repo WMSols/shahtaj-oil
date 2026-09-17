@@ -2,7 +2,7 @@
 
 import { Component, useState, onWillStart, onWillUpdateProps, onWillUnmount } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { hasFinancialAccess } from "../shahtaj_access";
+import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
 import { ConfirmModal } from "./confirm_modal"; // FIXED: Missing import
 import { BankTransactions } from "./bank_transactions";
 
@@ -63,10 +63,11 @@ export class FinancialsInvoicing extends Component {
         const target = this.props.requestedSubTab || 'invoices';
         const topLevelTabs = ['credit', 'pnl', 'money', 'cash', 'tax_ledger', 'expenses', 'po_management'];
         const poChildTabs = ['purchase_orders', 'receipts', 'vendor_bills', 'vendors'];
+        const creditChildTabs = ['balances'];
         const initActive = topLevelTabs.includes(target)
             ? target
-            : (poChildTabs.includes(target) ? 'po_management' : 'invoices');
-        const initInvoice = (target === 'credit' || target === 'pnl' || target === 'money' || target === 'cash' || target === 'tax_ledger' || target === 'invoices')
+            : (poChildTabs.includes(target) ? 'po_management' : (creditChildTabs.includes(target) ? 'credit' : 'invoices'));
+        const initInvoice = (target === 'credit' || target === 'pnl' || target === 'money' || target === 'cash' || target === 'tax_ledger' || target === 'invoices' || creditChildTabs.includes(target))
             ? 'all_orders'
             : target;
         const initPo = target === 'po_management'
@@ -81,7 +82,7 @@ export class FinancialsInvoicing extends Component {
             cashDirection: 'all',
             
             // --- CREDIT & BALANCES MERGED STATE ---
-            creditSubView: 'risk', // 'risk' | 'balances'
+            creditSubView: target === 'balances' ? 'balances' : 'risk', // 'risk' | 'balances'
             selectedShopBalance: null, // For editing shop credit limit details
             
             selectedOrder: null, 
@@ -169,7 +170,7 @@ export class FinancialsInvoicing extends Component {
                 receipts: { search: '', status: 'all' },
                 vendorBills: { search: '', status: 'all' },
                 vendors: { search: '' },
-                credits: { search: '', status: 'all' }, // Used for both risk monitor & balances
+                credits: { search: '', status: 'all', hasCreditLimit: false }, // Used for both risk monitor & balances
                 expenses: { search: '', status: 'all' },
                 expenseCategories: { search: '' },
             },
@@ -257,7 +258,12 @@ export class FinancialsInvoicing extends Component {
             }
             const req = nextProps.requestedSubTab;
             
-            if (['credit', 'pnl', 'money', 'cash', 'tax_ledger', 'expenses', 'po_management'].includes(req)) {
+            if (req === 'balances') {
+                this.state.activeSubTab = 'credit';
+                this.state.creditSubView = 'balances';
+                this.state.selectedShopBalance = null;
+                this.fetchActiveList();
+            } else if (['credit', 'pnl', 'money', 'cash', 'tax_ledger', 'expenses', 'po_management'].includes(req)) {
                 this.state.activeSubTab = req;
                 if (req === 'credit') {
                     this.state.creditSubView = 'risk';
@@ -330,6 +336,11 @@ export class FinancialsInvoicing extends Component {
     onFilterChange(listKey) {
         this.state.pagination[listKey].page = 1;
         this.fetchActiveList(); // Dropdowns don't need debouncing, fetch immediately
+    }
+
+    onHasCreditLimitFilterChange(ev) {
+        this.state.filters.credits.hasCreditLimit = Boolean(ev.target.checked);
+        this.onFilterChange('credits');
     }
 
     changePage(listKey, direction) {
@@ -406,6 +417,7 @@ export class FinancialsInvoicing extends Component {
         if (!config) return;
 
         this.state.isLoadingList = true;
+        notifyPortalBusy(true);
         try {
             const { stateKey, model, fields } = config;
             const pag = this.state.pagination[stateKey];
@@ -428,7 +440,15 @@ export class FinancialsInvoicing extends Component {
                     domain.push(["active", "=", true]);
                 }
             }
-            if (stateKey === 'credits') domain.push(["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]);
+            if (stateKey === 'credits') {
+                domain.push(["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]);
+                if (this.state.creditSubView === 'risk') {
+                    domain.push(["shahtaj_shop_category", "=", "credit"]);
+                }
+                if (this.state.creditSubView === 'balances' && this.state.filters.credits.hasCreditLimit) {
+                    domain.push(["credit_limit", ">", 0]);
+                }
+            }
 
             if (filters.search) {
                 if (stateKey === 'credits') {
@@ -443,9 +463,6 @@ export class FinancialsInvoicing extends Component {
             }
 
             if (filters.status && filters.status !== 'all') {
-                if (stateKey === 'credits') {
-                    if (filters.status === 'Cash') domain.push(['shahtaj_shop_category', '=', 'cash']);
-                }
                 if (stateKey === 'invoices' || stateKey === 'creditNotes') {
                     if (filters.status === 'Posted') domain.push(['state', '=', 'posted'], ['payment_state', 'in', ['not_paid']]);
                     if (filters.status === 'Paid' || filters.status === 'Paid/Reconciled') domain.push(['payment_state', 'in', ['paid', 'in_payment', 'reversed']]);
@@ -595,6 +612,7 @@ export class FinancialsInvoicing extends Component {
             this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isLoadingList = false;
+            notifyPortalBusy(false);
         }
     }
     setCreditSubView(viewName) {
@@ -628,8 +646,15 @@ export class FinancialsInvoicing extends Component {
         
         // Also update local state instantly for a snappy UI transition
         if (tabName === 'financials') {
-            if (['credit', 'pnl', 'money', 'cash', 'tax_ledger', 'expenses', 'po_management'].includes(subTabName)) {
+            if (subTabName === 'balances') {
+                this.state.activeSubTab = 'credit';
+                this.setCreditSubView('balances');
+            } else if (['credit', 'pnl', 'money', 'cash', 'tax_ledger', 'expenses', 'po_management'].includes(subTabName)) {
                 this.setSubTab(subTabName);
+                if (subTabName === 'credit') {
+                    this.state.creditSubView = 'risk';
+                    this.state.selectedShopBalance = null;
+                }
             } else if (['purchase_orders', 'receipts', 'vendor_bills', 'vendors'].includes(subTabName)) {
                 this.state.activeSubTab = 'po_management';
                 this.setPoSubTab(subTabName);
@@ -817,7 +842,14 @@ export class FinancialsInvoicing extends Component {
 
         // 3. Temporarily fetch Credit Risk data (until we migrate this tab to pagination too)
         if (this.state.activeSubTab === 'credit' || !this.state.credits.length) {
-            const shopsData = await this.orm.searchRead("res.partner", [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]], ["name", "owner_name", "shahtaj_shop_category", "credit_limit", "outstanding_balance"]);
+            const creditDomain = [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]];
+            if (this.state.creditSubView === 'risk') {
+                creditDomain.push(["shahtaj_shop_category", "=", "credit"]);
+            }
+            if (this.state.creditSubView === 'balances' && this.state.filters.credits.hasCreditLimit) {
+                creditDomain.push(["credit_limit", ">", 0]);
+            }
+            const shopsData = await this.orm.searchRead("res.partner", creditDomain, ["name", "owner_name", "shahtaj_shop_category", "credit_limit", "outstanding_balance"]);
             this.state.credits = (shopsData || []).map((shop) => {
                 const limit = shop.credit_limit || 0;
                 const utilized = shop.outstanding_balance || 0;
@@ -1265,6 +1297,7 @@ export class FinancialsInvoicing extends Component {
     }
     async loadMoneyOverview() {
         this.state.money.isLoading = true;
+        notifyPortalBusy(true);
         try {
             const from = this.state.money.date_from;
             const to = this.state.money.date_to;
@@ -1325,6 +1358,7 @@ export class FinancialsInvoicing extends Component {
             this.notification.add("Failed to load money overview: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.money.isLoading = false;
+            notifyPortalBusy(false);
         }
     }
 
@@ -2187,7 +2221,7 @@ export class FinancialsInvoicing extends Component {
 
     statusBadgeClass(status) {
         const map = {
-            Draft: "bg-secondary text-white",
+            Draft: "bg-secondary text-dark",
             Confirmed: "bg-primary text-white",
             "To Approve": "bg-warning text-dark",
             Ready: "bg-info text-white",

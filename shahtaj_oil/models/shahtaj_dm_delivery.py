@@ -910,6 +910,7 @@ class ShahtajDmDelivery(models.Model):
         delivery_man = delivery_man.sudo()
         if not sale_order or not sale_order.exists():
             raise UserError(_('Select a sales order to assign.'))
+        sale_order._shahtaj_assert_not_cancelled()
         if sale_order.state not in ('sale', 'done'):
             raise UserError(_(
                 'Only confirmed sales orders can be assigned to a delivery man.'
@@ -996,6 +997,7 @@ class ShahtajDmDelivery(models.Model):
         sale_order = sale_order.sudo()
         if not sale_order or sale_order.state not in ('sale', 'done'):
             raise UserError(_('Only confirmed sales orders can be assigned.'))
+        sale_order._shahtaj_assert_not_cancelled()
         sale_order._shahtaj_require_posted_invoice_for_dm()
         if not assignments:
             raise UserError(_('Add at least one delivery man assignment.'))
@@ -1301,6 +1303,7 @@ class ShahtajDmDelivery(models.Model):
     def action_pick_stock(self):
         """Open pick wizard (editable quantities)."""
         self.ensure_one()
+        self.sale_order_id._shahtaj_assert_not_cancelled()
         self.sudo()._sync_with_sale_order()
         if self.state not in ('ready', 'picked', 'partial'):
             raise UserError(_('This order is not available for stock pickup.'))
@@ -1351,6 +1354,7 @@ class ShahtajDmDelivery(models.Model):
     def _pick_stock_with_qtys(self, qty_by_line_id, reload_form=True):
         """Pick given quantities (line_id → qty) from WH onto van."""
         self.ensure_one()
+        self.sale_order_id._shahtaj_assert_not_cancelled()
         self.sudo()._sync_with_sale_order()
         if self.state in ('delivered', 'returned'):
             raise UserError(_('Cannot pick stock for a finished/returned delivery.'))
@@ -1493,6 +1497,7 @@ class ShahtajDmDelivery(models.Model):
     def action_deliver_to_shop(self):
         """Open deliver wizard (editable qty + GPS)."""
         self.ensure_one()
+        self.sale_order_id._shahtaj_assert_not_cancelled()
         self.sudo()._sync_with_sale_order()
         if self.state not in ('picked', 'partial'):
             raise UserError(_('Pick stock onto the van before delivering to the shop.'))
@@ -1523,6 +1528,7 @@ class ShahtajDmDelivery(models.Model):
     ):
         """Deliver given van qtys to shop; supports partial / multi-attempt."""
         self.ensure_one()
+        self.sale_order_id._shahtaj_assert_not_cancelled()
         if self.state not in ('picked', 'partial'):
             raise UserError(_('Pick stock onto the van before delivering.'))
         if not self.van_location_id:

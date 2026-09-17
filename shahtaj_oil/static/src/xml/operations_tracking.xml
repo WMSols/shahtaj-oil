@@ -2,6 +2,15 @@
 <templates xml:space="preserve">
     <t t-name="shahtaj_oil.OperationsTracking" owl="1">
         <div class="card border-0 shadow-sm bg-white rounded-3">
+            <style>
+                .so-checkin-dm-row {
+                    background-color: #eef6ff !important;
+                }
+                .list-group-item-action.so-checkin-dm-row:hover,
+                .list-group-item-action.so-checkin-dm-row:focus {
+                    background-color: #e0effe !important;
+                }
+            </style>
 
             <div class="p-4 border-bottom bg-light d-flex justify-content-between align-items-center rounded-top">
                 <div>
@@ -54,7 +63,7 @@
                         </div>
                         <div class="d-flex gap-2 mb-3">
                             <span class="badge bg-light text-dark"><t t-esc="this.stockStateLabel(this.state.selectedDmJob.state)"/></span>
-                            <span class="badge bg-secondary text-white"><t t-esc="this.fieldStateLabel(this.state.selectedDmJob.fieldState)"/></span>
+                            <span class="badge bg-secondary text-dark"><t t-esc="this.fieldStateLabel(this.state.selectedDmJob.fieldState)"/></span>
                         </div>
                         <div class="table-responsive">
                             <table class="table table-sm align-middle">
@@ -124,7 +133,7 @@
                                             <td class="text-end pe-4">
                                                 <button t-if="this.canCreateInvoice(row)" class="btn btn-sm btn-success text-white fw-bold me-1" t-on-click="() => this.createInvoiceFromDispatch(row)" t-att-disabled="this.state.isCreatingInvoice">Invoice</button>
                                                 <button t-if="this.canAssignDeliveryMan(row)" class="btn btn-sm btn-dark text-white fw-bold me-1" t-on-click="() => this.openAssignModal(row.odoo_id)">Assign / Split</button>
-                                                <button t-if="!row.dmJobCount and row.hasPostedInvoice" class="btn btn-sm btn-outline-primary fw-bold me-1" t-on-click="() => this.openDeliveryCustom(row.odoo_id)">Mark Delivery</button>
+                                                <button t-if="!row.dmJobCount and row.hasPostedInvoice and row.status !== 'Cancelled'" class="btn btn-sm btn-outline-primary fw-bold me-1" t-on-click="() => this.openDeliveryCustom(row.odoo_id)">Mark Delivery</button>
                                                 <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewDelivery(row)">View</button>
                                             </td>
                                         </tr>
@@ -211,7 +220,7 @@
                                             </td>
                                             <td><t t-esc="job.date"/></td>
                                             <td><span class="badge bg-light text-dark"><t t-esc="this.stockStateLabel(job.state)"/></span></td>
-                                            <td><span class="badge bg-secondary text-white"><t t-esc="this.fieldStateLabel(job.fieldState)"/></span></td>
+                                            <td><span class="badge bg-secondary text-dark"><t t-esc="this.fieldStateLabel(job.fieldState)"/></span></td>
                                             <td class="text-end pe-4">
                                                 <button class="btn btn-sm btn-outline-dark fw-bold me-1" t-on-click="() => this.viewDmJob(job)">View</button>
                                                 <button t-if="this.canResetField(job)" class="btn btn-sm btn-outline-secondary fw-bold me-1" t-on-click="() => this.resetDmJobField(job.id)">Reset</button>
@@ -348,7 +357,7 @@
 
                                     <!-- NEW: Auto-Hiding Mark Delivery Button -->
                                 <t t-set="hasPendingDelivery" t-value="this.state.selectedDelivery.full_lines and this.state.selectedDelivery.full_lines.some(l => l.qty > l.delivered)"/>
-                                <t t-if="hasPendingDelivery">
+                                <t t-if="hasPendingDelivery and this.state.selectedDelivery.status !== 'Cancelled' and this.state.selectedDelivery.orderState !== 'cancel'">
                                     <button class="btn btn-sm btn-primary shadow-sm fw-bold px-3 text-white d-flex align-items-center" t-on-click="() => this.openDeliveryCustom(this.state.selectedDelivery.odoo_id)">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package-check me-1">
                                             <path d="m16 16 2 2 4-4"/>
@@ -573,9 +582,39 @@
                             <button class="btn btn-sm btn-light" t-on-click="closeAssignModal">Close</button>
                         </div>
                         <div class="p-4">
-                            <t t-if="this.state.assignModal.allocationHtml">
-                                <div class="mb-3 small" t-out="this.state.assignModal.allocationHtml"/>
-                            </t>
+                            <div class="mb-3">
+                                <p t-attf-class="mb-1 small #{this.assignAllocationSummary.messageClass}">
+                                    <t t-if="this.assignAllocationSummary.messageStrong">
+                                        <b><t t-esc="this.assignAllocationSummary.message"/></b>
+                                    </t>
+                                    <t t-else="">
+                                        <t t-esc="this.assignAllocationSummary.message"/>
+                                    </t>
+                                </p>
+                                <table class="table table-sm table-bordered mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Product</th>
+                                            <th class="text-end">Ordered</th>
+                                            <th class="text-end">Assigned</th>
+                                            <th class="text-end">Left</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <t t-if="!this.assignAllocationSummary.rows.length">
+                                            <tr><td colspan="4" class="text-muted">No products</td></tr>
+                                        </t>
+                                        <t t-foreach="this.assignAllocationSummary.rows" t-as="arow" t-key="arow.id">
+                                            <tr t-attf-class="#{arow.status === 'over' ? 'text-danger' : arow.status === 'left' ? 'text-warning' : 'text-success'}">
+                                                <td><t t-esc="arow.product"/></td>
+                                                <td class="text-end"><t t-esc="arow.qtyOrderedLabel"/></td>
+                                                <td class="text-end"><t t-esc="arow.qtyAssignedLabel"/></td>
+                                                <td class="text-end"><t t-esc="arow.leftLabel"/></td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
                             <t t-foreach="this.state.assignModal.jobs" t-as="job" t-key="job.id">
                                 <div class="border rounded-3 p-3 mb-3">
                                     <div class="row g-2 mb-2">
@@ -663,14 +702,14 @@
                             t-model="this.state.filters.checkins.booker"
                             t-on-change="() => this.onFilterChange('checkins')">
                         <option value="all">All Field Users</option>
-                        <t t-foreach="this.state.lookupBookers" t-as="b" t-key="b.id">
+                        <t t-foreach="this.state.lookupFieldUsers" t-as="b" t-key="b.id">
                             <option t-att-value="b.id"><t t-esc="b.name"/></option>
                         </t>
                     </select>
                     <input type="date" class="form-control form-control-sm" style="max-width: 160px;"
                            t-model="this.state.filters.checkins.date"
                            t-on-change="() => this.onFilterChange('checkins')"
-                           title="Filter GPS attempts by date"/>
+                           title="Optional: show GPS attempts for this date only"/>
                     <select class="form-select form-select-sm" style="max-width: 180px;"
                             t-model="this.state.filters.checkins.purpose"
                             t-on-change="() => this.onFilterChange('checkins')">
@@ -713,7 +752,7 @@
                             </div>
                         </t>
                         <t t-foreach="this.state.tableCheckins" t-as="log" t-key="log.id">
-                            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3">
+                            <div t-attf-class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3 #{log.isDeliveryCheckin ? 'so-checkin-dm-row' : ''}">
                                 <div class="d-flex align-items-center">
                                     <div t-attf-class="rounded-circle d-flex justify-content-center align-items-center me-3 shadow-sm border #{log.isOk ? 'bg-light' : 'bg-danger'}" style="width: 45px; height: 45px;">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" t-attf-class="lucide lucide-map-pin #{log.isOk ? 'text-primary' : 'text-white'}"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -838,7 +877,7 @@
                     </div>
                     <div class="d-flex justify-content-between mb-2 pb-2 border-bottom" t-if="this.state.selectedCheckin.visitOutcome">
                         <span class="text-muted small">Visit Outcome:</span>
-                        <span t-attf-class="fw-bold #{this.state.selectedCheckin.visitOutcome === 'Order Placed' ? 'text-success' : 'text-warning'}">
+                        <span t-attf-class="fw-bold #{this.state.selectedCheckin.visitOutcome === 'Order Placed' or this.state.selectedCheckin.visitOutcome === 'Delivered' ? 'text-success' : 'text-warning'}">
                             <t t-esc="this.state.selectedCheckin.visitOutcome"/>
                         </span>
                     </div>
@@ -850,7 +889,7 @@
                     </div>
 
                     <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
-                        <span class="text-muted small">Order:</span>
+                        <span class="text-muted small"><t t-esc="this.state.selectedCheckin.isDeliveryCheckin ? 'Delivery:' : 'Order:'"/></span>
                         <t t-if="this.state.selectedCheckin.sale_order_id">
                             <button class="btn btn-sm btn-primary shadow-sm fw-bold" t-on-click="() => this.viewOrderFromCheckin(this.state.selectedCheckin)" title="Open the sales order linked to this visit">
                                 <t t-esc="this.state.selectedCheckin.sale_order_id[1]"/>
@@ -858,7 +897,7 @@
                             </button>
                         </t>
                         <t t-else="">
-                            <span class="fw-bold text-muted">No orders placed</span>
+                            <span class="fw-bold text-muted"><t t-esc="this.state.selectedCheckin.isDeliveryCheckin ? 'No delivery linked' : 'No orders placed'"/></span>
                         </t>
                     </div>
 
@@ -1152,6 +1191,7 @@
                             <option value="Draft">Draft</option>
                             <option value="To Invoice">To Invoice</option>
                             <option value="Delivered">Delivered</option>
+                            <option value="Cancelled">Cancelled</option>
                         </select>
                         <button class="btn btn-sm btn-dark fw-bold text-white shadow-sm ms-auto" t-on-click="openSaleOrderForm">
                             <i class="fa fa-plus me-1"></i> New Sales Order
@@ -1199,10 +1239,11 @@
                                                 </div>
                                             </td>
                                             <td class="align-middle">
-                                                <span t-attf-class="badge #{ord.status === 'To Invoice' ? 'bg-warning text-dark' : ord.status === 'Invoiced' ? 'bg-info text-white' : ord.status === 'Delivered' ? 'bg-success text-white' : 'bg-secondary text-white'} p-2 fs-6 shadow-sm"><t t-esc="ord.status"/></span>
+                                                <span t-attf-class="badge #{ord.status === 'To Invoice' ? 'bg-warning text-dark' : ord.status === 'Invoiced' ? 'bg-info text-white' : ord.status === 'Delivered' ? 'bg-success text-white' : ord.status === 'Cancelled' ? 'bg-danger text-white' : 'bg-secondary text-dark'} p-2 fs-6 shadow-sm"><t t-esc="ord.status"/></span>
                                             </td>
                                             <td class="align-middle text-end pe-4">
-                                                <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewOrder(ord)">View Details →</button>
+                                                <button class="btn btn-sm btn-outline-dark fw-bold me-1" t-on-click="() => this.viewOrder(ord)">View Details →</button>
+                                                <button t-if="this.canCancelOrder(ord)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click.stop="() => this.requestCancelOrder(ord)" t-att-disabled="this.state.isCancellingOrder">Cancel</button>
                                             </td>
                                         </tr>
                                     </t>
@@ -1264,8 +1305,17 @@
             </t>
         </button>
     </t>
+    <t t-if="this.canCancelOrder(this.state.selectedOrder)">
+        <button class="btn btn-sm btn-outline-danger fw-bold px-3 d-flex align-items-center ms-2" t-on-click="() => this.requestCancelOrder(this.state.selectedOrder)" t-att-disabled="this.state.isCancellingOrder" title="Cancel this order. Cancelled orders cannot be invoiced or delivered.">
+            <t t-if="this.state.isCancellingOrder">
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                            Cancelling...
+            </t>
+            <t t-else="">Cancel Order</t>
+        </button>
+    </t>
 
-    <span t-attf-class="badge #{this.state.selectedOrder.status === 'Confirmed' ? 'bg-primary' : this.state.selectedOrder.status === 'Delivered' ? 'bg-success' : this.state.selectedOrder.status === 'Invoiced' ? 'bg-info' : this.state.selectedOrder.status === 'To Invoice' ? 'bg-warning text-dark' : 'bg-secondary'} text-white p-2 fs-6 text-uppercase shadow-sm ms-2" style="letter-spacing: 1px;">
+    <span t-attf-class="badge #{this.state.selectedOrder.status === 'Confirmed' ? 'bg-primary text-white' : this.state.selectedOrder.status === 'Delivered' ? 'bg-success text-white' : this.state.selectedOrder.status === 'Invoiced' ? 'bg-info text-white' : this.state.selectedOrder.status === 'To Invoice' ? 'bg-warning text-dark' : this.state.selectedOrder.status === 'Cancelled' ? 'bg-danger text-white' : 'bg-secondary text-dark'} p-2 fs-6 text-uppercase shadow-sm ms-2" style="letter-spacing: 1px;">
                                     Status: <t t-esc="this.state.selectedOrder.status"/>
     </span>
 </div>
@@ -1746,19 +1796,10 @@
             <option t-att-value="b.id"><t t-esc="b.name"/></option>
         </t>
     </select>
-
-    <select class="form-select form-select-sm shadow-sm" style="max-width: 150px;" 
-            t-model="this.state.filters.schedules.day" 
-            t-on-change="() => this.onFilterChange('schedules')">
-        <option value="all">All Days</option>
-        <option value="0">Monday</option>
-        <option value="1">Tuesday</option>
-        <option value="2">Wednesday</option>
-        <option value="3">Thursday</option>
-        <option value="4">Friday</option>
-        <option value="5">Saturday</option>
-        <option value="6">Sunday</option>
-    </select>
+    <input type="date" class="form-control form-control-sm shadow-sm" style="max-width: 160px;"
+           t-model="this.state.filters.schedules.date"
+           t-on-change="() => this.onFilterChange('schedules')"
+           title="Optional: show this booker's performance on a specific date"/>
 </div>
 <div class="position-relative">
     <t t-if="this.state.isLoadingList">
@@ -1804,7 +1845,7 @@
                             </div>
                         </td>
                         <td class="text-center pe-4">
-                            <span t-attf-class="badge #{sched.active ? 'bg-success text-white' : 'bg-secondary text-white'} px-2 py-1 shadow-sm">
+                            <span t-attf-class="badge #{sched.active ? 'bg-success text-white' : 'bg-secondary text-dark'} px-2 py-1 shadow-sm">
                                 <t t-esc="sched.active ? 'Active' : 'Deactivated'"/>
                             </span>
                         </td>
@@ -1840,7 +1881,7 @@
     <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-3">
         <h4 class="text-dark fw-bold mb-0">Schedule: <t t-esc="this.state.selectedSchedule.name"/>
         </h4>
-        <span t-attf-class="badge #{this.state.selectedSchedule.active ? 'bg-success' : 'bg-secondary'} text-white px-3 py-2 shadow-sm fs-6">
+        <span t-attf-class="badge #{this.state.selectedSchedule.active ? 'bg-success text-white' : 'bg-secondary text-dark'} px-3 py-2 shadow-sm fs-6">
             <t t-esc="this.state.selectedSchedule.active ? 'Active Schedule' : 'Deactivated'"/>
         </span>
     </div>
@@ -1885,7 +1926,7 @@
                 <h6 class="fw-bold text-muted text-uppercase mb-3">Visit Performance</h6>
                 <div class="d-flex justify-content-between mb-2">
                     <span class="text-dark fw-bold">Shops on Route:</span>
-                    <span class="badge bg-secondary">
+                    <span class="badge bg-secondary text-dark">
                         <t t-esc="this.state.selectedSchedule.shops"/>
                     </span>
                 </div>
@@ -1981,7 +2022,7 @@
                                 <small class="fw-bold text-success"><t t-esc="tgt.progress.toFixed(0)"/>%</small>
                             </div>
                         </td>
-                        <td class="align-middle text-end pe-4 text-nowrap"><span t-attf-class="badge #{tgt.active ? 'bg-success text-white' : 'bg-secondary text-white'} px-2 py-1 shadow-sm"><t t-esc="tgt.active ? 'Active' : 'Deactivated'"/></span></td>
+                        <td class="align-middle text-end pe-4 text-nowrap"><span t-attf-class="badge #{tgt.active ? 'bg-success text-white' : 'bg-secondary text-dark'} px-2 py-1 shadow-sm"><t t-esc="tgt.active ? 'Active' : 'Deactivated'"/></span></td>
                     </tr>
                 </t>
             </tbody>
@@ -2241,6 +2282,15 @@
     </div>
 </div>
 </t>
+
+        <t t-if="this.state.confirmModal.isOpen">
+            <ConfirmModal
+                title="this.state.confirmModal.title"
+                message="this.state.confirmModal.message"
+                onConfirm="this.state.confirmModal.onConfirm"
+                onCancel="() => this.closeConfirm()"
+            />
+        </t>
 
 </t>
 </templates>

@@ -65,6 +65,8 @@ KNOWN_OPERATIONS = (
     'visit.place_order',
     'visit.undo',
     'order.update',
+    'order.cancelled',
+    'order.rejected',
     'delivery.update',
     'task.update',
     'zone.archive',

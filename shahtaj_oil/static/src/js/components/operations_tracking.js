@@ -2,14 +2,17 @@
 
 import { Component, useState, onWillStart, onWillUpdateProps, useEffect, useRef } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { hasFinancialAccess } from "../shahtaj_access";
+import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
+import { ConfirmModal } from "./confirm_modal";
 
 export class OperationsTracking extends Component {
+     static components = { ConfirmModal };
      static props = {
         requestedSubTab: { type: String, optional: true },
         requestedDeliveriesSubTab: { type: String, optional: true },
         requestedCheckinPurpose: { type: String, optional: true },
         requestedCheckinRole: { type: String, optional: true },
+        requestedCheckinDate: { type: String, optional: true },
     };
     setup() {
         this.orm = useService("orm");
@@ -41,7 +44,6 @@ export class OperationsTracking extends Component {
                 wizardId: null,
                 orderName: '',
                 shop: '',
-                allocationHtml: '',
                 jobs: [],
                 saving: false,
             },
@@ -54,6 +56,8 @@ export class OperationsTracking extends Component {
 
             isCreatingInvoice: false,
             isConfirmingOrder: false,
+            isCancellingOrder: false,
+            confirmModal: { isOpen: false, title: '', message: '', onConfirm: null },
             isSavingSaleOrder: false,
             isEditingDelivery: false,
             allProducts: [], // To list all products in a dropdown
@@ -98,7 +102,7 @@ export class OperationsTracking extends Component {
             searchTimeout: null,
             
             tableDeliveries: [], tableCheckins: [], tableOrders: [], tableVerification: [], tableSchedules: [], tableTargets: [],
-            lookupBookers: [], lookupTargetTypes: [],
+            lookupBookers: [], lookupFieldUsers: [], lookupTargetTypes: [],
             
             pagination: {
                 deliveries: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
@@ -114,10 +118,10 @@ export class OperationsTracking extends Component {
                 deliveries: { search: '', status: '' },
                 dispatch: { search: '' },
                 dm_jobs: { search: '', dm: 'all', date: this.todayStr, state: 'all', field_state: 'all' },
-                checkins: { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: '', role: this.props.requestedCheckinRole || 'all' },
+                checkins: { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
                 orders: { search: '', status: '', booker: 'all' },
                 verification: { search: '', booker: 'all', reason: 'all' },
-                schedules: { booker: 'all', day: 'all' },
+                schedules: { booker: 'all', date: '' },
                 targets: { booker: 'all', type: 'all' },
             },
         });
@@ -131,11 +135,14 @@ export class OperationsTracking extends Component {
             }
             const purpose = nextProps.requestedCheckinPurpose || 'all';
             const role = nextProps.requestedCheckinRole || 'all';
+            const date = nextProps.requestedCheckinDate || '';
             const prevPurpose = this.props.requestedCheckinPurpose || 'all';
             const prevRole = this.props.requestedCheckinRole || 'all';
-            if (purpose !== prevPurpose || role !== prevRole) {
+            const prevDate = this.props.requestedCheckinDate || '';
+            if (purpose !== prevPurpose || role !== prevRole || date !== prevDate) {
                 this.state.filters.checkins.purpose = purpose;
                 this.state.filters.checkins.role = role;
+                this.state.filters.checkins.date = date;
                 if (this.state.activeSubTab === 'checkins' || nextProps.requestedSubTab === 'checkins') {
                     this.state.pagination.checkins.page = 1;
                     this.fetchActiveList();
@@ -354,16 +361,46 @@ export class OperationsTracking extends Component {
         return ({ order_booker: 'Order Booker', delivery_man: 'Delivery Man', other: 'Other' })[role] || role || '—';
     }
 
+    _gpsIsDeliveryCheckin(attempt) {
+        return attempt.role === 'delivery_man' || attempt.purpose === 'deliver';
+    }
+
+    _gpsCheckinOutcome(attempt, hasLinkedOrder = false) {
+        if (this._gpsIsDeliveryCheckin(attempt)) {
+            const hasDelivery = Boolean(this._m2oId(attempt.dm_delivery_id)) || Boolean(hasLinkedOrder);
+            return {
+                isDeliveryCheckin: true,
+                hasOrder: hasDelivery,
+                orderLabel: hasDelivery ? 'Delivered' : 'No Delivery',
+            };
+        }
+        return {
+            isDeliveryCheckin: false,
+            hasOrder: Boolean(hasLinkedOrder),
+            orderLabel: hasLinkedOrder ? 'Order Placed' : 'No Order',
+        };
+    }
+
     /**
-     * Odoo weekday key for today in Pakistan: '0' Monday … '6' Sunday.
+     * Odoo weekday key for a Pakistan calendar date: '0' Monday … '6' Sunday.
      */
-    _pktTodayWeekday() {
-        const weekday = new Date().toLocaleDateString('en-US', {
+    _pktWeekdayForDate(dateStr) {
+        const date = dateStr
+            ? new Date(`${dateStr}T12:00:00+05:00`)
+            : new Date();
+        const weekday = date.toLocaleDateString('en-US', {
             timeZone: 'Asia/Karachi',
             weekday: 'short',
         }).slice(0, 3);
         const map = { Mon: '0', Tue: '1', Wed: '2', Thu: '3', Fri: '4', Sat: '5', Sun: '6' };
         return map[weekday] || '0';
+    }
+
+    /**
+     * Odoo weekday key for today in Pakistan: '0' Monday … '6' Sunday.
+     */
+    _pktTodayWeekday() {
+        return this._pktWeekdayForDate(this.todayStr);
     }
 
     /**
@@ -419,6 +456,46 @@ export class OperationsTracking extends Component {
         return { total, records: pageIds.map((id) => byId[id]).filter(Boolean) };
     }
 
+    async _loadScheduleProgressForDate(records, dateStr) {
+        const stats = {};
+        if (!records.length) {
+            return stats;
+        }
+        const bookerIds = [...new Set(records.map((r) => this._m2oId(r.order_booker_id)).filter(Boolean))];
+        const routeIds = [...new Set(records.map((r) => this._m2oId(r.route_id)).filter(Boolean))];
+        const domain = [
+            ['state', '!=', 'cancelled'],
+        ];
+        if (dateStr) {
+            domain.push(['scheduled_date', '=', dateStr]);
+        }
+        if (bookerIds.length) {
+            domain.push(['order_booker_id', 'in', bookerIds]);
+        }
+        if (routeIds.length) {
+            domain.push(['route_id', 'in', routeIds]);
+        }
+        const tasks = await this.orm.searchRead(
+            'shahtaj.visit.task',
+            domain,
+            ['order_booker_id', 'route_id', 'state'],
+            { limit: 10000 },
+        );
+        for (const task of tasks) {
+            const key = `${this._m2oId(task.order_booker_id) || 0}:${this._m2oId(task.route_id) || 0}`;
+            if (!stats[key]) {
+                stats[key] = { planned: 0, done: 0, skipped: 0 };
+            }
+            stats[key].planned += 1;
+            if (task.state === 'completed') {
+                stats[key].done += 1;
+            } else if (task.state === 'skipped') {
+                stats[key].skipped += 1;
+            }
+        }
+        return stats;
+    }
+
    async loadDropdownData() {
         try {
             const bookers = await this.orm.searchRead(
@@ -440,11 +517,13 @@ export class OperationsTracking extends Component {
             for (const user of [...bookers, ...deliveryMen]) {
                 byId.set(user.id, user);
             }
-            this.state.lookupBookers = [...byId.values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            this.state.lookupBookers = bookers.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
             this.state.lookupDeliveryMen = deliveryMen.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            this.state.lookupFieldUsers = [...byId.values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         } catch (error) {
             this.state.lookupBookers = [];
             this.state.lookupDeliveryMen = [];
+            this.state.lookupFieldUsers = [];
         }
 
         try {
@@ -660,11 +739,20 @@ export class OperationsTracking extends Component {
     canCreateInvoice(row) {
         if (!this.hasFinancialAccess || !row || row.hasPostedInvoice) return false;
         if (["Draft", "Needs Verification", "Rejected", "Cancelled"].includes(row.status)) return false;
+        if (row.orderState === "cancel") return false;
         return true;
     }
 
     canAssignDeliveryMan(row) {
-        return !!(row && row.hasPostedInvoice);
+        return !!(row && row.hasPostedInvoice && row.status !== "Cancelled" && row.orderState !== "cancel");
+    }
+
+    canCancelOrder(row) {
+        if (!row) return false;
+        if (["Cancelled", "Rejected", "Delivered", "Invoiced", "Needs Verification"].includes(row.status)) return false;
+        if (row.hasPostedInvoice || row.is_fully_delivered) return false;
+        if (["done", "cancel"].includes(row.orderState)) return false;
+        return ["draft", "sent", "sale"].includes(row.orderState) || ["Draft", "To Invoice"].includes(row.status);
     }
 
     async invoiceSaleOrder(orderId) {
@@ -727,6 +815,7 @@ export class OperationsTracking extends Component {
         }
         
         this.state.isLoadingList = true;
+        notifyPortalBusy(true);
         try {
             const pag = this.state.pagination[tab];
             const filters = this.state.filters[tab];
@@ -778,6 +867,7 @@ export class OperationsTracking extends Component {
                     else if (filters.status === 'Delivered') domain.push(['state', '=', 'done']);
                     else if (filters.status === 'To Invoice') domain.push(['state', '=', 'sale'], ['invoice_status', '!=', 'invoiced']);
                     else if (filters.status === 'Invoiced') domain.push(['invoice_status', '=', 'invoiced']);
+                    else if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
                 }
             } 
             else if (tab === 'dm_jobs') {
@@ -830,9 +920,9 @@ export class OperationsTracking extends Component {
             }
             else if (tab === 'schedules') {
                 model = 'shahtaj.weekly.schedule'; targetState = 'tableSchedules';
-                fields = ['id', 'name', 'day_of_week', 'route_id', 'zone_id', 'active', 'shop_count', 'week_tasks_planned', 'week_tasks_completed', 'week_tasks_skipped', 'week_tasks_progress', 'week_occurrence_date', 'order_booker_id'];
+                fields = ['id', 'name', 'day_of_week', 'route_id', 'zone_id', 'active', 'shop_count', 'order_booker_id'];
                 if (filters.booker !== 'all') domain.push(['order_booker_id', '=', parseInt(filters.booker)]);
-                if (filters.day !== 'all') domain.push(['day_of_week', '=', filters.day]);
+                if (filters.date) domain.push(['day_of_week', '=', this._pktWeekdayForDate(filters.date)]);
             }
             else if (tab === 'targets') {
                 model = 'shahtaj.visit.target'; targetState = 'tableTargets';
@@ -921,7 +1011,7 @@ export class OperationsTracking extends Component {
                     const visit = visitsById[this._m2oId(a.visit_id)] || null;
                     const task = tasksById[this._m2oId(a.visit_task_id)] || null;
                     const saleOrder = a.sale_order_id || (visit && visit.sale_order_id) || false;
-                    const hasOrder = Boolean(this._m2oId(saleOrder));
+                    const outcome = this._gpsCheckinOutcome(a, Boolean(this._m2oId(saleOrder)));
                     const notes = ((visit && visit.notes) || (task && task.notes) || '').trim();
                     return {
                         id: a.id,
@@ -952,8 +1042,9 @@ export class OperationsTracking extends Component {
                         visit_task_id: a.visit_task_id || false,
                         dm_delivery_id: a.dm_delivery_id || false,
                         sale_order_id: saleOrder,
-                        hasOrder,
-                        orderLabel: hasOrder ? 'Order Placed' : 'No Order',
+                        isDeliveryCheckin: outcome.isDeliveryCheckin,
+                        hasOrder: outcome.hasOrder,
+                        orderLabel: outcome.orderLabel,
                         notes,
                         endTime: '',
                         duration: distLabel,
@@ -962,13 +1053,25 @@ export class OperationsTracking extends Component {
                 });
             }
             else if (tab === 'schedules') {
+                const dateStr = filters.date || '';
+                const stats = await this._loadScheduleProgressForDate(records, dateStr);
                 const dayMap = { '0': 'Monday', '1': 'Tuesday', '2': 'Wednesday', '3': 'Thursday', '4': 'Friday', '5': 'Saturday', '6': 'Sunday' };
-                this.state.tableSchedules = records.map(r => ({
-                    id: r.id, name: r.name, bookerId: r.order_booker_id ? r.order_booker_id[0] : null, bookerName: r.order_booker_id ? r.order_booker_id[1] : 'Unknown',
-                    day_raw: r.day_of_week, day: dayMap[r.day_of_week] || r.day_of_week, route: r.route_id ? r.route_id[1] : 'Unassigned', zone: r.zone_id ? r.zone_id[1] : 'Unassigned',
-                    shops: r.shop_count, active: r.active, planned: r.week_tasks_planned, done: r.week_tasks_completed, skipped: r.week_tasks_skipped || 0,
-                    progress: r.week_tasks_progress || 0, occurrenceDate: r.week_occurrence_date || ''
-                })).sort((a, b) => this._compareSchedulesByToday(a, b, this._pktTodayWeekday()));
+                const rows = records.map(r => {
+                    const bookerId = r.order_booker_id ? r.order_booker_id[0] : null;
+                    const routeId = r.route_id ? r.route_id[0] : null;
+                    const rowStats = stats[`${bookerId || 0}:${routeId || 0}`] || { planned: 0, done: 0, skipped: 0 };
+                    const progress = rowStats.planned ? (rowStats.done / rowStats.planned * 100) : 0;
+                    return {
+                        id: r.id, name: r.name, bookerId, bookerName: r.order_booker_id ? r.order_booker_id[1] : 'Unknown',
+                        day_raw: r.day_of_week, day: dayMap[r.day_of_week] || r.day_of_week, route: r.route_id ? r.route_id[1] : 'Unassigned', zone: r.zone_id ? r.zone_id[1] : 'Unassigned',
+                        shops: r.shop_count, active: r.active, planned: rowStats.planned, done: rowStats.done, skipped: rowStats.skipped,
+                        progress, occurrenceDate: dateStr,
+                    };
+                });
+                if (!dateStr) {
+                    rows.sort((a, b) => this._compareSchedulesByToday(a, b, this._pktTodayWeekday()));
+                }
+                this.state.tableSchedules = rows;
             }
             else if (tab === 'targets') {
                 this.state.tableTargets = records.map(r => ({
@@ -997,6 +1100,7 @@ export class OperationsTracking extends Component {
             this.notification.add("Failed to fetch data: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isLoadingList = false;
+            notifyPortalBusy(false);
         }
     }
     async refreshData() {
@@ -1273,6 +1377,12 @@ export class OperationsTracking extends Component {
     }
     // --- CUSTOM DELIVERY MODAL LOGIC ---
     async openDeliveryCustom(orderId) {
+        const rows = [...this.state.tableDispatch, ...this.state.tableDeliveries, ...this.state.tableOrders];
+        const row = rows.find((r) => r.odoo_id === orderId) || this.state.selectedDelivery || this.state.selectedOrder;
+        if (row && (row.status === "Cancelled" || row.orderState === "cancel")) {
+            this.notification.add("Cancelled orders cannot be delivered.", { type: "warning" });
+            return;
+        }
         try {
             const wizardIds = await this.orm.create("shahtaj.mark.delivery.wizard", [{}], {
                 context: { active_id: orderId }
@@ -1381,9 +1491,64 @@ export class OperationsTracking extends Component {
         return map[state] || state || "—";
     }
 
+    _formatAssignQty(value) {
+        const n = Number(value) || 0;
+        return Number.isInteger(n) ? String(n) : String(parseFloat(n.toFixed(6)));
+    }
+
+    get assignAllocationSummary() {
+        const byLine = new Map();
+        for (const job of this.state.assignModal.jobs || []) {
+            for (const line of job.lines || []) {
+                const key = line.saleOrderLineId || line.id;
+                const current = byLine.get(key) || {
+                    id: key,
+                    product: line.product,
+                    qtyOrdered: Number(line.qtyOrdered) || 0,
+                    qtyAssigned: 0,
+                };
+                current.qtyAssigned += Number(line.qtyAssigned) || 0;
+                current.qtyOrdered = Number(line.qtyOrdered) || current.qtyOrdered;
+                byLine.set(key, current);
+            }
+        }
+        const rows = [...byLine.values()].map((row) => {
+            const left = row.qtyOrdered - row.qtyAssigned;
+            let status = "ok";
+            if (row.qtyAssigned > row.qtyOrdered + 1e-6) status = "over";
+            else if (left > 1e-6) status = "left";
+            return {
+                ...row,
+                left,
+                status,
+                qtyOrderedLabel: this._formatAssignQty(row.qtyOrdered),
+                qtyAssignedLabel: this._formatAssignQty(row.qtyAssigned),
+                leftLabel: this._formatAssignQty(left),
+            };
+        });
+        const over = rows.some((row) => row.status === "over");
+        const leftover = rows.some((row) => row.status === "left");
+        let message = "Fully allocated.";
+        let messageClass = "text-success";
+        let messageStrong = true;
+        if (over) {
+            message = "Over-allocated — reduce quantities.";
+            messageClass = "text-danger";
+        } else if (leftover || !rows.length) {
+            message = "Unassigned leftover stays on the sales order until you allocate it.";
+            messageClass = "text-muted";
+            messageStrong = false;
+        }
+        return { rows, message, messageClass, messageStrong };
+    }
+
     async openAssignModal(orderId) {
         const rows = [...this.state.tableDispatch, ...this.state.tableDeliveries, ...this.state.tableOrders];
         const row = rows.find((r) => r.odoo_id === orderId) || this.state.selectedDelivery;
+        if (row && (row.status === "Cancelled" || row.orderState === "cancel")) {
+            this.notification.add("Cancelled orders cannot be delivered.", { type: "warning" });
+            return;
+        }
         if (row && !this.canAssignDeliveryMan(row)) {
             this.notification.add("Invoice and post this order before assigning a delivery man.", { type: "warning" });
             return;
@@ -1409,7 +1574,7 @@ export class OperationsTracking extends Component {
         const [wiz] = await this.orm.read(
             "shahtaj.dm.assign.wizard",
             [wizardId],
-            ["sale_order_id", "partner_id", "job_ids", "allocation_html"],
+            ["sale_order_id", "partner_id", "job_ids"],
         );
         const jobs = wiz.job_ids?.length
             ? await this.orm.read(
@@ -1430,7 +1595,6 @@ export class OperationsTracking extends Component {
         this.state.assignModal.wizardId = wizardId;
         this.state.assignModal.orderName = wiz.sale_order_id ? wiz.sale_order_id[1] : "";
         this.state.assignModal.shop = wiz.partner_id ? wiz.partner_id[1] : "";
-        this.state.assignModal.allocationHtml = wiz.allocation_html || "";
         this.state.assignModal.jobs = jobs.map((j) => ({
             id: j.id,
             deliveryManId: j.delivery_man_id ? String(j.delivery_man_id[0]) : "",
@@ -1439,6 +1603,7 @@ export class OperationsTracking extends Component {
                 const l = linesById[lid] || {};
                 return {
                     id: lid,
+                    saleOrderLineId: l.sale_order_line_id ? l.sale_order_line_id[0] : lid,
                     product: l.product_id ? l.product_id[1] : "Product",
                     qtyOrdered: l.qty_ordered || 0,
                     qtyAssigned: l.qty_assigned || 0,
@@ -1662,10 +1827,10 @@ export class OperationsTracking extends Component {
             deliveries: { search: '', status: '' },
             dispatch:   { search: '' },
             dm_jobs:    { search: '', dm: 'all', date: this.todayStr, state: 'all', field_state: 'all' },
-            checkins:   { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: '', role: this.props.requestedCheckinRole || 'all' },
+            checkins:   { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
             orders:     { search: '', status: '', booker: 'all' },
             verification: { search: '', booker: 'all', reason: 'all' },
-            schedules:  { booker: 'all', day: 'all' },
+            schedules:  { booker: 'all', date: '' },
             targets:    { booker: 'all', type: 'all' },
         };
         if (defaultFilters[tabName]) {
@@ -1910,6 +2075,48 @@ export class OperationsTracking extends Component {
         }
     }
 
+    showConfirm(title, message, onConfirmCallback) {
+        this.state.confirmModal = {
+            isOpen: true,
+            title,
+            message,
+            onConfirm: async () => {
+                this.state.confirmModal.isOpen = false;
+                if (onConfirmCallback) await onConfirmCallback();
+            },
+        };
+    }
+
+    closeConfirm() {
+        this.state.confirmModal.isOpen = false;
+    }
+
+    requestCancelOrder(row) {
+        if (!this.canCancelOrder(row) || this.state.isCancellingOrder) return;
+        this.showConfirm(
+            "Cancel Order",
+            `Cancel ${row.id}? Cancelled orders cannot be invoiced or delivered.`,
+            () => this.cancelLiveOrder(row),
+        );
+    }
+
+    async cancelLiveOrder(row) {
+        if (!this.canCancelOrder(row) || this.state.isCancellingOrder) return;
+        this.state.isCancellingOrder = true;
+        try {
+            await this.orm.call("sale.order", "action_shahtaj_cancel_order", [[row.odoo_id]]);
+            this.notification.add("Order cancelled. It cannot be invoiced or delivered.", { type: "success" });
+            if (this.state.selectedOrder && this.state.selectedOrder.odoo_id === row.odoo_id) {
+                this.state.selectedOrder = null;
+            }
+            await this.fetchActiveList();
+        } catch (error) {
+            this.notification.add(error.data?.message || "Failed to cancel order.", { type: "danger" });
+        } finally {
+            this.state.isCancellingOrder = false;
+        }
+    }
+
     openRejectModal() {
         if (!this.state.selectedOrder) return;
         this.state.rejectReason = '';
@@ -2020,8 +2227,9 @@ export class OperationsTracking extends Component {
             ...log,
             notes: log.notes || '',
             sale_order_id: log.sale_order_id || false,
+            isDeliveryCheckin: !!log.isDeliveryCheckin,
             hasOrder: !!log.hasOrder,
-            orderLabel: log.orderLabel || (log.hasOrder ? 'Order Placed' : 'No Order'),
+            orderLabel: log.orderLabel || this._gpsCheckinOutcome(log, log.hasOrder).orderLabel,
             endTime: log.endTime || '',
             visitOutcome: log.orderLabel || '',
         };
@@ -2046,9 +2254,13 @@ export class OperationsTracking extends Component {
                 if (visits.length && this.state.selectedCheckin && this.state.selectedCheckin.id === log.id) {
                     const v = visits[0];
                     let visitOutcome = v.outcome || '';
+                    const isDelivery = this._gpsIsDeliveryCheckin(log);
                     if (v.state === 'in_progress') visitOutcome = 'In Progress';
                     else if (v.state === 'completed' && v.outcome === 'incomplete') visitOutcome = 'Incomplete / Auto-Skipped';
-                    else if (v.state === 'completed') visitOutcome = v.outcome === 'order' ? 'Order Placed' : 'No Order';
+                    else if (v.state === 'completed') {
+                        if (isDelivery) visitOutcome = v.outcome === 'order' ? 'Delivered' : 'No Delivery';
+                        else visitOutcome = v.outcome === 'order' ? 'Order Placed' : 'No Order';
+                    }
                     else if (v.state === 'cancelled') visitOutcome = 'Cancelled';
 
                     let durationStr = '';
@@ -2059,8 +2271,13 @@ export class OperationsTracking extends Component {
                     const visitNotes = (v.notes || '').trim();
                     if (visitNotes) this.state.selectedCheckin.notes = visitNotes;
                     this.state.selectedCheckin.sale_order_id = v.sale_order_id || this.state.selectedCheckin.sale_order_id || false;
-                    this.state.selectedCheckin.hasOrder = Boolean(this._m2oId(this.state.selectedCheckin.sale_order_id));
-                    this.state.selectedCheckin.orderLabel = this.state.selectedCheckin.hasOrder ? 'Order Placed' : 'No Order';
+                    const outcome = this._gpsCheckinOutcome(
+                        this.state.selectedCheckin,
+                        Boolean(this._m2oId(this.state.selectedCheckin.sale_order_id)),
+                    );
+                    this.state.selectedCheckin.isDeliveryCheckin = outcome.isDeliveryCheckin;
+                    this.state.selectedCheckin.hasOrder = outcome.hasOrder;
+                    this.state.selectedCheckin.orderLabel = outcome.orderLabel;
                     this.state.selectedCheckin.endTime = this.formatUtcToPkt(v.ended_at) || '';
                     this.state.selectedCheckin.visitOutcome = visitOutcome;
                     if (durationStr) {
@@ -2134,6 +2351,10 @@ export class OperationsTracking extends Component {
             return;
         }
         if (!this.state.selectedOrder || this.state.isCreatingInvoice) return;
+        if (!this.canCreateInvoice(this.state.selectedOrder)) {
+            this.notification.add("Cancelled orders cannot be invoiced.", { type: "warning" });
+            return;
+        }
         this.state.isCreatingInvoice = true;
         
         try {

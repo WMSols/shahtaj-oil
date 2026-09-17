@@ -218,6 +218,7 @@ class ShahtajDmAssignWizard(models.TransientModel):
 
     def action_confirm_assign(self):
         self.ensure_one()
+        self.sale_order_id._shahtaj_assert_not_cancelled()
         if self.sale_order_id.state not in ('sale', 'done'):
             raise UserError(_('Only confirmed sales orders can be assigned.'))
         self.sale_order_id._shahtaj_require_posted_invoice_for_dm()

@@ -4,7 +4,7 @@ import { Component, useState, onWillStart, onWillUnmount, useRef, useEffect } fr
 import { useService } from "@web/core/utils/hooks";
 import { registry } from "@web/core/registry";
 import { loadBundle, loadJS } from "@web/core/assets";
-import { hasFinancialAccess } from "../shahtaj_access";
+import { hasFinancialAccess, notifyPortalBusy, resetPortalBusy } from "../shahtaj_access";
 import { StaffManagement } from "./staff_management";
 import { OperationsTracking } from "./operations_tracking";
 import { DeliveryManPerformance } from "./delivery_man_performance";
@@ -26,9 +26,7 @@ export class ShahtajDashboard extends Component {
         this.cashChart = null;
         this._cashChartToken = 0;
         const today = new Date();
-        const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
         this.todayStr = this._formatDate(today);
-        this.tomorrowStr = this._formatDate(tomorrow);
 
         this.state = useState({
             activeTab: 'overview', // Default to the new Master Overview
@@ -36,17 +34,22 @@ export class ShahtajDashboard extends Component {
             staffRole: 'order_booker',
             deliveriesSubTab: '',
             checkinPurpose: 'all',
-            checkinRole: 'all', 
+            checkinRole: 'all',
+            checkinDate: '', 
             isSidebarOpen: false, 
             isSwitchingTab: false,
+            isSidebarLocked: false,
             isLoadingKpis: false,
             cashRangeDays: 30,
+            shopRegDate: this.todayStr,
+            opsDate: this.todayStr,
             // Master KPI State
             kpis: {
                 totalZones: 0,
                 totalRoutes: 0,
                 totalShops: 0,
                 pendingShops: 0,
+                shopsRegisteredByOb: 0,
                 totalBookers: 0,
                 onlineBookers: 0,
                 todayCheckins: 0,
@@ -93,6 +96,7 @@ export class ShahtajDashboard extends Component {
             }
             this.state.checkinPurpose = ev.detail.checkinPurpose || 'all';
             this.state.checkinRole = ev.detail.checkinRole || 'all';
+            this.state.checkinDate = ev.detail.checkinDate || '';
             this.switchTab(ev.detail.tab, ev.detail.subTab);
         });
         onWillStart(async () => {
@@ -113,7 +117,15 @@ export class ShahtajDashboard extends Component {
                 this.state.kpis.cashTrend.labels.join("|"),
             ]
         );
-        onWillUnmount(() => this.destroyCashChart());
+        this._onPortalBusy = (ev) => {
+            this.state.isSidebarLocked = Boolean(ev.detail?.busy);
+        };
+        window.addEventListener("shahtaj-portal-busy", this._onPortalBusy);
+        onWillUnmount(() => {
+            window.removeEventListener("shahtaj-portal-busy", this._onPortalBusy);
+            resetPortalBusy();
+            this.destroyCashChart();
+        });
         
     }
 
@@ -122,6 +134,28 @@ export class ShahtajDashboard extends Component {
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
+    }
+
+    /**
+     * Convert a Pakistan calendar date (YYYY-MM-DD) to Odoo UTC naive bounds.
+     * PKT day 2026-08-19 is 2026-08-18 19:00:00 UTC through 2026-08-19 18:59:59 UTC.
+     */
+    _pktDateToUtcBounds(dateStr) {
+        const start = new Date(`${dateStr}T00:00:00+05:00`);
+        const end = new Date(`${dateStr}T23:59:59+05:00`);
+        const toOdooUtc = (d) => d.toISOString().slice(0, 19).replace("T", " ");
+        return { start: toOdooUtc(start), end: toOdooUtc(end) };
+    }
+
+    _shopRegDomain(dateStr) {
+        const bounds = this._pktDateToUtcBounds(dateStr || this.todayStr);
+        return [
+            ["is_shahtaj_shop", "=", true],
+            ["registered_by_id", "!=", false],
+            ["registered_by_id.shahtaj_is_order_booker", "=", true],
+            ["create_date", ">=", bounds.start],
+            ["create_date", "<=", bounds.end],
+        ];
     }
 
     _parseDayKey(value) {
@@ -165,8 +199,8 @@ export class ShahtajDashboard extends Component {
     
     async fetchMasterKPIs() {
         this.state.isLoadingKpis = true;
-        const todayStart = `${this.todayStr} 00:00:00`;
-        const tomorrowStart = `${this.tomorrowStr} 00:00:00`;
+        notifyPortalBusy(true);
+        const opsBounds = this._pktDateToUtcBounds(this.state.opsDate || this.todayStr);
         const productBaseDomain = [
             ["sale_ok", "=", true],
             ["default_code", "!=", "SHAHTAJ-LEGACY"],
@@ -179,20 +213,25 @@ export class ShahtajDashboard extends Component {
                 this.orm.searchCount("shahtaj.route", [["active", "=", true]]),
                 this.orm.searchCount("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", true]]),
                 this.orm.searchCount("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", true], ["shop_approval_state", "=", "pending"]]),
+                this.orm.searchCount("res.partner", this._shopRegDomain(this.state.shopRegDate)),
                 this.orm.searchCount("res.users", [["shahtaj_is_order_booker", "=", true], ["active", "=", true]]),
                 this.orm.searchCount("res.users", [["shahtaj_is_order_booker", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
-                this.orm.searchCount("shahtaj.visit", [["started_at", ">=", todayStart], ["started_at", "<", tomorrowStart]]),
-                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["date_order", ">=", todayStart], ["date_order", "<", tomorrowStart]]),
-                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["state", "=", "sale"]]),
+                this.orm.searchCount("shahtaj.gps.attempt", [
+                    ["purpose", "=", "check_in"],
+                    ["create_date", ">=", opsBounds.start],
+                    ["create_date", "<=", opsBounds.end],
+                ]),
+                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]),
+                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["state", "=", "sale"], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]),
                 this.orm.searchCount("product.template", productBaseDomain),
                 this.orm.searchCount("product.template", [...productBaseDomain, ["qty_available", "<=", 0]]),
                 this.orm.searchCount("shahtaj.weekly.schedule", [["active", "=", true]]),
                 this.orm.searchCount("shahtaj.visit.target", [["active", "=", true]]),
                 this.orm.searchCount("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true]]),
                 this.orm.searchCount("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
-                this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.todayStr], ["state", "!=", "not_ready"]]),
+                this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["state", "!=", "not_ready"]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["state", "in", ["ready", "picked", "partial"]]]),
-                this.orm.searchCount("shahtaj.dm.delivery", [["field_state", "=", "in_transit"]]),
+                this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["field_state", "=", "in_transit"]]),
                 this.orm.searchCount("sale.order", [["state", "in", ["sale", "done"]], ["shahtaj_delivery_status", "in", ["pending", "partial"]]]),
             ]);
 
@@ -214,7 +253,7 @@ export class ShahtajDashboard extends Component {
             const [coreCounts, financial] = await Promise.all([coreCountsPromise, financialPromise]);
 
             const [
-                zones, routes, shops, pendingShops,
+                zones, routes, shops, pendingShops, shopsRegisteredByOb,
                 totalBookers, onlineBookers,
                 todayCheckins, todayOrders, pendingDeliveries,
                 totalProducts, outOfStockProducts,
@@ -228,6 +267,7 @@ export class ShahtajDashboard extends Component {
                 totalRoutes: routes,
                 totalShops: shops,
                 pendingShops: pendingShops,
+                shopsRegisteredByOb,
                 totalBookers,
                 onlineBookers,
                 todayCheckins,
@@ -249,6 +289,7 @@ export class ShahtajDashboard extends Component {
             console.error("Failed to fetch Master KPIs", error);
         } finally {
             this.state.isLoadingKpis = false;
+            notifyPortalBusy(false);
         }
     }
 
@@ -323,6 +364,53 @@ export class ShahtajDashboard extends Component {
         };
     }
 
+    async onOpsDateChange(ev) {
+        const dateStr = ev.target.value;
+        if (!dateStr || dateStr === this.state.opsDate) {
+            return;
+        }
+        this.state.opsDate = dateStr;
+        const opsBounds = this._pktDateToUtcBounds(dateStr);
+        try {
+            const [todayCheckins, todayOrders, pendingDeliveries, dmJobsToday, dmInTransit] = await Promise.all([
+                this.orm.searchCount("shahtaj.gps.attempt", [
+                    ["purpose", "=", "check_in"],
+                    ["create_date", ">=", opsBounds.start],
+                    ["create_date", "<=", opsBounds.end],
+                ]),
+                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]),
+                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["state", "=", "sale"], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]),
+                this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["state", "!=", "not_ready"]]),
+                this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["field_state", "=", "in_transit"]]),
+            ]);
+            Object.assign(this.state.kpis, {
+                todayCheckins,
+                todayOrders,
+                pendingDeliveries,
+                dmJobsToday,
+                dmInTransit,
+            });
+        } catch (error) {
+            console.error("Failed to fetch field activity counts", error);
+        }
+    }
+
+    async onShopRegDateChange(ev) {
+        const dateStr = ev.target.value;
+        if (!dateStr || dateStr === this.state.shopRegDate) {
+            return;
+        }
+        this.state.shopRegDate = dateStr;
+        try {
+            this.state.kpis.shopsRegisteredByOb = await this.orm.searchCount(
+                "res.partner",
+                this._shopRegDomain(dateStr),
+            );
+        } catch (error) {
+            console.error("Failed to fetch shop registration count", error);
+        }
+    }
+
     async setCashRangeDays(days) {
         if (this.state.cashRangeDays === days) {
             return;
@@ -375,14 +463,14 @@ export class ShahtajDashboard extends Component {
                     {
                         label: "Cash in",
                         data: trend.cashIn,
-                        backgroundColor: "rgba(52, 211, 153, 0.88)",
+                        backgroundColor: "rgba(250, 204, 21, 0.95)",
                         borderRadius: 4,
                         maxBarThickness: 18,
                     },
                     {
                         label: "Cash out",
                         data: trend.cashOut,
-                        backgroundColor: "rgba(251, 146, 60, 0.92)",
+                        backgroundColor: "rgba(29, 78, 216, 0.88)",
                         borderRadius: 4,
                         maxBarThickness: 18,
                     },
@@ -395,7 +483,7 @@ export class ShahtajDashboard extends Component {
                 plugins: {
                     legend: {
                         labels: {
-                            color: "#e2e8f0",
+                            color: "#1e3a8a",
                             boxWidth: 12,
                             font: { weight: "600" },
                         },
@@ -408,16 +496,16 @@ export class ShahtajDashboard extends Component {
                 },
                 scales: {
                     x: {
-                        ticks: { color: "#94a3b8", maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+                        ticks: { color: "#1e40af", maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
                         grid: { display: false },
                     },
                     y: {
                         beginAtZero: true,
                         ticks: {
-                            color: "#94a3b8",
+                            color: "#1e40af",
                             callback: (value) => this.formatMoney(value),
                         },
-                        grid: { color: "rgba(255, 255, 255, 0.08)" },
+                        grid: { color: "rgba(30, 64, 175, 0.12)" },
                     },
                 },
             },
@@ -432,6 +520,22 @@ export class ShahtajDashboard extends Component {
             weekday: "long",
             day: "numeric",
             month: "long",
+            year: "numeric",
+        });
+    }
+
+    get isOpsDateToday() {
+        return (this.state.opsDate || this.todayStr) === this.todayStr;
+    }
+
+    get opsDateLabel() {
+        if (this.isOpsDateToday) {
+            return "today";
+        }
+        const date = new Date(`${this.state.opsDate}T00:00:00`);
+        return date.toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
             year: "numeric",
         });
     }
@@ -472,17 +576,31 @@ export class ShahtajDashboard extends Component {
     }
 
     openDeliveries(subTab = 'dispatch') {
+        const forceBusy = this.state.activeTab === 'operations'
+            && this.state.activeSubTab === 'deliveries'
+            && this.state.deliveriesSubTab !== subTab;
         this.state.deliveriesSubTab = subTab;
-        this.switchTab('operations', 'deliveries');
+        this.switchTab('operations', 'deliveries', { forceBusy });
     }
 
     openCheckins() {
         this.state.checkinPurpose = 'all';
         this.state.checkinRole = 'all';
+        this.state.checkinDate = '';
+        this.switchTab('operations', 'checkins');
+    }
+
+    openTodayCheckins() {
+        this.state.checkinPurpose = 'check_in';
+        this.state.checkinRole = 'all';
+        this.state.checkinDate = this.state.opsDate || this.todayStr;
         this.switchTab('operations', 'checkins');
     }
 
     async toggleMenu(menuName, defaultSubTab = '') {
+        if (this.state.isSwitchingTab) {
+            return;
+        }
         const isCurrentlyOpen = this.state.expandedMenus[menuName];
         
         // 1. Close ALL menus first (Exclusive Accordion Logic)
@@ -499,7 +617,10 @@ export class ShahtajDashboard extends Component {
             await this.switchTab(menuName, defaultSubTab); 
         }
     }
-    async switchTab(tabName, subTabName = '') {
+    async switchTab(tabName, subTabName = '', options = {}) {
+        if (this.state.isSwitchingTab) {
+            return;
+        }
         if (tabName === 'staff' && !this.state.staffRole) {
             this.state.staffRole = 'order_booker';
         }
@@ -514,11 +635,9 @@ export class ShahtajDashboard extends Component {
             subTabName = 'management';
         }
 
-        // SMART FIX: If we are already on this main tab, don't unmount! Just change the sub-tab gracefully.
-        if (this.state.activeTab === tabName) {
-            this.state.activeSubTab = subTabName;
-            
-            // Manage accordion highlighting
+        const sameTab = this.state.activeTab === tabName;
+        const sameSub = sameTab && (this.state.activeSubTab || '') === (subTabName || '');
+        if (sameSub && !options.forceBusy) {
             for (let key in this.state.expandedMenus) {
                 this.state.expandedMenus[key] = false;
             }
@@ -526,19 +645,30 @@ export class ShahtajDashboard extends Component {
                 this.state.expandedMenus[tabName] = true;
             }
             this.state.isSidebarOpen = false;
-            return; // Exit early, no unmounting needed!
+            return;
         }
 
-        // 1. Unmount the heavy components and show the loading screen
-        this.state.isSwitchingTab = true;
-
-        // 2. Force the browser to paint the UI before locking the thread
-        await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 10)));
-
+        notifyPortalBusy(true);
         try {
+            if (sameTab) {
+                this.state.activeSubTab = subTabName;
+                for (let key in this.state.expandedMenus) {
+                    this.state.expandedMenus[key] = false;
+                }
+                if (this.state.expandedMenus[tabName] !== undefined) {
+                    this.state.expandedMenus[tabName] = true;
+                }
+                this.state.isSidebarOpen = false;
+                await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 10)));
+                return;
+            }
+
+            this.state.isSwitchingTab = true;
+            await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 10)));
+
             this.state.activeTab = tabName;
             this.state.activeSubTab = subTabName;
-            
+
             for (let key in this.state.expandedMenus) {
                 this.state.expandedMenus[key] = false;
             }
@@ -547,18 +677,20 @@ export class ShahtajDashboard extends Component {
             }
             this.state.isSidebarOpen = false;
 
-            // 3. Yield once more so Owl can begin mounting the new component
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise((resolve) => setTimeout(resolve, 10));
 
             if (tabName === 'overview') {
                 await this.fetchMasterKPIs();
             }
         } finally {
-            // 4. Remove the loading screen
             this.state.isSwitchingTab = false;
+            resetPortalBusy();
         }
     }
     toggleSidebar() {
+        if (this.state.isSwitchingTab) {
+            return;
+        }
         this.state.isSidebarOpen = !this.state.isSidebarOpen;
     }
 }
