@@ -350,7 +350,44 @@
                                     <button t-on-click="() => this.switchTab('operations', 'orders')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'operations' and this.state.activeSubTab === 'orders' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Live Orders</button>
                                     <button t-on-click="() => this.switchTab('operations', 'performance')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'operations' and this.state.activeSubTab === 'performance' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Bookers Performance</button>
                                     <button t-on-click="() => this.switchTab('operations', 'dm_performance')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'operations' and this.state.activeSubTab === 'dm_performance' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Delivery Men Performance</button>
-                                    <button t-on-click="() => this.openDeliveries('dispatch')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'operations' and this.state.activeSubTab === 'deliveries' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Pending Deliveries</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <button t-on-click="() => this.toggleDeliveryManMenu()" class="list-group-item list-group-item-action border-0 rounded text-start d-flex align-items-center justify-content-between transition-all w-100" t-att-style="this.state.expandedMenus.deliveryMan ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
+                            <div class="d-flex align-items-center">
+                                <span class="me-3 d-flex align-items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-truck">
+                                        <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+                                        <path d="M15 18H9"/>
+                                        <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/>
+                                        <circle cx="17" cy="18" r="2"/>
+                                        <circle cx="7" cy="18" r="2"/>
+                                    </svg>
+                                </span>
+                                Delivery Man
+                            </div>
+                            <span class="d-flex align-items-center transition-all" t-att-style="this.state.expandedMenus.deliveryMan ? 'transform: rotate(180deg);' : ''">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down">
+                                    <path d="m6 9 6 6 6-6"/>
+                                </svg>
+                            </span>
+                        </button>
+                        <div t-attf-class="smooth-accordion #{this.state.expandedMenus.deliveryMan ? 'open' : ''}">
+                            <div class="smooth-accordion-inner">
+                                <div class="d-flex flex-column ps-4 mt-1 pe-2 gap-1 border-start ms-3 border-2 border-light mb-1">
+                                    <button t-on-click="() => this.openDeliveryManOverview()" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.dmNavStyle('overview')">Overview</button>
+                                    <button t-on-click="() => this.openCreateDeliveryMan()" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.dmNavStyle('create')">Create Delivery Man</button>
+                                    <button t-on-click="() => this.openDeliveries('dispatch')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.dmNavStyle('dispatch')">Dispatch Orders</button>
+                                    <button t-on-click="() => this.openDeliveries('jobs')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.dmNavStyle('jobs')">Delivery Jobs</button>
+                                    <button t-on-click="() => this.openDeliveries('all_jobs')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.dmNavStyle('all_jobs')">All Delivery Orders</button>
+                                    <button t-on-click="() => this.openDmVisitProgress()" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.dmNavStyle('visit')">DM Visit Tasks Progress</button>
+                                    <button t-on-click="() => this.openDmPerformance('sessions')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.dmNavStyle('sessions')">DM Day Sessions</button>
+                                    <button t-if="this.hasFinancialAccess" t-on-click="() => this.openDmPerformance('collections')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.dmNavStyle('collections')">DM Wallet Collections</button>
+                                    <button t-if="this.hasFinancialAccess" t-on-click="() => this.openDmPerformance('collections', true)" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.dmNavStyle('settle')">Settle DM Wallet</button>
+                                    <button t-if="this.hasFinancialAccess" t-on-click="() => this.openDmPerformance('settlements')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.dmNavStyle('settlements')">DM Wallet Settlements</button>
                                 </div>
                             </div>
                         </div>
@@ -427,7 +464,7 @@
                         </div>
                     </div>
                     <hr class="my-2"/>
-                    <button t-on-click="() => this.switchTab('staff')" class="list-group-item list-group-item-action border-0 rounded mb-2 text-start d-flex align-items-center transition-all" t-att-style="this.state.activeTab === 'staff' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
+                    <button t-on-click="() => this.openStaff(this.state.staffRole || 'order_booker')" class="list-group-item list-group-item-action border-0 rounded mb-2 text-start d-flex align-items-center transition-all" t-att-style="this.state.activeTab === 'staff' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
                         <span class="me-3 d-flex align-items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-users">
                                 <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
@@ -667,10 +704,28 @@
                                                     <div class="so-ov-metric-value" t-esc="this.state.kpis.pendingDeliveries"/>
                                                 </div>
                                             </div>
-                                            <div class="col-6 col-sm-6">
+                                            <div class="col-6 col-sm-4">
                                                 <div class="so-ov-metric" t-on-click="() => this.openDeliveries('jobs')">
-                                                    <div class="so-ov-metric-label">Jobs</div>
+                                                    <div class="so-ov-metric-label">Jobs today</div>
                                                     <div class="so-ov-metric-value" t-esc="this.state.kpis.dmJobsToday"/>
+                                                </div>
+                                            </div>
+                                            <div class="col-6 col-sm-4">
+                                                <div t-attf-class="so-ov-metric #{this.state.kpis.dmJobsActive > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openDeliveries('jobs')">
+                                                    <div class="so-ov-metric-label">Active jobs</div>
+                                                    <div class="so-ov-metric-value" t-esc="this.state.kpis.dmJobsActive"/>
+                                                </div>
+                                            </div>
+                                            <div class="col-6 col-sm-4">
+                                                <div t-attf-class="so-ov-metric #{this.state.kpis.ordersToDispatch > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openDeliveries('dispatch')">
+                                                    <div class="so-ov-metric-label">To dispatch</div>
+                                                    <div class="so-ov-metric-value" t-esc="this.state.kpis.ordersToDispatch"/>
+                                                </div>
+                                            </div>
+                                            <div class="col-6 col-sm-6">
+                                                <div t-attf-class="so-ov-metric #{this.state.kpis.dmStopsPending > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openDeliveries('jobs')">
+                                                    <div class="so-ov-metric-label">Stops pending</div>
+                                                    <div class="so-ov-metric-value" t-esc="this.state.kpis.dmStopsPending"/>
                                                 </div>
                                             </div>
                                             <div class="col-6 col-sm-6">
@@ -947,7 +1002,7 @@
                     </div>
 
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'operations' and this.state.activeSubTab === 'dm_performance'" class="h-100">
-                        <DeliveryManPerformance />
+                        <DeliveryManPerformance requestedPerfSubTab="this.state.perfSubTab" requestedOpenSettle="this.state.openSettleWallet" />
                     </div>
 
                     <div t-if="!this.state.isSwitchingTab and this.hasFinancialAccess and this.state.activeTab === 'financials'" class="h-100">
@@ -955,7 +1010,7 @@
                     </div>
 
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'staff'" class="h-100">
-                        <StaffManagement requestedStaffRole="this.state.staffRole" />
+                        <StaffManagement requestedStaffRole="this.state.staffRole" requestedShowCreate="this.state.staffShowCreate" />
                     </div>
 
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'schedules'" class="h-100">

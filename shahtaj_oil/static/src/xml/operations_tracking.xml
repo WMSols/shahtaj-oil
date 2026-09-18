@@ -27,7 +27,7 @@
 
 
             <!-- ========================================== -->
-            <!-- PENDING DELIVERIES SUBTAB                  -->
+            <!-- DISPATCH / DELIVERY JOBS                    -->
             <!-- ========================================== -->
             <t t-if="this.state.activeSubTab === 'deliveries'">
 
@@ -35,10 +35,13 @@
                     <div class="px-3 pt-3 border-bottom bg-white">
                         <ul class="nav nav-pills gap-2 mb-3">
                             <li class="nav-item">
-                                <button t-on-click="() => this.setDeliveriesSubTab('dispatch')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.deliveriesSubTab === 'dispatch' ? 'active bg-dark text-white' : 'text-muted bg-light'}">To Dispatch</button>
+                                <button t-on-click="() => this.setDeliveriesSubTab('dispatch')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.deliveriesSubTab === 'dispatch' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Dispatch Orders</button>
                             </li>
                             <li class="nav-item">
                                 <button t-on-click="() => this.setDeliveriesSubTab('jobs')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.deliveriesSubTab === 'jobs' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Delivery Jobs</button>
+                            </li>
+                            <li class="nav-item">
+                                <button t-on-click="() => this.setDeliveriesSubTab('all_jobs')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.deliveriesSubTab === 'all_jobs' ? 'active bg-dark text-white' : 'text-muted bg-light'}">All Delivery Orders</button>
                             </li>
                             <li class="nav-item">
                                 <button t-on-click="() => this.setDeliveriesSubTab('manual')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.deliveriesSubTab === 'manual' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Manual</button>
@@ -51,24 +54,105 @@
                     <div class="p-4">
                         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                             <button class="btn btn-sm btn-light border fw-bold" t-on-click="closeDmJob">← Back to Jobs</button>
-                            <div class="d-flex gap-2">
+                            <div class="d-flex flex-wrap gap-2">
                                 <button t-if="this.canPickJob(this.state.selectedDmJob)" class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openPickModal(this.state.selectedDmJob.id)">Pick Stock</button>
-                                <button t-if="this.canResetField(this.state.selectedDmJob)" class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.resetDmJobField(this.state.selectedDmJob.id)">Reset Pending</button>
-                                <button t-if="this.canReturnWarehouse(this.state.selectedDmJob)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.returnDmJobWarehouse(this.state.selectedDmJob.id)">Return to WH</button>
+                                <button t-if="this.canCollectJob(this.state.selectedDmJob)" class="btn btn-sm btn-outline-primary fw-bold" t-on-click="() => this.openCollectFromJob(this.state.selectedDmJob)">Collect Payment</button>
+                                <button t-if="this.canResetField(this.state.selectedDmJob)" class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.resetDmJobField(this.state.selectedDmJob.id)">Reset Stop</button>
+                                <button t-if="this.canReturnWarehouse(this.state.selectedDmJob)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.returnDmJobWarehouse(this.state.selectedDmJob.id)">Return WH</button>
+                                <button t-if="this.state.selectedDmJob.orderId" class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.viewSaleOrderFromJob(this.state.selectedDmJob)">View SO</button>
                             </div>
                         </div>
                         <h4 class="fw-bold"><t t-esc="this.state.selectedDmJob.name"/></h4>
-                        <div class="text-muted mb-3">
-                            <t t-esc="this.state.selectedDmJob.shop"/> · <t t-esc="this.state.selectedDmJob.dm"/> · <t t-esc="this.state.selectedDmJob.order"/>
-                        </div>
-                        <div class="d-flex gap-2 mb-3">
+                        <div class="d-flex flex-wrap gap-2 mb-4">
                             <span class="badge bg-light text-dark"><t t-esc="this.stockStateLabel(this.state.selectedDmJob.state)"/></span>
                             <span class="badge bg-secondary text-dark"><t t-esc="this.fieldStateLabel(this.state.selectedDmJob.fieldState)"/></span>
+                            <span t-if="this.state.selectedDmJob.isSplit" class="badge bg-info text-white">Split</span>
+                            <span t-if="this.state.selectedDmJob.gpsVerified" class="badge bg-success text-white">GPS verified</span>
                         </div>
-                        <div class="table-responsive">
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-12 col-lg-6">
+                                <div class="card border-0 bg-light p-3 h-100">
+                                    <h6 class="fw-bold text-uppercase small text-muted mb-3">Order</h6>
+                                    <div class="small"><span class="text-muted">SO:</span> <span class="fw-bold"><t t-esc="this.state.selectedDmJob.order"/></span></div>
+                                    <div class="small"><span class="text-muted">Shop:</span> <span class="fw-bold"><t t-esc="this.state.selectedDmJob.shop"/></span></div>
+                                    <div class="small"><span class="text-muted">Booker:</span> <span class="fw-bold"><t t-esc="this.state.selectedDmJob.booker"/></span></div>
+                                    <div class="small"><span class="text-muted">Order date:</span> <span class="fw-bold"><t t-esc="this.state.selectedDmJob.orderDate"/></span></div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-lg-6">
+                                <div class="card border-0 bg-light p-3 h-100">
+                                    <h6 class="fw-bold text-uppercase small text-muted mb-3">Delivery</h6>
+                                    <div class="small"><span class="text-muted">DM:</span> <span class="fw-bold"><t t-esc="this.state.selectedDmJob.dm"/></span></div>
+                                    <div class="small"><span class="text-muted">Scheduled:</span> <span class="fw-bold"><t t-esc="this.state.selectedDmJob.date"/> <t t-esc="this.state.selectedDmJob.scheduledTime"/></span></div>
+                                    <div class="small"><span class="text-muted">Picked / Delivered:</span> <span class="fw-bold"><t t-esc="this.state.selectedDmJob.pickedAt"/> / <t t-esc="this.state.selectedDmJob.deliveredAt"/></span></div>
+                                    <div class="small"><span class="text-muted">Assignment:</span> <span class="fw-bold"><t t-esc="this.assignmentModeLabel(this.state.selectedDmJob.assignmentMode)"/></span> · <t t-esc="this.state.selectedDmJob.assignedBy"/></div>
+                                    <div class="small" t-if="this.hasFinancialAccess"><span class="text-muted">Amount:</span> <span class="fw-bold">Rs. <t t-esc="this.formatMoney(this.state.selectedDmJob.amountTotal)"/></span></div>
+                                    <div class="small"><span class="text-muted">Assigned qty:</span> <span class="fw-bold"><t t-esc="this.state.selectedDmJob.qtyAssigned"/></span></div>
+                                    <div class="small"><span class="text-muted">Invoice:</span> <span class="fw-bold"><t t-esc="this.invoiceStatusLabel(this.state.selectedDmJob.invoiceStatus)"/></span></div>
+                                    <div class="small"><span class="text-muted">Van:</span> <span class="fw-bold"><t t-esc="this.state.selectedDmJob.vanLocation"/></span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div t-if="this.hasFinancialAccess" class="card border-0 bg-light p-3 mb-4">
+                            <h6 class="fw-bold text-uppercase small text-muted mb-3">Shop balance</h6>
+                            <div class="row g-2 small mb-3">
+                                <div class="col-6 col-md-3"><span class="text-muted d-block">Category</span><span class="fw-bold"><t t-esc="this.state.selectedDmJob.shopCategory"/></span></div>
+                                <div class="col-6 col-md-3"><span class="text-muted d-block">Outstanding</span><span class="fw-bold">Rs. <t t-esc="this.formatMoney(this.state.selectedDmJob.shopDue)"/></span></div>
+                                <div class="col-6 col-md-3"><span class="text-muted d-block">Unpaid invoices</span><span class="fw-bold">Rs. <t t-esc="this.formatMoney(this.state.selectedDmJob.unpaidInvoiceAmount)"/> · <t t-esc="this.state.selectedDmJob.unpaidInvoiceCount"/></span></div>
+                                <div class="col-6 col-md-3"><span class="text-muted d-block">Credit limit</span><span class="fw-bold">Rs. <t t-esc="this.formatMoney(this.state.selectedDmJob.creditLimit)"/></span></div>
+                            </div>
+                            <div t-if="this.state.selectedDmJob.shopInvoicesHtml" class="bg-white rounded-3 p-2 small" t-out="this.htmlOut(this.state.selectedDmJob.shopInvoicesHtml)"/>
+                            <t t-if="!this.state.selectedDmJob.shopInvoicesHtml and this.state.selectedDmJob.invoices.length">
+                                <div class="table-responsive">
+                                    <table class="table table-sm mb-0">
+                                        <thead><tr><th>Invoice</th><th>Date</th><th class="text-end">Total</th><th class="text-end">Remaining</th><th>Payment</th></tr></thead>
+                                        <tbody>
+                                            <t t-foreach="this.state.selectedDmJob.invoices" t-as="inv" t-key="inv.id">
+                                                <tr>
+                                                    <td><t t-esc="inv.name"/></td>
+                                                    <td><t t-esc="inv.date"/></td>
+                                                    <td class="text-end"><t t-esc="this.formatMoney(inv.total)"/></td>
+                                                    <td class="text-end"><t t-esc="this.formatMoney(inv.residual)"/></td>
+                                                    <td><t t-esc="inv.paymentState"/></td>
+                                                </tr>
+                                            </t>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </t>
+                        </div>
+
+                        <div t-if="this.state.selectedDmJob.gpsVerified" class="card border-0 bg-light p-3 mb-4">
+                            <h6 class="fw-bold text-uppercase small text-muted mb-3">Last GPS deliver</h6>
+                            <div class="row g-2 small">
+                                <div class="col-6 col-md-3"><span class="text-muted d-block">Distance</span><span class="fw-bold"><t t-esc="this.state.selectedDmJob.gpsDistance"/> m</span></div>
+                                <div class="col-6 col-md-3"><span class="text-muted d-block">Receiver</span><span class="fw-bold"><t t-esc="this.state.selectedDmJob.receiverName"/></span></div>
+                                <div class="col-12 col-md-6"><span class="text-muted d-block">Coords</span><span class="fw-bold"><t t-esc="this.state.selectedDmJob.gpsLat"/>, <t t-esc="this.state.selectedDmJob.gpsLng"/></span></div>
+                            </div>
+                            <img t-if="this.state.selectedDmJob.proofImage" class="img-fluid rounded mt-3" style="max-height: 180px;" t-att-src="'data:image/jpeg;base64,' + this.state.selectedDmJob.proofImage"/>
+                        </div>
+
+                        <div t-if="this.state.selectedDmJob.notes" class="card border-0 bg-light p-3 mb-4">
+                            <h6 class="fw-bold text-uppercase small text-muted mb-2">Notes</h6>
+                            <div class="small" style="white-space: pre-wrap;"><t t-esc="this.state.selectedDmJob.notes"/></div>
+                        </div>
+
+                        <h6 class="fw-bold text-uppercase small text-muted mb-2">Products</h6>
+                        <div class="table-responsive mb-4">
                             <table class="table table-sm align-middle">
                                 <thead class="bg-light small text-muted text-uppercase">
-                                    <tr><th>Product</th><th class="text-end">Ordered</th><th class="text-end">Assigned</th><th class="text-end">Picked</th><th class="text-end">Delivered</th></tr>
+                                    <tr>
+                                        <th>Product</th>
+                                        <th class="text-end">SO Ordered</th>
+                                        <th class="text-end">Assigned</th>
+                                        <th class="text-end">To Pick</th>
+                                        <th class="text-end">Picked</th>
+                                        <th class="text-end">Delivered</th>
+                                        <th class="text-end">On van</th>
+                                        <th>UoM</th>
+                                    </tr>
                                 </thead>
                                 <tbody>
                                     <t t-foreach="this.state.selectedDmJob.lines" t-as="line" t-key="line.id">
@@ -76,12 +160,28 @@
                                             <td><t t-esc="line.product"/></td>
                                             <td class="text-end"><t t-esc="line.qtyOrdered"/></td>
                                             <td class="text-end"><t t-esc="line.qtyAssigned"/></td>
+                                            <td class="text-end"><t t-esc="line.qtyToPick"/></td>
                                             <td class="text-end"><t t-esc="line.qtyPicked"/></td>
                                             <td class="text-end"><t t-esc="line.qtyDelivered"/></td>
+                                            <td class="text-end"><t t-esc="line.qtyOnVan"/></td>
+                                            <td><t t-esc="line.uom"/></td>
                                         </tr>
                                     </t>
                                 </tbody>
                             </table>
+                        </div>
+
+                        <div class="card border-0 bg-light p-3 mb-4">
+                            <h6 class="fw-bold text-uppercase small text-muted mb-2">Van stock</h6>
+                            <div t-if="this.state.selectedDmJob.vanStockHtml" class="bg-white rounded-3 p-2 small" t-out="this.htmlOut(this.state.selectedDmJob.vanStockHtml)"/>
+                            <p t-else="" class="small text-muted mb-0">No van stock snapshot for this job.</p>
+                        </div>
+
+                        <h6 class="fw-bold text-uppercase small text-muted mb-2">Linked pickings</h6>
+                        <div class="small">
+                            <div><span class="text-muted">Pick:</span> <span class="fw-bold"><t t-esc="this.state.selectedDmJob.pickPicking"/></span></div>
+                            <div><span class="text-muted">Delivery:</span> <span class="fw-bold"><t t-esc="this.state.selectedDmJob.deliveryPicking"/></span></div>
+                            <div><span class="text-muted">Return:</span> <span class="fw-bold"><t t-esc="this.state.selectedDmJob.returnPicking"/></span></div>
                         </div>
                     </div>
                 </t>
@@ -107,6 +207,11 @@
                                     <tr>
                                         <th class="ps-4 border-top-0">Order</th>
                                         <th class="border-top-0">Shop &amp; Booker</th>
+                                        <th class="border-top-0">Date</th>
+                                        <th t-if="this.hasFinancialAccess" class="border-top-0 text-end">Amount</th>
+                                        <th class="border-top-0">Delivery</th>
+                                        <th class="border-top-0">Assigned DM</th>
+                                        <th class="border-top-0">Planned day</th>
                                         <th class="border-top-0">Left</th>
                                         <th class="border-top-0">Invoice</th>
                                         <th class="border-top-0">DM Jobs</th>
@@ -115,7 +220,7 @@
                                 </thead>
                                 <tbody>
                                     <t t-if="this.state.tableDispatch.length === 0 and !this.state.isLoadingList">
-                                        <tr><td colspan="6" class="text-center py-5 text-muted fw-bold">No orders waiting to dispatch.</td></tr>
+                                        <tr><td colspan="11" class="text-center py-5 text-muted fw-bold">No orders waiting to dispatch.</td></tr>
                                     </t>
                                     <t t-foreach="this.state.tableDispatch" t-as="row" t-key="row.odoo_id">
                                         <tr>
@@ -124,13 +229,20 @@
                                                 <div class="fw-bold"><t t-esc="row.shop"/></div>
                                                 <small class="text-muted"><t t-esc="row.booker"/></small>
                                             </td>
+                                            <td class="text-nowrap"><t t-esc="row.date"/></td>
+                                            <td t-if="this.hasFinancialAccess" class="text-end text-nowrap">Rs. <t t-esc="this.formatMoney(row.rawAmount)"/></td>
+                                            <td>
+                                                <span t-attf-class="badge #{this.deliveryStatusBadgeClass(row.deliveryStatus)}"><t t-esc="this.deliveryStatusLabel(row.deliveryStatus)"/></span>
+                                            </td>
+                                            <td><t t-esc="row.assignedDm || '—'"/></td>
+                                            <td class="text-nowrap"><t t-esc="row.plannedDay || '—'"/></td>
                                             <td><t t-esc="row.qtyToDeliver"/></td>
                                             <td>
                                                 <span t-if="row.hasPostedInvoice" class="badge bg-success text-white">Posted</span>
                                                 <span t-else="" class="badge bg-warning text-dark">Invoice first</span>
                                             </td>
                                             <td><t t-esc="row.dmJobCount"/></td>
-                                            <td class="text-end pe-4">
+                                            <td class="text-end pe-4 text-nowrap">
                                                 <button t-if="this.canCreateInvoice(row)" class="btn btn-sm btn-success text-white fw-bold me-1" t-on-click="() => this.createInvoiceFromDispatch(row)" t-att-disabled="this.state.isCreatingInvoice">Invoice</button>
                                                 <button t-if="this.canAssignDeliveryMan(row)" class="btn btn-sm btn-dark text-white fw-bold me-1" t-on-click="() => this.openAssignModal(row.odoo_id)">Assign / Split</button>
                                                 <button t-if="!row.dmJobCount and row.hasPostedInvoice and row.status !== 'Cancelled'" class="btn btn-sm btn-outline-primary fw-bold me-1" t-on-click="() => this.openDeliveryCustom(row.odoo_id)">Mark Delivery</button>
@@ -156,7 +268,7 @@
                     </div>
                 </t>
 
-                <t t-if="!this.state.selectedDelivery and !this.state.selectedDmJob and this.state.deliveriesSubTab === 'jobs'">
+                <t t-if="!this.state.selectedDelivery and !this.state.selectedDmJob and (this.state.deliveriesSubTab === 'jobs' or this.state.deliveriesSubTab === 'all_jobs')">
                     <div class="p-3 bg-light border-bottom d-flex flex-wrap gap-2">
                         <div class="input-group input-group-sm shadow-sm" style="max-width: 240px;">
                             <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
@@ -199,31 +311,45 @@
                             <table class="table table-hover mb-0 align-middle">
                                 <thead class="bg-light text-uppercase small fw-bold text-muted">
                                     <tr>
-                                        <th class="ps-4 border-top-0">Job</th>
-                                        <th class="border-top-0">DM / Shop</th>
-                                        <th class="border-top-0">Date</th>
+                                        <th class="ps-4 border-top-0">Day</th>
+                                        <th class="border-top-0">Order / Shop</th>
+                                        <th class="border-top-0">Booker</th>
+                                        <th class="border-top-0">DM</th>
+                                        <th class="border-top-0">Mode</th>
+                                        <th t-if="this.hasFinancialAccess" class="border-top-0 text-end">Amount</th>
+                                        <th t-if="this.hasFinancialAccess" class="border-top-0 text-end">Shop Due</th>
+                                        <th class="border-top-0 text-end">Assigned</th>
                                         <th class="border-top-0">Stock</th>
-                                        <th class="border-top-0">Field</th>
+                                        <th class="border-top-0">Stop</th>
                                         <th class="text-end pe-4 border-top-0">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <t t-if="this.state.tableDmJobs.length === 0 and !this.state.isLoadingList">
-                                        <tr><td colspan="6" class="text-center py-5 text-muted fw-bold">No delivery jobs for these filters.</td></tr>
+                                        <tr><td colspan="11" class="text-center py-5 text-muted fw-bold">No delivery jobs for these filters.</td></tr>
                                     </t>
                                     <t t-foreach="this.state.tableDmJobs" t-as="job" t-key="job.id">
                                         <tr>
-                                            <td class="ps-4 fw-bold"><t t-esc="job.name"/></td>
+                                            <td class="ps-4 text-nowrap"><t t-esc="job.date"/></td>
                                             <td>
-                                                <div class="fw-bold"><t t-esc="job.dm"/></div>
-                                                <small class="text-muted"><t t-esc="job.shop"/> · <t t-esc="job.order"/></small>
+                                                <div class="fw-bold"><t t-esc="job.order"/></div>
+                                                <small class="text-muted"><t t-esc="job.shop"/></small>
+                                                <span t-if="job.isSplit" class="badge bg-info text-white ms-1">Split</span>
                                             </td>
-                                            <td><t t-esc="job.date"/></td>
+                                            <td><t t-esc="job.booker"/></td>
+                                            <td><t t-esc="job.dm"/></td>
+                                            <td><t t-esc="this.assignmentModeLabel(job.assignmentMode)"/></td>
+                                            <td t-if="this.hasFinancialAccess" class="text-end text-nowrap">Rs. <t t-esc="this.formatMoney(job.amountTotal)"/></td>
+                                            <td t-if="this.hasFinancialAccess" class="text-end text-nowrap">Rs. <t t-esc="this.formatMoney(job.shopDue)"/></td>
+                                            <td class="text-end"><t t-esc="job.qtyAssigned"/></td>
                                             <td><span class="badge bg-light text-dark"><t t-esc="this.stockStateLabel(job.state)"/></span></td>
                                             <td><span class="badge bg-secondary text-dark"><t t-esc="this.fieldStateLabel(job.fieldState)"/></span></td>
-                                            <td class="text-end pe-4">
+                                            <td class="text-end pe-4 text-nowrap">
                                                 <button class="btn btn-sm btn-outline-dark fw-bold me-1" t-on-click="() => this.viewDmJob(job)">View</button>
-                                                <button t-if="this.canResetField(job)" class="btn btn-sm btn-outline-secondary fw-bold me-1" t-on-click="() => this.resetDmJobField(job.id)">Reset</button>
+                                                <button t-if="this.canPickJob(job)" class="btn btn-sm btn-dark text-white fw-bold me-1" t-on-click="() => this.openPickModal(job.id)">Pick</button>
+                                                <button t-if="this.canCollectJob(job)" class="btn btn-sm btn-outline-primary fw-bold me-1" t-on-click="() => this.openCollectFromJob(job)">Collect</button>
+                                                <button t-if="this.hasFinancialAccess" class="btn btn-sm btn-outline-secondary fw-bold me-1" t-on-click="() => this.viewDmJob(job)">Shop Due</button>
+                                                <button t-if="this.canResetField(job)" class="btn btn-sm btn-outline-secondary fw-bold me-1" t-on-click="() => this.resetDmJobField(job.id)">Reset Stop</button>
                                                 <button t-if="this.canReturnWarehouse(job)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.returnDmJobWarehouse(job.id)">Return WH</button>
                                             </td>
                                         </tr>
@@ -687,7 +813,250 @@
                 </div>
             </t>
 
+            <t t-if="this.state.collectModal.open">
+                <div class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background: rgba(15, 23, 42, 0.6); z-index: 1056;">
+                    <div class="card border-0 shadow-lg rounded-4" style="width: 100%; max-width: 720px; max-height: 90vh; overflow: auto;">
+                        <div class="p-4 border-bottom d-flex justify-content-between align-items-start">
+                            <div>
+                                <h5 class="fw-bold mb-0">Collect shop payment</h5>
+                                <small class="text-muted"><t t-esc="this.state.collectModal.shop"/> · <t t-esc="this.state.collectModal.dmName"/></small>
+                            </div>
+                            <button class="btn btn-sm btn-light" t-on-click="closeCollectModal">Close</button>
+                        </div>
+                        <div class="p-4">
+                            <div class="d-flex justify-content-between small text-muted mb-3">
+                                <span>Wallet: Rs. <t t-esc="this.formatMoney(this.state.collectModal.walletBalance)"/></span>
+                                <span>Outstanding: Rs. <t t-esc="this.formatMoney(this.state.collectModal.shopOutstanding)"/></span>
+                            </div>
+                            <t t-if="this.state.collectModal.lines.length">
+                                <div class="table-responsive mb-2">
+                                    <table class="table table-sm">
+                                        <thead><tr><th>Invoice</th><th class="text-end">Remaining</th><th class="text-end">Collect</th></tr></thead>
+                                        <tbody>
+                                            <t t-foreach="this.state.collectModal.lines" t-as="cline" t-key="cline.id">
+                                                <tr>
+                                                    <td><t t-esc="cline.move"/></td>
+                                                    <td class="text-end"><t t-esc="this.formatMoney(cline.residual)"/></td>
+                                                    <td class="text-end" style="max-width: 120px;">
+                                                        <input type="number" class="form-control form-control-sm text-end" t-model.number="cline.amount" min="0"/>
+                                                    </td>
+                                                </tr>
+                                            </t>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary mb-3" t-on-click="fillCollectResiduals">Fill remaining</button>
+                            </t>
+                            <label class="small fw-bold">Payment method</label>
+                            <select class="form-select mb-3" t-model="this.state.collectModal.paymentMethod">
+                                <option value="cash">Cash</option>
+                                <option value="cheque">Cheque</option>
+                            </select>
+                            <t t-if="this.state.collectModal.paymentMethod === 'cheque'">
+                                <label class="small fw-bold">Cheque number</label>
+                                <input type="text" class="form-control mb-3" t-model="this.state.collectModal.chequeNumber"/>
+                                <label class="small fw-bold">Cheque photo</label>
+                                <input type="file" class="form-control mb-3" accept="image/*" t-on-change="onCollectChequeImage"/>
+                            </t>
+                            <label class="small fw-bold">Notes</label>
+                            <textarea class="form-control mb-3" rows="2" t-model="this.state.collectModal.notes"/>
+                            <div class="text-end">
+                                <button class="btn btn-dark text-white fw-bold" t-on-click="confirmCollectFromJob" t-att-disabled="this.state.collectModal.saving or !this.state.collectModal.wizardId">Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
 
+
+        </t>
+
+        <!-- DM Visit Tasks Progress (distributor visit hub) -->
+        <t t-if="this.state.activeSubTab === 'dm_visit_progress'">
+            <t t-if="!this.state.selectedDmVisit">
+                <div class="p-3 bg-light border-bottom">
+                    <div class="input-group input-group-sm w-50 shadow-sm">
+                        <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0" placeholder="Search delivery man..."
+                               t-att-value="this.state.filters.dm_visit_progress.search"
+                               t-on-input="(ev) => this.onSearchInput(ev, 'dm_visit_progress')"/>
+                    </div>
+                </div>
+                <div class="position-relative">
+                    <t t-if="this.state.isLoadingList">
+                        <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;">
+                            <div class="spinner-border text-primary" role="status"></div>
+                        </div>
+                    </t>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                <tr>
+                                    <th class="ps-4 border-top-0">Delivery man</th>
+                                    <th class="border-top-0">Login</th>
+                                    <th class="border-top-0">Code</th>
+                                    <th class="text-center border-top-0">Today done</th>
+                                    <th class="text-center border-top-0">Today pending</th>
+                                    <th class="text-center border-top-0">Today total</th>
+                                    <th class="text-center border-top-0">Week %</th>
+                                    <th class="text-center border-top-0">Week done</th>
+                                    <th class="border-top-0">Online</th>
+                                    <th class="border-top-0">Last seen</th>
+                                    <th class="text-end pe-4 border-top-0">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-if="this.state.tableDmVisitProgress.length === 0 and !this.state.isLoadingList">
+                                    <tr><td colspan="11" class="text-center py-5 text-muted fw-bold">No delivery men found.</td></tr>
+                                </t>
+                                <t t-foreach="this.state.tableDmVisitProgress" t-as="row" t-key="row.id">
+                                    <tr>
+                                        <td class="ps-4 fw-bold"><t t-esc="row.name"/></td>
+                                        <td><t t-esc="row.login"/></td>
+                                        <td><t t-esc="row.code"/></td>
+                                        <td class="text-center"><t t-esc="row.todayDone"/></td>
+                                        <td class="text-center"><t t-esc="row.todayPending"/></td>
+                                        <td class="text-center"><t t-esc="row.todayTotal"/></td>
+                                        <td class="text-center"><t t-esc="row.weekPct"/>%</td>
+                                        <td class="text-center"><t t-esc="row.weekDone"/> / <t t-esc="row.weekTotal"/></td>
+                                        <td><span class="badge bg-light text-dark"><t t-esc="this.onlineStatusLabel(row.online)"/></span></td>
+                                        <td class="small"><t t-esc="row.lastSeen"/></td>
+                                        <td class="text-end pe-4">
+                                            <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewDmVisitProgress(row)">View</button>
+                                        </td>
+                                    </tr>
+                                </t>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                        <small class="text-muted fw-bold">
+                            Showing <t t-esc="this.state.pagination.dm_visit_progress.total === 0 ? 0 : ((this.state.pagination.dm_visit_progress.page - 1) * this.state.pagination.dm_visit_progress.limit) + 1"/>
+                            to <t t-esc="Math.min(this.state.pagination.dm_visit_progress.page * this.state.pagination.dm_visit_progress.limit, this.state.pagination.dm_visit_progress.total)"/>
+                            of <t t-esc="this.state.pagination.dm_visit_progress.total"/>
+                        </small>
+                        <div class="btn-group shadow-sm">
+                            <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('dm_visit_progress', -1)" t-att-disabled="this.state.pagination.dm_visit_progress.page === 1">Prev</button>
+                            <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.dm_visit_progress.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.dm_visit_progress.total / this.state.pagination.dm_visit_progress.limit))"/></button>
+                            <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('dm_visit_progress', 1)" t-att-disabled="this.state.pagination.dm_visit_progress.page &gt;= Math.ceil(this.state.pagination.dm_visit_progress.total / this.state.pagination.dm_visit_progress.limit)">Next</button>
+                        </div>
+                    </div>
+                </div>
+            </t>
+            <t t-if="this.state.selectedDmVisit">
+                <div class="p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <button class="btn btn-sm btn-light border fw-bold" t-on-click="closeDmVisitProgress">← Back</button>
+                        <button class="btn btn-sm btn-dark text-white fw-bold" t-on-click="openDayProgress" t-att-disabled="this.state.dayProgressModal.saving">Day Progress by Date</button>
+                    </div>
+                    <h4 class="fw-bold"><t t-esc="this.state.selectedDmVisit.name"/></h4>
+                    <div class="text-muted small mb-4"><t t-esc="this.state.selectedDmVisit.login"/> — <t t-esc="this.state.selectedDmVisit.code"/></div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-12 col-lg-6">
+                            <div class="card border-0 bg-light p-3 h-100">
+                                <h6 class="fw-bold text-uppercase small text-muted mb-3">Today</h6>
+                                <div class="small">Done: <span class="fw-bold"><t t-esc="this.state.selectedDmVisit.todayDone"/></span></div>
+                                <div class="small">Pending: <span class="fw-bold"><t t-esc="this.state.selectedDmVisit.todayPending"/></span></div>
+                                <div class="small">Total: <span class="fw-bold"><t t-esc="this.state.selectedDmVisit.todayTotal"/></span></div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6">
+                            <div class="card border-0 bg-light p-3 h-100">
+                                <h6 class="fw-bold text-uppercase small text-muted mb-3">This week</h6>
+                                <div class="small">Progress: <span class="fw-bold"><t t-esc="this.state.selectedDmVisit.weekPct"/>%</span></div>
+                                <div class="small">Done: <span class="fw-bold"><t t-esc="this.state.selectedDmVisit.weekDone"/> / <t t-esc="this.state.selectedDmVisit.weekTotal"/></span></div>
+                                <div class="small">Online: <span class="fw-bold"><t t-esc="this.onlineStatusLabel(this.state.selectedDmVisit.online)"/></span></div>
+                                <div class="small">Last seen: <span class="fw-bold"><t t-esc="this.state.selectedDmVisit.lastSeen"/></span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <ul class="nav nav-pills gap-2 mb-3">
+                        <li class="nav-item">
+                            <button t-on-click="() => this.setDmVisitTaskTab('today')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.dmVisitTaskTab === 'today' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Today</button>
+                        </li>
+                        <li class="nav-item">
+                            <button t-on-click="() => this.setDmVisitTaskTab('week')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.dmVisitTaskTab === 'week' ? 'active bg-dark text-white' : 'text-muted bg-light'}">This Week</button>
+                        </li>
+                        <li class="nav-item">
+                            <button t-on-click="() => this.setDmVisitTaskTab('history')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.dmVisitTaskTab === 'history' ? 'active bg-dark text-white' : 'text-muted bg-light'}">History</button>
+                        </li>
+                    </ul>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="bg-light small text-muted text-uppercase">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Route</th>
+                                    <th>Shop</th>
+                                    <th>State</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-if="!this.state.dmVisitTasks.length">
+                                    <tr><td colspan="5" class="text-center py-4 text-muted">No visit tasks.</td></tr>
+                                </t>
+                                <t t-foreach="this.state.dmVisitTasks" t-as="task" t-key="task.id">
+                                    <tr>
+                                        <td><t t-esc="task.date"/></td>
+                                        <td><t t-esc="this.taskKindLabel(task.kind)"/></td>
+                                        <td><t t-esc="task.route"/></td>
+                                        <td><t t-esc="task.shop"/></td>
+                                        <td><span class="badge bg-light text-dark"><t t-esc="this.visitTaskStateLabel(task.state)"/></span></td>
+                                    </tr>
+                                </t>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </t>
+            <t t-if="this.state.dayProgressModal.open">
+                <div class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background: rgba(15, 23, 42, 0.6); z-index: 1056;">
+                    <div class="card border-0 shadow-lg rounded-4" style="width: 100%; max-width: 720px; max-height: 90vh; overflow: auto;">
+                        <div class="p-4 border-bottom d-flex justify-content-between align-items-start">
+                            <div>
+                                <h5 class="fw-bold mb-0">Day Progress by Date</h5>
+                                <small class="text-muted"><t t-esc="this.state.selectedDmVisit and this.state.selectedDmVisit.name"/></small>
+                            </div>
+                            <button class="btn btn-sm btn-light" t-on-click="closeDayProgressModal">Close</button>
+                        </div>
+                        <div class="p-4">
+                            <div class="d-flex flex-wrap gap-2 mb-3">
+                                <input type="date" class="form-control form-control-sm" style="max-width: 160px;" t-model="this.state.dayProgressModal.dateFrom"/>
+                                <input type="date" class="form-control form-control-sm" style="max-width: 160px;" t-model="this.state.dayProgressModal.dateTo"/>
+                                <button class="btn btn-sm btn-dark text-white fw-bold" t-on-click="refreshDayProgress" t-att-disabled="this.state.dayProgressModal.saving">Refresh</button>
+                            </div>
+                            <div class="row g-2 small mb-3">
+                                <div class="col"><span class="text-muted d-block">Planned</span><span class="fw-bold"><t t-esc="this.state.dayProgressModal.planned"/></span></div>
+                                <div class="col"><span class="text-muted d-block">Done</span><span class="fw-bold"><t t-esc="this.state.dayProgressModal.done"/></span></div>
+                                <div class="col"><span class="text-muted d-block">Pending</span><span class="fw-bold"><t t-esc="this.state.dayProgressModal.pending"/></span></div>
+                                <div class="col"><span class="text-muted d-block">In progress</span><span class="fw-bold"><t t-esc="this.state.dayProgressModal.inProgress"/></span></div>
+                                <div class="col"><span class="text-muted d-block">Progress</span><span class="fw-bold"><t t-esc="this.state.dayProgressModal.percent"/>%</span></div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm mb-0">
+                                    <thead><tr><th>Date</th><th>Day</th><th class="text-end">Planned</th><th class="text-end">Done</th><th class="text-end">Pending</th><th class="text-end">%</th></tr></thead>
+                                    <tbody>
+                                        <t t-if="!this.state.dayProgressModal.lines.length">
+                                            <tr><td colspan="6" class="text-center text-muted py-3">No days in this range.</td></tr>
+                                        </t>
+                                        <t t-foreach="this.state.dayProgressModal.lines" t-as="line" t-key="line.id">
+                                            <tr>
+                                                <td><t t-esc="line.date"/></td>
+                                                <td><t t-esc="line.weekday"/></td>
+                                                <td class="text-end"><t t-esc="line.planned"/></td>
+                                                <td class="text-end"><t t-esc="line.done"/></td>
+                                                <td class="text-end"><t t-esc="line.pending"/></td>
+                                                <td class="text-end"><t t-esc="line.percent"/>%</td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
         </t>
 
         <!-- Shop Checkins Tab (GPS attempts: success + blocked) -->

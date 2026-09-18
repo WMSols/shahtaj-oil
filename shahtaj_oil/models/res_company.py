@@ -117,6 +117,23 @@ class ResCompany(models.Model):
         run_all_setup_checks(self.env)
 
     @api.model
+    def shahtaj_get_app_info(self):
+        """Installed Shahtaj Oil module version for the portal settings tab."""
+        Module = self.env['ir.module.module']
+        info = Module.get_module_info('shahtaj_oil') or {}
+        module = Module.sudo().search([('name', '=', 'shahtaj_oil')], limit=1)
+        version = (
+            info.get('version')
+            or module.installed_version
+            or module.latest_version
+            or ''
+        )
+        return {
+            'name': info.get('name') or module.shortdesc or 'Shahtaj Oil',
+            'version': version,
+        }
+
+    @api.model
     def shahtaj_get_company_profile(self):
         """Portal: company name, phone, and logo preview."""
         company = self.env.company

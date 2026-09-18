@@ -149,9 +149,13 @@
                                     <th class="ps-4 border-top-0">Employee Profile</th>
                                     <th class="border-top-0">Role</th>
                                     <th class="border-top-0">System Presence</th>
-                                    <th t-if="this.isDeliveryManTab" class="border-top-0 text-center">Jobs Today</th>
+                                    <th t-if="this.isDeliveryManTab" class="border-top-0 text-center">Jobs</th>
+                                    <th t-if="this.isDeliveryManTab" class="border-top-0 text-center">Today</th>
                                     <th t-if="this.isDeliveryManTab" class="border-top-0 text-center">Open</th>
                                     <th t-if="this.isDeliveryManTab" class="border-top-0 text-center">On Van</th>
+                                    <th t-if="this.isDeliveryManTab" class="border-top-0 text-center">SKUs</th>
+                                    <th t-if="this.isDeliveryManTab" class="border-top-0 text-center">Loaded</th>
+                                    <th t-if="this.isDeliveryManTab" class="border-top-0 text-center">Picked / Del.</th>
                                     <th t-if="this.isDeliveryManTab and this.hasFinancialAccess" class="border-top-0 text-end">Wallet</th>
                                     <th class="text-end pe-4 border-top-0">Action</th>
                                 </tr>
@@ -169,6 +173,9 @@
                                                 <t t-esc="staff.name"/>
                                                 <span t-if="!staff.active" class="badge bg-danger text-white ms-2" style="font-size: 0.65rem;">Deactivated</span>
                                             </div>
+                                            <t t-if="staff.login">
+                                                <small class="text-muted d-block mt-1"><t t-esc="staff.login"/></small>
+                                            </t>
                                             <t t-if="staff.employee_code">
                                                 <small class="text-muted d-block mt-1"><t t-esc="staff.employee_code"/></small>
                                             </t>
@@ -193,9 +200,13 @@
                                                 </span>
                                             </t>
                                         </td>
+                                        <td t-if="this.isDeliveryManTab" class="text-center fw-bold"><t t-esc="staff.jobCount"/></td>
                                         <td t-if="this.isDeliveryManTab" class="text-center fw-bold"><t t-esc="staff.jobsToday"/></td>
                                         <td t-if="this.isDeliveryManTab" class="text-center fw-bold"><t t-esc="staff.openJobs"/></td>
                                         <td t-if="this.isDeliveryManTab" class="text-center"><t t-esc="staff.vanQty"/></td>
+                                        <td t-if="this.isDeliveryManTab" class="text-center"><t t-esc="staff.skuCount"/></td>
+                                        <td t-if="this.isDeliveryManTab" class="text-center"><t t-esc="staff.loadedForShops"/></td>
+                                        <td t-if="this.isDeliveryManTab" class="text-center"><t t-esc="staff.pickedToday"/> / <t t-esc="staff.deliveredToday"/></td>
                                         <td t-if="this.isDeliveryManTab and this.hasFinancialAccess" class="text-end fw-bold">Rs. <t t-esc="this.formatMoney(staff.wallet)"/></td>
                                         <td class="text-end pe-4 text-nowrap">
                                             <button class="btn btn-sm btn-outline-danger fw-bold d-inline-flex align-items-center me-2 shadow-sm" t-on-click="() => this.toggleActiveStatus(staff.id, staff.active)" title="Move to Archive" t-att-disabled="this.state.loading.toggle">Archive</button>
@@ -361,9 +372,11 @@
                             </t>
                         </button>
                     </div>
-                    <div t-if="this.state.selectedStaff.roleKey === 'delivery_man' and this.hasFinancialAccess" class="d-flex flex-wrap gap-2 mt-3">
-                        <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="openCollectModal" t-att-disabled="this.state.loading.wallet">Collect Payment</button>
-                        <button class="btn btn-sm btn-dark fw-bold text-white" t-on-click="openSettleModal" t-att-disabled="this.state.loading.wallet">Settle Wallet</button>
+                    <div t-if="this.state.selectedStaff.roleKey === 'delivery_man'" class="d-flex flex-wrap gap-2 mt-3">
+                        <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.openTodayLoad(this.state.selectedStaff.id)">Today Load</button>
+                        <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.openVanTransfer(this.state.selectedStaff.id)">Van procedure</button>
+                        <button t-if="this.hasFinancialAccess" class="btn btn-sm btn-outline-dark fw-bold" t-on-click="openCollectModal" t-att-disabled="this.state.loading.wallet">Collect Payment</button>
+                        <button t-if="this.hasFinancialAccess" class="btn btn-sm btn-dark fw-bold text-white" t-on-click="openSettleModal" t-att-disabled="this.state.loading.wallet">Settle Wallet</button>
                     </div>
                 </div>
 
@@ -386,7 +399,7 @@
                             <div class="card bg-light border-0 shadow-sm p-3 rounded-3 h-100">
                                 <div class="text-muted fw-bold small text-uppercase">On Van</div>
                                 <h3 class="fw-bold mb-0 mt-2"><t t-esc="this.state.vanSnapshot.qtyOnHand"/></h3>
-                                <small class="text-muted"><t t-esc="this.state.vanSnapshot.skuCount"/> SKUs</small>
+                                <small class="text-muted"><t t-esc="this.state.vanSnapshot.skuCount"/> SKUs · loaded <t t-esc="this.state.vanSnapshot.onVanForShops"/></small>
                             </div>
                         </div>
                         <div class="col-6 col-md-3">
@@ -407,6 +420,15 @@
                                 <button t-on-click="() => this.state.detailTab = 'jobs'" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 #{this.state.detailTab === 'jobs' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-light'}">Assigned Jobs</button>
                             </li>
                             <li class="nav-item">
+                                <button t-on-click="() => this.state.detailTab = 'dispatch'" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 #{this.state.detailTab === 'dispatch' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-light'}">Orders to Dispatch</button>
+                            </li>
+                            <li class="nav-item">
+                                <button t-on-click="() => this.state.detailTab = 'van'" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 #{this.state.detailTab === 'van' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-light'}">Van Stock</button>
+                            </li>
+                            <li class="nav-item">
+                                <button t-on-click="() => this.state.detailTab = 'activity'" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 #{this.state.detailTab === 'activity' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-light'}">Recent Pick &amp; Deliver</button>
+                            </li>
+                            <li class="nav-item">
                                 <button t-on-click="() => this.state.detailTab = 'coverage'" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 #{this.state.detailTab === 'coverage' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-light'}">Booker Coverage</button>
                             </li>
                         </ul>
@@ -419,14 +441,18 @@
                                     <tr>
                                         <th class="ps-4 border-top-0">Job</th>
                                         <th class="border-top-0">Shop / Order</th>
-                                        <th class="border-top-0">Date</th>
+                                        <th class="border-top-0">Booker</th>
+                                        <th class="border-top-0">Order date</th>
+                                        <th t-if="this.hasFinancialAccess" class="border-top-0 text-end">Amount</th>
+                                        <th class="border-top-0 text-end">Assigned</th>
+                                        <th class="border-top-0">Mode</th>
                                         <th class="border-top-0">Stock</th>
-                                        <th class="pe-4 border-top-0">Field</th>
+                                        <th class="pe-4 border-top-0">Stop</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <t t-if="this.state.detailJobs.length === 0">
-                                        <tr><td colspan="5" class="text-center py-4 text-muted fw-bold">No delivery jobs yet.</td></tr>
+                                        <tr><td colspan="9" class="text-center py-4 text-muted fw-bold">No delivery jobs yet.</td></tr>
                                     </t>
                                     <t t-foreach="this.state.detailJobs" t-as="job" t-key="job.id">
                                         <tr>
@@ -435,7 +461,11 @@
                                                 <div class="fw-bold"><t t-esc="job.shop"/></div>
                                                 <small class="text-muted"><t t-esc="job.order"/></small>
                                             </td>
-                                            <td><t t-esc="job.date"/></td>
+                                            <td><t t-esc="job.booker"/></td>
+                                            <td><t t-esc="job.orderDate"/></td>
+                                            <td t-if="this.hasFinancialAccess" class="text-end">Rs. <t t-esc="this.formatMoney(job.amount)"/></td>
+                                            <td class="text-end"><t t-esc="job.qtyAssigned"/></td>
+                                            <td><t t-esc="this.assignmentModeLabel(job.assignmentMode)"/></td>
                                             <td><span class="badge bg-light text-dark"><t t-esc="this.stockStateLabel(job.state)"/></span></td>
                                             <td class="pe-4"><span class="badge bg-secondary text-dark"><t t-esc="this.fieldStateLabel(job.fieldState)"/></span></td>
                                         </tr>
@@ -455,6 +485,70 @@
                                 <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('detailJobs', 1)" t-att-disabled="this.state.pagination.detailJobs.page &gt;= Math.ceil(this.state.pagination.detailJobs.total / this.state.pagination.detailJobs.limit)">Next</button>
                             </div>
                         </div>
+                    </t>
+
+                    <t t-if="this.state.detailTab === 'dispatch'">
+                        <div class="table-responsive bg-white rounded-3 shadow-sm border">
+                            <table class="table table-hover mb-0">
+                                <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                    <tr>
+                                        <th class="ps-4 border-top-0">Order</th>
+                                        <th class="border-top-0">Shop / Booker</th>
+                                        <th class="border-top-0">Date</th>
+                                        <th t-if="this.hasFinancialAccess" class="border-top-0 text-end">Amount</th>
+                                        <th class="border-top-0">Delivery</th>
+                                        <th class="pe-4 text-end border-top-0">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-if="this.state.detailDispatch.length === 0">
+                                        <tr><td colspan="6" class="text-center py-4 text-muted fw-bold">No orders waiting to dispatch for this delivery man.</td></tr>
+                                    </t>
+                                    <t t-foreach="this.state.detailDispatch" t-as="row" t-key="row.odoo_id">
+                                        <tr>
+                                            <td class="ps-4 fw-bold"><t t-esc="row.id"/></td>
+                                            <td>
+                                                <div class="fw-bold"><t t-esc="row.shop"/></div>
+                                                <small class="text-muted"><t t-esc="row.booker"/></small>
+                                            </td>
+                                            <td><t t-esc="row.date"/></td>
+                                            <td t-if="this.hasFinancialAccess" class="text-end">Rs. <t t-esc="this.formatMoney(row.amount)"/></td>
+                                            <td><span t-attf-class="badge #{this.deliveryStatusBadgeClass(row.deliveryStatus)}"><t t-esc="this.deliveryStatusLabel(row.deliveryStatus)"/></span></td>
+                                            <td class="pe-4 text-end">
+                                                <button t-if="this.canAssignDispatch(row)" class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openAssignModal(row.odoo_id)">Assign / Split</button>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+                            <small class="text-muted fw-bold">
+                                Showing <t t-esc="this.state.pagination.detailDispatch.total === 0 ? 0 : ((this.state.pagination.detailDispatch.page - 1) * this.state.pagination.detailDispatch.limit) + 1"/>
+                                to <t t-esc="Math.min(this.state.pagination.detailDispatch.page * this.state.pagination.detailDispatch.limit, this.state.pagination.detailDispatch.total)"/>
+                                of <t t-esc="this.state.pagination.detailDispatch.total"/>
+                            </small>
+                            <div class="btn-group shadow-sm">
+                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('detailDispatch', -1)" t-att-disabled="this.state.pagination.detailDispatch.page === 1">Prev</button>
+                                <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.detailDispatch.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.detailDispatch.total / this.state.pagination.detailDispatch.limit))"/></button>
+                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('detailDispatch', 1)" t-att-disabled="this.state.pagination.detailDispatch.page &gt;= Math.ceil(this.state.pagination.detailDispatch.total / this.state.pagination.detailDispatch.limit)">Next</button>
+                            </div>
+                        </div>
+                    </t>
+
+                    <t t-if="this.state.detailTab === 'van'">
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            <button class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openTodayLoad(this.state.selectedStaff.id)">Today Load</button>
+                            <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.openVanTransfer(this.state.selectedStaff.id)">Van procedure</button>
+                            <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.state.detailTab = 'jobs'">Open jobs</button>
+                        </div>
+                        <div t-if="this.state.vanStockHtml" class="bg-white rounded-3 border p-3 small" t-out="this.htmlOut(this.state.vanStockHtml)"/>
+                        <div t-else="" class="text-muted py-4 fw-bold">No van stock snapshot yet.</div>
+                    </t>
+
+                    <t t-if="this.state.detailTab === 'activity'">
+                        <div t-if="this.state.recentActivityHtml" class="bg-white rounded-3 border p-3 small" t-out="this.htmlOut(this.state.recentActivityHtml)"/>
+                        <div t-else="" class="text-muted py-4 fw-bold">No recent pick and deliver activity.</div>
                     </t>
 
                     <t t-if="this.state.detailTab === 'coverage'">
@@ -652,6 +746,17 @@
                                     </div>
                                     <button class="btn btn-sm btn-outline-secondary mb-2" t-on-click="fillCollectResiduals">Fill remaining</button>
                                 </t>
+                                <label class="small fw-bold">Payment method</label>
+                                <select class="form-select mb-3" t-model="this.state.collectModal.paymentMethod">
+                                    <option value="cash">Cash</option>
+                                    <option value="cheque">Cheque</option>
+                                </select>
+                                <t t-if="this.state.collectModal.paymentMethod === 'cheque'">
+                                    <label class="small fw-bold">Cheque number</label>
+                                    <input type="text" class="form-control mb-3" t-model="this.state.collectModal.chequeNumber"/>
+                                    <label class="small fw-bold">Cheque photo</label>
+                                    <input type="file" class="form-control mb-3" accept="image/*" t-on-change="onCollectChequeImage"/>
+                                </t>
                                 <label class="small fw-bold">Notes</label>
                                 <textarea class="form-control" rows="2" t-model="this.state.collectModal.notes"/>
                             </div>
@@ -689,6 +794,148 @@
                             <div class="modal-footer">
                                 <button class="btn btn-outline-secondary" t-on-click="closeSettleModal">Cancel</button>
                                 <button class="btn btn-dark text-white" t-on-click="confirmSettle" t-att-disabled="this.state.loading.wallet">Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
+
+            <t t-if="this.state.assignModal.open">
+                <div class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background: rgba(15, 23, 42, 0.6); z-index: 1056;">
+                    <div class="card border-0 shadow-lg rounded-4" style="width: 100%; max-width: 820px; max-height: 90vh; overflow: auto;">
+                        <div class="p-4 border-bottom d-flex justify-content-between">
+                            <div>
+                                <h5 class="fw-bold mb-0">Assign / Split</h5>
+                                <small class="text-muted"><t t-esc="this.state.assignModal.orderName"/> · <t t-esc="this.state.assignModal.shop"/></small>
+                            </div>
+                            <button class="btn btn-sm btn-light" t-on-click="closeAssignModal">Close</button>
+                        </div>
+                        <div class="p-4">
+                            <t t-foreach="this.state.assignModal.jobs" t-as="job" t-key="job.id">
+                                <div class="border rounded-3 p-3 mb-3">
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-md-7">
+                                            <label class="small fw-bold">Delivery man</label>
+                                            <select class="form-select form-select-sm" t-model="job.deliveryManId">
+                                                <option value="">Select</option>
+                                                <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="dm.id">
+                                                    <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
+                                                </t>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-5">
+                                            <label class="small fw-bold">Delivery day</label>
+                                            <input type="date" class="form-control form-control-sm" t-model="job.scheduledDate"/>
+                                        </div>
+                                    </div>
+                                    <table class="table table-sm mb-0">
+                                        <thead><tr><th>Product</th><th class="text-end">Ordered</th><th class="text-end">Assign</th></tr></thead>
+                                        <tbody>
+                                            <t t-foreach="job.lines" t-as="line" t-key="line.id">
+                                                <tr>
+                                                    <td><t t-esc="line.product"/></td>
+                                                    <td class="text-end"><t t-esc="line.qtyOrdered"/></td>
+                                                    <td class="text-end" style="max-width: 110px;">
+                                                        <input type="number" class="form-control form-control-sm text-end" t-model.number="line.qtyAssigned" min="0"/>
+                                                    </td>
+                                                </tr>
+                                            </t>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </t>
+                            <div class="d-flex justify-content-between">
+                                <button class="btn btn-outline-secondary fw-bold" t-on-click="addAssignDeliveryMan" t-att-disabled="this.state.assignModal.saving">Add delivery man</button>
+                                <button class="btn btn-dark text-white fw-bold" t-on-click="confirmAssign" t-att-disabled="this.state.assignModal.saving">Confirm assign</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
+
+            <t t-if="this.state.todayLoadModal.open">
+                <div class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background: rgba(15, 23, 42, 0.6); z-index: 1056;">
+                    <div class="card border-0 shadow-lg rounded-4" style="width: 100%; max-width: 920px; max-height: 90vh; overflow: auto;">
+                        <div class="p-4 border-bottom d-flex justify-content-between">
+                            <div>
+                                <h5 class="fw-bold mb-0">Today's Load</h5>
+                                <small class="text-muted"><t t-esc="this.state.todayLoadModal.dmName"/> · <t t-esc="this.state.todayLoadModal.loadDate"/></small>
+                            </div>
+                            <button class="btn btn-sm btn-light" t-on-click="closeTodayLoadModal">Close</button>
+                        </div>
+                        <div class="p-4">
+                            <div t-if="this.state.todayLoadModal.summaryHtml" class="small mb-3" t-out="this.htmlOut(this.state.todayLoadModal.summaryHtml)"/>
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm">
+                                    <thead><tr><th>Product</th><th class="text-end">Warehouse</th><th class="text-end">On van</th><th class="text-end">Still need</th><th class="text-end">Pick now</th></tr></thead>
+                                    <tbody>
+                                        <t t-foreach="this.state.todayLoadModal.pickLines" t-as="pline" t-key="pline.id">
+                                            <tr>
+                                                <td><t t-esc="pline.product"/></td>
+                                                <td class="text-end"><t t-esc="pline.warehouse"/></td>
+                                                <td class="text-end"><t t-esc="pline.onVan"/></td>
+                                                <td class="text-end"><t t-esc="pline.stillNeed"/></td>
+                                                <td class="text-end" style="max-width: 110px;"><input type="number" class="form-control form-control-sm text-end" t-model.number="pline.qtyToPick" min="0"/></td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm">
+                                    <thead><tr><th>Shop</th><th>Order</th><th>Stock</th><th>Stop</th></tr></thead>
+                                    <tbody>
+                                        <t t-foreach="this.state.todayLoadModal.shopLines" t-as="sline" t-key="sline.id">
+                                            <tr>
+                                                <td><t t-esc="sline.shop"/></td>
+                                                <td><t t-esc="sline.order"/></td>
+                                                <td><span class="badge bg-light text-dark"><t t-esc="this.stockStateLabel(sline.state)"/></span></td>
+                                                <td><span class="badge bg-secondary text-dark"><t t-esc="this.fieldStateLabel(sline.fieldState)"/></span></td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="text-end">
+                                <button class="btn btn-dark text-white fw-bold" t-on-click="confirmTodayLoad" t-att-disabled="this.state.todayLoadModal.saving">Pick today's load</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
+
+            <t t-if="this.state.vanTransferModal.open">
+                <div class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background: rgba(15, 23, 42, 0.6); z-index: 1056;">
+                    <div class="card border-0 shadow-lg rounded-4" style="width: 100%; max-width: 920px; max-height: 90vh; overflow: auto;">
+                        <div class="p-4 border-bottom d-flex justify-content-between">
+                            <div>
+                                <h5 class="fw-bold mb-0">Van procedure</h5>
+                                <small class="text-muted"><t t-esc="this.state.vanTransferModal.dmName"/></small>
+                            </div>
+                            <button class="btn btn-sm btn-light" t-on-click="closeVanTransferModal">Close</button>
+                        </div>
+                        <div class="p-4">
+                            <div t-if="this.state.vanTransferModal.procedureHtml" class="small mb-3" t-out="this.htmlOut(this.state.vanTransferModal.procedureHtml)"/>
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm">
+                                    <thead><tr><th>Product</th><th class="text-end">Warehouse</th><th class="text-end">On van</th><th class="text-end">Load</th><th class="text-end">Return</th></tr></thead>
+                                    <tbody>
+                                        <t t-foreach="this.state.vanTransferModal.lines" t-as="vline" t-key="vline.id">
+                                            <tr>
+                                                <td><t t-esc="vline.product"/></td>
+                                                <td class="text-end"><t t-esc="vline.warehouse"/></td>
+                                                <td class="text-end"><t t-esc="vline.onVan"/></td>
+                                                <td class="text-end" style="max-width: 100px;"><input type="number" class="form-control form-control-sm text-end" t-model.number="vline.qtyLoad" min="0"/></td>
+                                                <td class="text-end" style="max-width: 100px;"><input type="number" class="form-control form-control-sm text-end" t-model.number="vline.qtyReturn" min="0"/></td>
+                                            </tr>
+                                        </t>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="d-flex flex-wrap justify-content-end gap-2">
+                                <button class="btn btn-dark text-white fw-bold" t-on-click="confirmVanLoad" t-att-disabled="this.state.vanTransferModal.saving">Load to van</button>
+                                <button class="btn btn-outline-dark fw-bold" t-on-click="confirmVanReturn" t-att-disabled="this.state.vanTransferModal.saving">Return to WH</button>
+                                <button class="btn btn-outline-danger fw-bold" t-on-click="confirmVanEmpty" t-att-disabled="this.state.vanTransferModal.saving">Empty van</button>
                             </div>
                         </div>
                     </div>

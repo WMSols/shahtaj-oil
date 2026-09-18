@@ -26,7 +26,10 @@
                     <button t-on-click="() => this.setPerfSubTab('sessions')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.perfSubTab === 'sessions' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Day sessions</button>
                 </li>
                 <li class="nav-item" t-if="this.hasFinancialAccess">
-                    <button t-on-click="() => this.setPerfSubTab('recovery')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.perfSubTab === 'recovery' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Recovery</button>
+                    <button t-on-click="() => this.setPerfSubTab('collections')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.perfSubTab === 'collections' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Wallet collections</button>
+                </li>
+                <li class="nav-item" t-if="this.hasFinancialAccess">
+                    <button t-on-click="() => this.setPerfSubTab('settlements')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.perfSubTab === 'settlements' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Wallet settlements</button>
                 </li>
             </ul>
 
@@ -134,12 +137,15 @@
                                 <th class="border-top-0">Status</th>
                                 <th class="border-top-0">Departed</th>
                                 <th class="border-top-0">Ended</th>
+                                <th class="border-top-0 text-end">GPS min</th>
+                                <th class="border-top-0 text-end">GPS max</th>
+                                <th class="border-top-0">Notes</th>
                                 <th class="text-end pe-3 border-top-0">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             <t t-if="!this.state.sessions.length and !this.state.isLoading">
-                                <tr><td colspan="6" class="text-center py-5 text-muted fw-bold">No day sessions in this range.</td></tr>
+                                <tr><td colspan="9" class="text-center py-5 text-muted fw-bold">No day sessions in this range.</td></tr>
                             </t>
                             <t t-foreach="this.state.sessions" t-as="sess" t-key="sess.id">
                                 <tr>
@@ -148,6 +154,9 @@
                                     <td><t t-esc="this.sessionLabel(sess.state)"/></td>
                                     <td><t t-esc="sess.departed"/></td>
                                     <td><t t-esc="sess.ended"/></td>
+                                    <td class="text-end"><t t-esc="sess.gpsMin"/></td>
+                                    <td class="text-end"><t t-esc="sess.gpsMax"/></td>
+                                    <td><t t-esc="sess.notes || '—'"/></td>
                                     <td class="text-end pe-3">
                                         <button t-if="sess.state !== 'office'" class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.resetSession(sess.id)">Reset to office</button>
                                     </td>
@@ -170,20 +179,24 @@
                 </div>
             </t>
 
-            <t t-if="this.state.perfSubTab === 'recovery' and this.hasFinancialAccess">
+            <t t-if="(this.state.perfSubTab === 'collections' or this.state.perfSubTab === 'settlements') and this.hasFinancialAccess">
                 <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
-                    <select class="form-select form-select-sm" style="max-width: 220px;" t-model="this.state.filters.collections.dm" t-on-change="() => this.onFilterChange('collections')">
-                        <option value="all">Collections: all DMs</option>
-                        <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="'c-' + dm.id">
-                            <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
-                        </t>
-                    </select>
-                    <select class="form-select form-select-sm" style="max-width: 220px;" t-model="this.state.filters.settlements.dm" t-on-change="() => this.onFilterChange('settlements')">
-                        <option value="all">Settlements: all DMs</option>
-                        <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="'s-' + dm.id">
-                            <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
-                        </t>
-                    </select>
+                    <t t-if="this.state.perfSubTab === 'collections'">
+                        <select class="form-select form-select-sm" style="max-width: 220px;" t-model="this.state.filters.collections.dm" t-on-change="() => this.onFilterChange('collections')">
+                            <option value="all">Collections: all DMs</option>
+                            <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="'c-' + dm.id">
+                                <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
+                            </t>
+                        </select>
+                    </t>
+                    <t t-if="this.state.perfSubTab === 'settlements'">
+                        <select class="form-select form-select-sm" style="max-width: 220px;" t-model="this.state.filters.settlements.dm" t-on-change="() => this.onFilterChange('settlements')">
+                            <option value="all">Settlements: all DMs</option>
+                            <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="'s-' + dm.id">
+                                <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
+                            </t>
+                        </select>
+                    </t>
                     <select class="form-select form-select-sm" style="max-width: 220px;" t-model="this.state.settleDmId">
                         <option value="">Settle wallet for…</option>
                         <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="'w-' + dm.id">
@@ -192,7 +205,9 @@
                     </select>
                     <button class="btn btn-sm btn-dark text-white fw-bold" t-on-click="openSettleFromPicker" t-att-disabled="!this.state.settleDmId">Settle wallet</button>
                 </div>
+                <div t-if="this.props.requestedOpenSettle" class="alert alert-info small">Select a delivery man and press Settle wallet to move DM wallet cash to the bank journal.</div>
 
+                <t t-if="this.state.perfSubTab === 'collections'">
                 <h6 class="fw-bold mt-2">Wallet collections</h6>
                 <div class="table-responsive mb-4">
                     <table class="table table-hover mb-0 align-middle">
@@ -202,12 +217,17 @@
                                 <th class="border-top-0">Date</th>
                                 <th class="border-top-0">Shop</th>
                                 <th class="border-top-0">Delivery man</th>
+                                <th class="border-top-0">Channel</th>
+                                <th class="border-top-0">Cheque #</th>
+                                <th class="border-top-0">Job</th>
+                                <th class="border-top-0">Notes</th>
+                                <th class="border-top-0">State</th>
                                 <th class="text-end pe-3 border-top-0">Amount</th>
                             </tr>
                         </thead>
                         <tbody>
                             <t t-if="!this.state.collections.length and !this.state.isLoading">
-                                <tr><td colspan="5" class="text-center py-4 text-muted">No collections in this range.</td></tr>
+                                <tr><td colspan="10" class="text-center py-4 text-muted">No collections in this range.</td></tr>
                             </t>
                             <t t-foreach="this.state.collections" t-as="pay" t-key="pay.id">
                                 <tr>
@@ -215,6 +235,14 @@
                                     <td><t t-esc="pay.date"/></td>
                                     <td><t t-esc="pay.shop"/></td>
                                     <td><t t-esc="pay.dm"/></td>
+                                    <td><t t-esc="this.channelLabel(pay.channel)"/></td>
+                                    <td>
+                                        <t t-esc="pay.cheque || '—'"/>
+                                        <span t-if="pay.hasChequeImage" class="badge bg-light text-dark ms-1">Photo</span>
+                                    </td>
+                                    <td><t t-esc="pay.job"/></td>
+                                    <td class="small"><t t-esc="pay.notes || '—'"/></td>
+                                    <td><t t-esc="pay.state"/></td>
                                     <td class="text-end pe-3">Rs. <t t-esc="this.formatMoney(pay.amount)"/></td>
                                 </tr>
                             </t>
@@ -233,7 +261,9 @@
                         <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('collections', 1)" t-att-disabled="this.state.pagination.collections.page &gt;= Math.ceil(this.state.pagination.collections.total / this.state.pagination.collections.limit)">Next</button>
                     </div>
                 </div>
+                </t>
 
+                <t t-if="this.state.perfSubTab === 'settlements'">
                 <h6 class="fw-bold">Wallet settlements</h6>
                 <div class="table-responsive">
                     <table class="table table-hover mb-0 align-middle">
@@ -241,17 +271,25 @@
                             <tr>
                                 <th class="ps-3 border-top-0">Delivery man</th>
                                 <th class="border-top-0">Date</th>
+                                <th class="border-top-0">Bank journal</th>
+                                <th class="border-top-0">Settled by</th>
+                                <th class="border-top-0">Move</th>
+                                <th class="border-top-0">State</th>
                                 <th class="text-end pe-3 border-top-0">Amount</th>
                             </tr>
                         </thead>
                         <tbody>
                             <t t-if="!this.state.settlements.length and !this.state.isLoading">
-                                <tr><td colspan="3" class="text-center py-4 text-muted">No settlements in this range.</td></tr>
+                                <tr><td colspan="7" class="text-center py-4 text-muted">No settlements in this range.</td></tr>
                             </t>
                             <t t-foreach="this.state.settlements" t-as="setl" t-key="setl.id">
                                 <tr>
                                     <td class="ps-3 fw-bold"><t t-esc="setl.dm"/></td>
                                     <td><t t-esc="setl.date"/></td>
+                                    <td><t t-esc="setl.journal"/></td>
+                                    <td><t t-esc="setl.settledBy"/></td>
+                                    <td><t t-esc="setl.move"/></td>
+                                    <td><t t-esc="setl.state"/></td>
                                     <td class="text-end pe-3">Rs. <t t-esc="this.formatMoney(setl.amount)"/></td>
                                 </tr>
                             </t>
@@ -270,6 +308,7 @@
                         <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('settlements', 1)" t-att-disabled="this.state.pagination.settlements.page &gt;= Math.ceil(this.state.pagination.settlements.total / this.state.pagination.settlements.limit)">Next</button>
                     </div>
                 </div>
+                </t>
             </t>
 
             <t t-if="this.state.settleModal.open">

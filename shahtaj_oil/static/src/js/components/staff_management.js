@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, onWillUpdateProps, onMounted, onWillUnmount } from "@odoo/owl";
+import { Component, useState, onWillStart, onWillUpdateProps, onMounted, onWillUnmount, markup } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { ConfirmModal } from "./confirm_modal";
 import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
@@ -9,6 +9,7 @@ export class StaffManagement extends Component {
     static components = { ConfirmModal };
     static props = {
         requestedStaffRole: { type: String, optional: true },
+        requestedShowCreate: { type: Boolean, optional: true },
     };
     setup() {
         this.orm = useService("orm");
@@ -39,6 +40,44 @@ export class StaffManagement extends Component {
                 onVanForShops: 0,
                 pickedToday: 0,
                 deliveredToday: 0,
+            },
+            vanStockHtml: "",
+            recentActivityHtml: "",
+            detailDispatch: [],
+            lookupDeliveryMen: [],
+            assignModal: {
+                open: false,
+                wizardId: null,
+                orderName: "",
+                shop: "",
+                jobs: [],
+                saving: false,
+            },
+            todayLoadModal: {
+                open: false,
+                wizardId: null,
+                dmName: "",
+                loadDate: "",
+                summaryHtml: "",
+                stockSummaryHtml: "",
+                shopCount: 0,
+                stillToPick: 0,
+                vanQty: 0,
+                warehouseQty: 0,
+                pickLines: [],
+                shopLines: [],
+                saving: false,
+            },
+            vanTransferModal: {
+                open: false,
+                wizardId: null,
+                dmName: "",
+                procedureHtml: "",
+                vanQty: 0,
+                warehouseQty: 0,
+                openPickedJobs: 0,
+                lines: [],
+                saving: false,
             },
 
             loading: {
@@ -71,6 +110,9 @@ export class StaffManagement extends Component {
                 shopOutstanding: 0,
                 lines: [],
                 notes: "",
+                paymentMethod: "cash",
+                chequeNumber: "",
+                chequeImage: false,
             },
             settleModal: {
                 open: false,
@@ -89,6 +131,7 @@ export class StaffManagement extends Component {
                 staff: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 archive: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 detailJobs: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                detailDispatch: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
             },
             filters: {
                 staff: { search: "", status: "all" },
@@ -107,11 +150,23 @@ export class StaffManagement extends Component {
         this.debouncedFetchStaffData = this.debounceSearch(() => this.fetchStaffData(), 400);
 
         onWillStart(async () => {
+            if (this.props.requestedShowCreate) {
+                this.state.activeTab = "delivery_man";
+                this.openForm();
+            }
             await this.fetchStaffData();
         });
 
         onWillUpdateProps((nextProps) => {
+            if (this.props.requestedShowCreate && !nextProps.requestedShowCreate && this.state.showForm && !this.state.editingStaffId) {
+                this.cancelForm();
+            }
             const role = nextProps.requestedStaffRole;
+            if (nextProps.requestedShowCreate && !this.props.requestedShowCreate) {
+                this.state.activeTab = "delivery_man";
+                this.openForm();
+                return;
+            }
             if (role && role !== this.state.activeTab && this.state.viewMode === "list" && !this.state.showForm) {
                 this.switchTab(role);
             }
@@ -157,6 +212,8 @@ export class StaffManagement extends Component {
             pag.page = newPage;
             if (tabName === "detailJobs") {
                 this.fetchDetailJobs();
+            } else if (tabName === "detailDispatch") {
+                this.fetchDetailDispatch();
             } else {
                 this.fetchStaffData();
             }
@@ -182,6 +239,10 @@ export class StaffManagement extends Component {
                 "shahtaj_van_qty_on_hand",
                 "shahtaj_dm_wallet_balance",
                 "shahtaj_dm_job_count",
+                "shahtaj_van_sku_count",
+                "shahtaj_dm_on_van_for_shops",
+                "shahtaj_dm_picked_today",
+                "shahtaj_dm_delivered_today",
             );
         } else {
             fields.push(
@@ -212,6 +273,10 @@ export class StaffManagement extends Component {
             openJobs: u.shahtaj_pending_delivery_count || 0,
             jobCount: u.shahtaj_dm_job_count || 0,
             vanQty: u.shahtaj_van_qty_on_hand || 0,
+            skuCount: u.shahtaj_van_sku_count || 0,
+            loadedForShops: u.shahtaj_dm_on_van_for_shops || 0,
+            pickedToday: u.shahtaj_dm_picked_today || 0,
+            deliveredToday: u.shahtaj_dm_delivered_today || 0,
             wallet: u.shahtaj_dm_wallet_balance || 0,
             metrics: {
                 today: {
@@ -333,10 +398,13 @@ export class StaffManagement extends Component {
         if (staff.roleKey === "delivery_man" || this.isDeliveryManTab) {
             this.state.detailTab = "jobs";
             this.state.pagination.detailJobs.page = 1;
+            this.state.pagination.detailDispatch.page = 1;
             await Promise.all([
                 this.fetchDetailJobs(),
+                this.fetchDetailDispatch(),
                 this.fetchVanSnapshot(staff.id),
                 this.fetchCoverage(staff.id),
+                this._ensureLookupDeliveryMen(),
             ]);
             return;
         }
@@ -380,7 +448,8 @@ export class StaffManagement extends Component {
             this.orm.searchRead(
                 "shahtaj.dm.delivery",
                 domain,
-                ["id", "display_name", "partner_id", "sale_order_id", "scheduled_date", "state", "field_state"],
+                ["id", "display_name", "partner_id", "sale_order_id", "order_booker_id", "order_date",
+                 "scheduled_date", "state", "field_state", "assignment_mode", "amount_total", "qty_assigned_total"],
                 { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "scheduled_date desc, id desc" },
             ),
         ]);
@@ -390,7 +459,12 @@ export class StaffManagement extends Component {
             name: j.display_name || (j.sale_order_id ? j.sale_order_id[1] : `Job ${j.id}`),
             shop: j.partner_id ? j.partner_id[1] : "—",
             order: j.sale_order_id ? j.sale_order_id[1] : "—",
+            booker: j.order_booker_id ? j.order_booker_id[1] : "—",
+            orderDate: j.order_date || "—",
             date: j.scheduled_date || "—",
+            amount: j.amount_total || 0,
+            qtyAssigned: j.qty_assigned_total || 0,
+            assignmentMode: j.assignment_mode,
             state: j.state,
             fieldState: j.field_state,
         }));
@@ -409,6 +483,8 @@ export class StaffManagement extends Component {
                 "shahtaj_dm_wallet_balance",
                 "shahtaj_dm_jobs_today_count",
                 "shahtaj_pending_delivery_count",
+                "shahtaj_van_stock_html",
+                "shahtaj_dm_recent_activity_html",
             ],
         );
         if (!rec) return;
@@ -419,6 +495,8 @@ export class StaffManagement extends Component {
             pickedToday: rec.shahtaj_dm_picked_today || 0,
             deliveredToday: rec.shahtaj_dm_delivered_today || 0,
         };
+        this.state.vanStockHtml = rec.shahtaj_van_stock_html || "";
+        this.state.recentActivityHtml = rec.shahtaj_dm_recent_activity_html || "";
         if (this.state.selectedStaff) {
             this.state.selectedStaff.wallet = rec.shahtaj_dm_wallet_balance || 0;
             this.state.selectedStaff.jobsToday = rec.shahtaj_dm_jobs_today_count || 0;
@@ -598,6 +676,9 @@ export class StaffManagement extends Component {
             shopOutstanding: 0,
             lines: [],
             notes: "",
+            paymentMethod: "cash",
+            chequeNumber: "",
+            chequeImage: false,
         };
         await this.searchCollectShops("");
     }
@@ -705,11 +786,12 @@ export class StaffManagement extends Component {
             for (const line of this.state.collectModal.lines) {
                 await this.orm.write("shahtaj.dm.collect.payment.line", [line.id], { amount: Number(line.amount) || 0 });
             }
-            if (this.state.collectModal.notes) {
-                await this.orm.write("shahtaj.dm.collect.payment", [this.state.collectModal.wizardId], {
-                    notes: this.state.collectModal.notes,
-                });
-            }
+            await this.orm.write("shahtaj.dm.collect.payment", [this.state.collectModal.wizardId], {
+                notes: this.state.collectModal.notes || "",
+                payment_method: this.state.collectModal.paymentMethod || "cash",
+                cheque_number: this.state.collectModal.chequeNumber || false,
+                ...(this.state.collectModal.chequeImage ? { cheque_image: this.state.collectModal.chequeImage } : {}),
+            });
             await this.orm.call("shahtaj.dm.collect.payment", "action_confirm", [[this.state.collectModal.wizardId]]);
             this.notification.add("Collected into DM wallet.", { type: "success" });
             this.closeCollectModal();
@@ -781,6 +863,379 @@ export class StaffManagement extends Component {
         } finally {
             this.state.loading.wallet = false;
         }
+    }
+
+    assignmentModeLabel(mode) {
+        const map = { auto: "Auto (booker)", manual: "Manual" };
+        return map[mode] || mode || "—";
+    }
+
+    deliveryStatusLabel(status) {
+        const map = { pending: "Pending", partial: "Partial", done: "Done", no_stock: "No stock" };
+        return map[status] || status || "—";
+    }
+
+    deliveryStatusBadgeClass(status) {
+        if (status === "done") return "bg-success text-white";
+        if (status === "partial") return "bg-info text-white";
+        if (status === "pending") return "bg-warning text-dark";
+        return "bg-light text-dark";
+    }
+
+    _m2oName(value) {
+        if (!value) return "—";
+        return Array.isArray(value) ? (value[1] || "—") : String(value);
+    }
+
+    _safeMarkup(html) {
+        return html ? String(html) : "";
+    }
+
+    htmlOut(html) {
+        if (!html) return "";
+        return markup(String(html));
+    }
+
+    _dmWizardContext(dmId) {
+        return { shahtaj_delivery_man_id: dmId };
+    }
+
+    async _ensureLookupDeliveryMen() {
+        if (this.state.lookupDeliveryMen.length) return;
+        this.state.lookupDeliveryMen = await this.orm.searchRead(
+            "res.users",
+            [["shahtaj_is_delivery_man", "=", true], ["active", "=", true]],
+            ["id", "name"],
+            { order: "name asc", limit: 300 },
+        );
+    }
+
+    async fetchDetailDispatch() {
+        const staff = this.state.selectedStaff;
+        if (!staff) return;
+        try {
+        const pag = this.state.pagination.detailDispatch;
+        const [user] = await this.orm.read("res.users", [staff.id], ["shahtaj_dm_dispatchable_order_ids"]);
+        const ids = user?.shahtaj_dm_dispatchable_order_ids || [];
+        this.state.pagination.detailDispatch.total = ids.length;
+        if (!ids.length) {
+            this.state.detailDispatch = [];
+            return;
+        }
+        const pageIds = ids.slice((pag.page - 1) * pag.limit, pag.page * pag.limit);
+        const orders = await this.orm.read(
+            "sale.order",
+            pageIds,
+            ["id", "name", "partner_id", "user_id", "date_order", "amount_total", "shahtaj_delivery_status", "invoice_ids"],
+        );
+        const posted = new Set();
+        const invoiceIds = orders.flatMap((o) => o.invoice_ids || []);
+        if (invoiceIds.length) {
+            const invoices = await this.orm.searchRead(
+                "account.move",
+                [["id", "in", invoiceIds], ["state", "=", "posted"]],
+                ["id", "invoice_origin"],
+            );
+            for (const inv of invoices) posted.add(inv.id);
+        }
+        this.state.detailDispatch = orders.map((o) => ({
+            odoo_id: o.id,
+            id: o.name,
+            shop: o.partner_id ? o.partner_id[1] : "—",
+            booker: o.user_id ? o.user_id[1] : "—",
+            date: o.date_order ? String(o.date_order).split(" ")[0] : "—",
+            amount: o.amount_total || 0,
+            deliveryStatus: o.shahtaj_delivery_status || "",
+            hasPostedInvoice: (o.invoice_ids || []).some((iid) => posted.has(iid)),
+        }));
+        } catch (error) {
+            this.notification.add("Failed to load dispatch orders: " + (error.data?.message || error.message), { type: "danger" });
+            this.state.detailDispatch = [];
+        }
+    }
+
+    canAssignDispatch(row) {
+        return row && row.hasPostedInvoice;
+    }
+
+    async openAssignModal(orderId) {
+        const row = this.state.detailDispatch.find((r) => r.odoo_id === orderId);
+        if (row && !this.canAssignDispatch(row)) {
+            this.notification.add("Invoice and post this order before assigning a delivery man.", { type: "warning" });
+            return;
+        }
+        this.state.assignModal.saving = true;
+        try {
+            await this._ensureLookupDeliveryMen();
+            const wizardIds = await this.orm.create(
+                "shahtaj.dm.assign.wizard",
+                [{}],
+                { context: { active_id: orderId, active_model: "sale.order" } },
+            );
+            const wizardId = Array.isArray(wizardIds) ? wizardIds[0] : wizardIds;
+            await this._loadAssignWizard(wizardId);
+            this.state.assignModal.open = true;
+        } catch (error) {
+            this.notification.add("Failed to open assign: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.assignModal.saving = false;
+        }
+    }
+
+    async _loadAssignWizard(wizardId) {
+        const [wiz] = await this.orm.read("shahtaj.dm.assign.wizard", [wizardId], ["sale_order_id", "partner_id", "job_ids"]);
+        const jobs = wiz.job_ids?.length
+            ? await this.orm.read("shahtaj.dm.assign.wizard.job", wiz.job_ids, ["id", "delivery_man_id", "scheduled_date", "line_ids"])
+            : [];
+        const allLineIds = jobs.flatMap((j) => j.line_ids || []);
+        const lineRecs = allLineIds.length
+            ? await this.orm.read("shahtaj.dm.assign.wizard.line", allLineIds, ["id", "sale_order_line_id", "product_id", "qty_ordered", "qty_assigned"])
+            : [];
+        const linesById = Object.fromEntries(lineRecs.map((l) => [l.id, l]));
+        this.state.assignModal.wizardId = wizardId;
+        this.state.assignModal.orderName = wiz.sale_order_id ? wiz.sale_order_id[1] : "";
+        this.state.assignModal.shop = wiz.partner_id ? wiz.partner_id[1] : "";
+        this.state.assignModal.jobs = jobs.map((j) => ({
+            id: j.id,
+            deliveryManId: j.delivery_man_id ? String(j.delivery_man_id[0]) : "",
+            scheduledDate: j.scheduled_date || "",
+            lines: (j.line_ids || []).map((lid) => {
+                const l = linesById[lid] || {};
+                return {
+                    id: lid,
+                    product: l.product_id ? l.product_id[1] : "Product",
+                    qtyOrdered: l.qty_ordered || 0,
+                    qtyAssigned: l.qty_assigned || 0,
+                };
+            }),
+        }));
+    }
+
+    closeAssignModal() {
+        this.state.assignModal.open = false;
+        this.state.assignModal.wizardId = null;
+        this.state.assignModal.jobs = [];
+    }
+
+    async persistAssignEdits() {
+        for (const job of this.state.assignModal.jobs) {
+            await this.orm.write("shahtaj.dm.assign.wizard.job", [job.id], {
+                delivery_man_id: job.deliveryManId ? parseInt(job.deliveryManId, 10) : false,
+                scheduled_date: job.scheduledDate || false,
+            });
+            for (const line of job.lines) {
+                await this.orm.write("shahtaj.dm.assign.wizard.line", [line.id], {
+                    qty_assigned: Number(line.qtyAssigned) || 0,
+                });
+            }
+        }
+    }
+
+    async addAssignDeliveryMan() {
+        if (!this.state.assignModal.wizardId) return;
+        this.state.assignModal.saving = true;
+        try {
+            await this.persistAssignEdits();
+            await this.orm.call("shahtaj.dm.assign.wizard", "action_add_delivery_man", [[this.state.assignModal.wizardId]]);
+            await this._loadAssignWizard(this.state.assignModal.wizardId);
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        } finally {
+            this.state.assignModal.saving = false;
+        }
+    }
+
+    async confirmAssign() {
+        if (!this.state.assignModal.wizardId) return;
+        this.state.assignModal.saving = true;
+        try {
+            await this.persistAssignEdits();
+            await this.orm.call("shahtaj.dm.assign.wizard", "action_confirm_assign", [[this.state.assignModal.wizardId]]);
+            this.notification.add("Delivery men assigned.", { type: "success" });
+            this.closeAssignModal();
+            await Promise.all([this.fetchDetailJobs(), this.fetchDetailDispatch(), this.fetchVanSnapshot(this.state.selectedStaff.id)]);
+        } catch (error) {
+            this.notification.add("Assign failed: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.assignModal.saving = false;
+        }
+    }
+
+    async openTodayLoad(dmId) {
+        const id = dmId || this.state.selectedStaff?.id;
+        if (!id) return;
+        this.state.todayLoadModal.saving = true;
+        try {
+            const action = await this.orm.call("shahtaj.dm.today.load", "action_open", [], { context: this._dmWizardContext(id) });
+            await this._loadTodayLoadWizard(action.res_id);
+            this.state.todayLoadModal.open = true;
+        } catch (error) {
+            this.notification.add("Today Load failed: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.todayLoadModal.saving = false;
+        }
+    }
+
+    async _loadTodayLoadWizard(wizardId) {
+        const [wiz] = await this.orm.read("shahtaj.dm.today.load", [wizardId], [
+            "delivery_man_id", "load_date", "summary_html", "stock_summary_html",
+            "shop_count", "total_still_to_pick", "van_qty_on_hand", "warehouse_qty_available",
+            "pick_line_ids", "shop_line_ids",
+        ]);
+        const pickLines = wiz.pick_line_ids?.length
+            ? await this.orm.read("shahtaj.dm.today.load.pick", wiz.pick_line_ids, [
+                "id", "product_id", "product_uom_id", "qty_warehouse_available", "qty_on_van", "qty_still_needed", "qty_to_pick",
+            ])
+            : [];
+        const shopLines = wiz.shop_line_ids?.length
+            ? await this.orm.read("shahtaj.dm.today.load.shop", wiz.shop_line_ids, [
+                "id", "partner_id", "sale_order_id", "state", "field_state",
+            ])
+            : [];
+        this.state.todayLoadModal.wizardId = wizardId;
+        this.state.todayLoadModal.dmName = this._m2oName(wiz.delivery_man_id);
+        this.state.todayLoadModal.loadDate = wiz.load_date || "";
+        this.state.todayLoadModal.summaryHtml = this._safeMarkup(wiz.summary_html);
+        this.state.todayLoadModal.stockSummaryHtml = this._safeMarkup(wiz.stock_summary_html);
+        this.state.todayLoadModal.shopCount = wiz.shop_count || 0;
+        this.state.todayLoadModal.stillToPick = wiz.total_still_to_pick || 0;
+        this.state.todayLoadModal.vanQty = wiz.van_qty_on_hand || 0;
+        this.state.todayLoadModal.warehouseQty = wiz.warehouse_qty_available || 0;
+        this.state.todayLoadModal.pickLines = pickLines.map((l) => ({
+            id: l.id,
+            product: this._m2oName(l.product_id),
+            uom: this._m2oName(l.product_uom_id),
+            warehouse: l.qty_warehouse_available || 0,
+            onVan: l.qty_on_van || 0,
+            stillNeed: l.qty_still_needed || 0,
+            qtyToPick: l.qty_to_pick || 0,
+        }));
+        this.state.todayLoadModal.shopLines = shopLines.map((l) => ({
+            id: l.id,
+            shop: this._m2oName(l.partner_id),
+            order: this._m2oName(l.sale_order_id),
+            state: l.state,
+            fieldState: l.field_state,
+        }));
+    }
+
+    closeTodayLoadModal() {
+        this.state.todayLoadModal.open = false;
+        this.state.todayLoadModal.wizardId = null;
+        this.state.todayLoadModal.pickLines = [];
+        this.state.todayLoadModal.shopLines = [];
+    }
+
+    async confirmTodayLoad() {
+        if (!this.state.todayLoadModal.wizardId) return;
+        this.state.todayLoadModal.saving = true;
+        try {
+            for (const line of this.state.todayLoadModal.pickLines) {
+                await this.orm.write("shahtaj.dm.today.load.pick", [line.id], { qty_to_pick: Number(line.qtyToPick) || 0 });
+            }
+            await this.orm.call("shahtaj.dm.today.load", "action_pick_today_load", [[this.state.todayLoadModal.wizardId]]);
+            this.notification.add("Today's load picked to van.", { type: "success" });
+            this.closeTodayLoadModal();
+            await Promise.all([this.fetchDetailJobs(), this.fetchVanSnapshot(this.state.selectedStaff.id)]);
+        } catch (error) {
+            this.notification.add("Today Load failed: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.todayLoadModal.saving = false;
+        }
+    }
+
+    async openVanTransfer(dmId) {
+        const id = dmId || this.state.selectedStaff?.id;
+        if (!id) return;
+        this.state.vanTransferModal.saving = true;
+        try {
+            const action = await this.orm.call("shahtaj.dm.van.transfer", "action_open", [], { context: this._dmWizardContext(id) });
+            await this._loadVanTransferWizard(action.res_id);
+            this.state.vanTransferModal.open = true;
+        } catch (error) {
+            this.notification.add("Van procedure failed: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.vanTransferModal.saving = false;
+        }
+    }
+
+    async _loadVanTransferWizard(wizardId) {
+        const [wiz] = await this.orm.read("shahtaj.dm.van.transfer", [wizardId], [
+            "delivery_man_id", "procedure_html", "van_qty_total", "warehouse_qty_total", "open_picked_job_count", "line_ids",
+        ]);
+        const lines = wiz.line_ids?.length
+            ? await this.orm.read("shahtaj.dm.van.transfer.line", wiz.line_ids, [
+                "id", "product_id", "product_uom_id", "qty_warehouse", "qty_on_van", "qty_load", "qty_return",
+            ])
+            : [];
+        this.state.vanTransferModal.wizardId = wizardId;
+        this.state.vanTransferModal.dmName = this._m2oName(wiz.delivery_man_id);
+        this.state.vanTransferModal.procedureHtml = this._safeMarkup(wiz.procedure_html);
+        this.state.vanTransferModal.vanQty = wiz.van_qty_total || 0;
+        this.state.vanTransferModal.warehouseQty = wiz.warehouse_qty_total || 0;
+        this.state.vanTransferModal.openPickedJobs = wiz.open_picked_job_count || 0;
+        this.state.vanTransferModal.lines = lines.map((l) => ({
+            id: l.id,
+            product: this._m2oName(l.product_id),
+            uom: this._m2oName(l.product_uom_id),
+            warehouse: l.qty_warehouse || 0,
+            onVan: l.qty_on_van || 0,
+            qtyLoad: l.qty_load || 0,
+            qtyReturn: l.qty_return || 0,
+        }));
+    }
+
+    closeVanTransferModal() {
+        this.state.vanTransferModal.open = false;
+        this.state.vanTransferModal.wizardId = null;
+        this.state.vanTransferModal.lines = [];
+    }
+
+    async _runVanTransferAction(method, successMessage) {
+        if (!this.state.vanTransferModal.wizardId) return;
+        this.state.vanTransferModal.saving = true;
+        try {
+            for (const line of this.state.vanTransferModal.lines) {
+                await this.orm.write("shahtaj.dm.van.transfer.line", [line.id], {
+                    qty_load: Number(line.qtyLoad) || 0,
+                    qty_return: Number(line.qtyReturn) || 0,
+                });
+            }
+            await this.orm.call("shahtaj.dm.van.transfer", method, [[this.state.vanTransferModal.wizardId]]);
+            this.notification.add(successMessage, { type: "success" });
+            await this._loadVanTransferWizard(this.state.vanTransferModal.wizardId);
+            await this.fetchVanSnapshot(this.state.selectedStaff.id);
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        } finally {
+            this.state.vanTransferModal.saving = false;
+        }
+    }
+
+    confirmVanLoad() {
+        return this._runVanTransferAction("action_load_to_van", "Warehouse stock loaded onto van.");
+    }
+
+    confirmVanReturn() {
+        return this._runVanTransferAction("action_return_to_warehouse", "Van stock returned to warehouse.");
+    }
+
+    confirmVanEmpty() {
+        return this._runVanTransferAction("action_return_all_to_warehouse", "Van emptied to warehouse.");
+    }
+
+    onCollectChequeImage(ev) {
+        const file = ev.target.files && ev.target.files[0];
+        if (!file) {
+            this.state.collectModal.chequeImage = false;
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = String(reader.result || "");
+            this.state.collectModal.chequeImage = result.includes(",") ? result.split(",")[1] : result;
+        };
+        reader.readAsDataURL(file);
     }
 
     stockStateLabel(state) {

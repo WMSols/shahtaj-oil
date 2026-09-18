@@ -1,18 +1,23 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart } from "@odoo/owl";
+import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
 
 export class DeliveryManPerformance extends Component {
+    static props = {
+        requestedPerfSubTab: { type: String, optional: true },
+        requestedOpenSettle: { type: Boolean, optional: true },
+    };
     setup() {
         this.orm = useService("orm");
         this.notification = useService("notification");
         const today = new Date();
         this.todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
         const ITEMS_PER_PAGE = 10;
+        const initialTab = this._allowedPerfTab(this.props.requestedPerfSubTab);
         this.state = useState({
-            perfSubTab: "jobs",
+            perfSubTab: initialTab,
             dateFrom: this.todayStr,
             dateTo: this.todayStr,
             isLoading: false,
@@ -52,6 +57,28 @@ export class DeliveryManPerformance extends Component {
             await this.loadDeliveryMen();
             await this.refreshActive();
         });
+
+        onWillUpdateProps(async (nextProps) => {
+            const nextTab = this._allowedPerfTab(nextProps.requestedPerfSubTab);
+            if (nextTab !== this.state.perfSubTab) {
+                this.state.perfSubTab = nextTab;
+                await this.refreshActive();
+            }
+            if (nextProps.requestedOpenSettle && !this.props.requestedOpenSettle) {
+                this.state.perfSubTab = "collections";
+                await this.refreshActive();
+            }
+        });
+    }
+
+    _allowedPerfTab(tab) {
+        if (tab === "sessions" || tab === "collections" || tab === "settlements" || tab === "jobs") {
+            if ((tab === "collections" || tab === "settlements") && !this.hasFinancialAccess) {
+                return "jobs";
+            }
+            return tab;
+        }
+        return "jobs";
     }
 
     get hasFinancialAccess() {
@@ -187,7 +214,7 @@ export class DeliveryManPerformance extends Component {
                 this.orm.searchRead(
                     "shahtaj.dm.day.session",
                     domain,
-                    ["id", "delivery_man_id", "session_date", "state", "departed_at", "ended_at"],
+                    ["id", "delivery_man_id", "session_date", "state", "departed_at", "ended_at", "gps_min_distance_m", "gps_max_distance_m", "notes"],
                     { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "session_date desc, id desc" },
                 ),
             ]);
@@ -199,6 +226,9 @@ export class DeliveryManPerformance extends Component {
                 state: s.state,
                 departed: s.departed_at || "—",
                 ended: s.ended_at || "—",
+                gpsMin: s.gps_min_distance_m || 0,
+                gpsMax: s.gps_max_distance_m || 0,
+                notes: s.notes || "",
             }));
         } catch (error) {
             this.notification.add("Failed to load sessions: " + (error.data?.message || error.message), { type: "danger" });
@@ -240,14 +270,14 @@ export class DeliveryManPerformance extends Component {
                 this.orm.searchRead(
                     "account.payment",
                     payDomain,
-                    ["id", "name", "date", "amount", "partner_id", "shahtaj_collected_by_dm_id"],
+                    ["id", "name", "date", "amount", "partner_id", "shahtaj_collected_by_dm_id", "shahtaj_payment_channel", "shahtaj_instrument_reference", "shahtaj_has_cheque_image", "shahtaj_dm_delivery_id", "shahtaj_payment_notes", "state"],
                     { limit: colPag.limit, offset: (colPag.page - 1) * colPag.limit, order: "date desc, id desc" },
                 ),
                 this.orm.searchCount("shahtaj.dm.wallet.settlement", setDomain),
                 this.orm.searchRead(
                     "shahtaj.dm.wallet.settlement",
                     setDomain,
-                    ["id", "name", "delivery_man_id", "amount", "settlement_date"],
+                    ["id", "name", "delivery_man_id", "amount", "settlement_date", "bank_journal_id", "settled_by_id", "move_id", "state"],
                     { limit: setPag.limit, offset: (setPag.page - 1) * setPag.limit, order: "settlement_date desc, id desc" },
                 ),
             ]);
@@ -260,12 +290,22 @@ export class DeliveryManPerformance extends Component {
                 amount: p.amount || 0,
                 shop: p.partner_id ? p.partner_id[1] : "—",
                 dm: p.shahtaj_collected_by_dm_id ? p.shahtaj_collected_by_dm_id[1] : "—",
+                channel: p.shahtaj_payment_channel || "cash",
+                cheque: p.shahtaj_instrument_reference || "",
+                hasChequeImage: !!p.shahtaj_has_cheque_image,
+                job: p.shahtaj_dm_delivery_id ? p.shahtaj_dm_delivery_id[1] : "—",
+                notes: p.shahtaj_payment_notes || "",
+                state: p.state || "",
             }));
             this.state.settlements = settlements.map((s) => ({
                 id: s.id,
                 dm: s.delivery_man_id ? s.delivery_man_id[1] : "—",
                 amount: s.amount || 0,
                 date: s.settlement_date || "—",
+                journal: s.bank_journal_id ? s.bank_journal_id[1] : "—",
+                settledBy: s.settled_by_id ? s.settled_by_id[1] : "—",
+                move: s.move_id ? s.move_id[1] : "—",
+                state: s.state || "",
             }));
         } catch (error) {
             this.notification.add("Failed to load recovery: " + (error.data?.message || error.message), { type: "danger" });
@@ -396,6 +436,11 @@ export class DeliveryManPerformance extends Component {
     sessionLabel(state) {
         const map = { office: "Office", on_the_way: "On the way", ended: "Ended" };
         return map[state] || state || "—";
+    }
+
+    channelLabel(channel) {
+        const map = { cash: "Cash", cheque: "Cheque", bank: "Bank" };
+        return map[channel] || channel || "—";
     }
 
     openGpsDeliveries() {
