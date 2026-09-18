@@ -11,7 +11,6 @@
                 <div class="text-end">
                     <span class="badge bg-dark px-3 py-2 fs-6 text-white">Admin</span>
                     <div t-if="this.state.appVersion" class="small text-muted mt-2">
-                        <span t-esc="this.state.appName"/>
                         <span class="fw-semibold text-dark ms-1" t-esc="this.state.appVersion"/>
                     </div>
                 </div>
@@ -132,23 +131,7 @@
                         </div>
                     </div>
 
-                    <div class="row mt-4">
-                        <div class="col-12">
-                            <div class="card border shadow-sm p-4 rounded-3 bg-white">
-                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                    <div>
-                                        <h5 class="fw-bold mb-1">App version</h5>
-                                        <small class="text-muted">Installed Shahtaj Oil module currently running on this server.</small>
-                                    </div>
-                                    <div class="text-end">
-                                        <div class="fw-bold text-dark" t-esc="this.state.appName"/>
-                                        <span class="badge bg-dark text-white px-3 py-2 font-monospace"
-                                              t-esc="this.state.appVersion or '—'"/>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    
                 </div>
             </t>
         </div>
