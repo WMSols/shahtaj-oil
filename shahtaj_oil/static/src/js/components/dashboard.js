@@ -32,10 +32,7 @@ export class ShahtajDashboard extends Component {
             activeTab: 'overview', // Default to the new Master Overview
             activeSubTab: '',
             staffRole: 'order_booker',
-            staffShowCreate: false,
             deliveriesSubTab: '',
-            perfSubTab: 'jobs',
-            openSettleWallet: false,
             checkinPurpose: 'all',
             checkinRole: 'all',
             checkinDate: '', 
@@ -62,7 +59,6 @@ export class ShahtajDashboard extends Component {
                 onlineDeliveryMen: 0,
                 dmJobsToday: 0,
                 dmJobsActive: 0,
-                dmStopsPending: 0,
                 dmInTransit: 0,
                 ordersToDispatch: 0,
                 totalProducts: 0,
@@ -85,7 +81,6 @@ export class ShahtajDashboard extends Component {
                 territory: false,
                 warehouse: false,
                 operations: false,
-                deliveryMan: false,
                 financials: false,
                 schedules: false,
                 accounting: false,
@@ -96,25 +91,13 @@ export class ShahtajDashboard extends Component {
             if (ev.detail.staffRole) {
                 this.state.staffRole = ev.detail.staffRole;
             }
-            if (ev.detail.staffShowCreate !== undefined) {
-                this.state.staffShowCreate = ev.detail.staffShowCreate;
-            }
             if (ev.detail.deliveriesSubTab) {
                 this.state.deliveriesSubTab = ev.detail.deliveriesSubTab;
-            }
-            if (ev.detail.perfSubTab) {
-                this.state.perfSubTab = ev.detail.perfSubTab;
-            }
-            if (ev.detail.openSettleWallet !== undefined) {
-                this.state.openSettleWallet = ev.detail.openSettleWallet;
             }
             this.state.checkinPurpose = ev.detail.checkinPurpose || 'all';
             this.state.checkinRole = ev.detail.checkinRole || 'all';
             this.state.checkinDate = ev.detail.checkinDate || '';
-            this.switchTab(ev.detail.tab, ev.detail.subTab, {
-                expandMenu: ev.detail.expandMenu,
-                forceBusy: ev.detail.forceBusy,
-            });
+            this.switchTab(ev.detail.tab, ev.detail.subTab);
         });
         onWillStart(async () => {
             const chartPromise = this.hasFinancialAccess ? this.ensureChartJs() : Promise.resolve();
@@ -248,7 +231,6 @@ export class ShahtajDashboard extends Component {
                 this.orm.searchCount("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["state", "!=", "not_ready"]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["state", "in", ["ready", "picked", "partial"]]]),
-                this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["field_state", "in", ["pending", "in_transit", "not_attended", "failed"]]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["field_state", "=", "in_transit"]]),
                 this.orm.searchCount("sale.order", [["state", "in", ["sale", "done"]], ["shahtaj_delivery_status", "in", ["pending", "partial"]]]),
             ]);
@@ -277,7 +259,7 @@ export class ShahtajDashboard extends Component {
                 totalProducts, outOfStockProducts,
                 activeSchedules, activeTargets,
                 totalDeliveryMen, onlineDeliveryMen,
-                dmJobsToday, dmJobsActive, dmStopsPending, dmInTransit, ordersToDispatch,
+                dmJobsToday, dmJobsActive, dmInTransit, ordersToDispatch,
             ] = coreCounts;
 
             Object.assign(this.state.kpis, {
@@ -299,7 +281,6 @@ export class ShahtajDashboard extends Component {
                 onlineDeliveryMen,
                 dmJobsToday,
                 dmJobsActive,
-                dmStopsPending,
                 dmInTransit,
                 ordersToDispatch,
                 ...financial,
@@ -391,7 +372,7 @@ export class ShahtajDashboard extends Component {
         this.state.opsDate = dateStr;
         const opsBounds = this._pktDateToUtcBounds(dateStr);
         try {
-            const [todayCheckins, todayOrders, pendingDeliveries, dmJobsToday, dmJobsActive, dmStopsPending, dmInTransit] = await Promise.all([
+            const [todayCheckins, todayOrders, pendingDeliveries, dmJobsToday, dmInTransit] = await Promise.all([
                 this.orm.searchCount("shahtaj.gps.attempt", [
                     ["purpose", "=", "check_in"],
                     ["create_date", ">=", opsBounds.start],
@@ -400,8 +381,6 @@ export class ShahtajDashboard extends Component {
                 this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]),
                 this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["state", "=", "sale"], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["state", "!=", "not_ready"]]),
-                this.orm.searchCount("shahtaj.dm.delivery", [["state", "in", ["ready", "picked", "partial"]]]),
-                this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["field_state", "in", ["pending", "in_transit", "not_attended", "failed"]]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["field_state", "=", "in_transit"]]),
             ]);
             Object.assign(this.state.kpis, {
@@ -409,8 +388,6 @@ export class ShahtajDashboard extends Component {
                 todayOrders,
                 pendingDeliveries,
                 dmJobsToday,
-                dmJobsActive,
-                dmStopsPending,
                 dmInTransit,
             });
         } catch (error) {
@@ -595,15 +572,7 @@ export class ShahtajDashboard extends Component {
 
     openStaff(role = 'order_booker') {
         this.state.staffRole = role;
-        this.state.staffShowCreate = false;
         this.switchTab('staff');
-    }
-
-    openCreateDeliveryMan() {
-        const forceBusy = this.state.activeTab === 'staff';
-        this.state.staffRole = 'delivery_man';
-        this.state.staffShowCreate = true;
-        this.switchTab('staff', '', { forceBusy, expandMenu: 'deliveryMan' });
     }
 
     openDeliveries(subTab = 'dispatch') {
@@ -611,102 +580,7 @@ export class ShahtajDashboard extends Component {
             && this.state.activeSubTab === 'deliveries'
             && this.state.deliveriesSubTab !== subTab;
         this.state.deliveriesSubTab = subTab;
-        this.switchTab('operations', 'deliveries', { forceBusy, expandMenu: 'deliveryMan' });
-    }
-
-    openDmVisitProgress() {
-        this.switchTab('operations', 'dm_visit_progress', { expandMenu: 'deliveryMan' });
-    }
-
-    openDmPerformance(subTab = 'jobs', openSettle = false) {
-        const forceBusy = this.state.activeTab === 'operations'
-            && this.state.activeSubTab === 'dm_performance'
-            && (this.state.perfSubTab !== subTab || !!this.state.openSettleWallet !== !!openSettle);
-        this.state.perfSubTab = subTab;
-        this.state.openSettleWallet = openSettle;
-        this.switchTab('operations', 'dm_performance', { forceBusy, expandMenu: 'deliveryMan' });
-    }
-
-    openDeliveryManOverview() {
-        this.switchTab('overview', '', { expandMenu: 'deliveryMan' });
-    }
-
-    async toggleDeliveryManMenu() {
-        if (this.state.isSwitchingTab) {
-            return;
-        }
-        const isCurrentlyOpen = this.state.expandedMenus.deliveryMan;
-        if (isCurrentlyOpen) {
-            this.state.expandedMenus.deliveryMan = false;
-            return;
-        }
-        await this.openDeliveryManOverview();
-    }
-
-    dmNavStyle(item) {
-        const active = this._isDmNavItemActive(item);
-        return active
-            ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;'
-            : 'color: #6b7280; background-color: transparent;';
-    }
-
-    _isDmNavItemActive(item) {
-        if (item === 'overview') {
-            return this.state.activeTab === 'overview' && this.state.expandedMenus.deliveryMan;
-        }
-        if (item === 'create') {
-            return this.state.activeTab === 'staff' && this.state.staffRole === 'delivery_man' && this.state.staffShowCreate;
-        }
-        if (item === 'dispatch') {
-            return this.state.activeTab === 'operations' && this.state.activeSubTab === 'deliveries' && this.state.deliveriesSubTab === 'dispatch';
-        }
-        if (item === 'jobs') {
-            return this.state.activeTab === 'operations' && this.state.activeSubTab === 'deliveries' && this.state.deliveriesSubTab === 'jobs';
-        }
-        if (item === 'all_jobs') {
-            return this.state.activeTab === 'operations' && this.state.activeSubTab === 'deliveries' && this.state.deliveriesSubTab === 'all_jobs';
-        }
-        if (item === 'visit') {
-            return this.state.activeTab === 'operations' && this.state.activeSubTab === 'dm_visit_progress';
-        }
-        if (item === 'sessions') {
-            return this.state.activeTab === 'operations' && this.state.activeSubTab === 'dm_performance' && this.state.perfSubTab === 'sessions';
-        }
-        if (item === 'collections') {
-            return this.state.activeTab === 'operations' && this.state.activeSubTab === 'dm_performance' && this.state.perfSubTab === 'collections' && !this.state.openSettleWallet;
-        }
-        if (item === 'settle') {
-            return this.state.activeTab === 'operations' && this.state.activeSubTab === 'dm_performance' && this.state.openSettleWallet;
-        }
-        if (item === 'settlements') {
-            return this.state.activeTab === 'operations' && this.state.activeSubTab === 'dm_performance' && this.state.perfSubTab === 'settlements';
-        }
-        return false;
-    }
-
-    _expandKey(tabName, subTabName, options = {}) {
-        if (options.expandMenu) {
-            return options.expandMenu;
-        }
-        if (tabName === 'operations' && ['deliveries', 'dm_visit_progress'].includes(subTabName)) {
-            return 'deliveryMan';
-        }
-        if (tabName === 'staff' && this.state.staffShowCreate) {
-            return 'deliveryMan';
-        }
-        if (this.state.expandedMenus[tabName] !== undefined) {
-            return tabName;
-        }
-        return '';
-    }
-
-    _applyExpandedMenu(expandKey) {
-        for (const key in this.state.expandedMenus) {
-            this.state.expandedMenus[key] = false;
-        }
-        if (expandKey && this.state.expandedMenus[expandKey] !== undefined) {
-            this.state.expandedMenus[expandKey] = true;
-        }
+        this.switchTab('operations', 'deliveries', { forceBusy });
     }
 
     openCheckins() {
@@ -760,18 +634,16 @@ export class ShahtajDashboard extends Component {
         if (!this.hasFinancialAccess && tabName === 'warehouse' && ['inventory', 'taxes'].includes(subTabName)) {
             subTabName = 'management';
         }
-        if (tabName !== 'staff') {
-            this.state.staffShowCreate = false;
-        }
-        if (!(tabName === 'operations' && subTabName === 'dm_performance')) {
-            this.state.openSettleWallet = false;
-        }
 
-        const expandKey = this._expandKey(tabName, subTabName, options);
         const sameTab = this.state.activeTab === tabName;
         const sameSub = sameTab && (this.state.activeSubTab || '') === (subTabName || '');
         if (sameSub && !options.forceBusy) {
-            this._applyExpandedMenu(expandKey);
+            for (let key in this.state.expandedMenus) {
+                this.state.expandedMenus[key] = false;
+            }
+            if (this.state.expandedMenus[tabName] !== undefined) {
+                this.state.expandedMenus[tabName] = true;
+            }
             this.state.isSidebarOpen = false;
             return;
         }
@@ -780,7 +652,12 @@ export class ShahtajDashboard extends Component {
         try {
             if (sameTab) {
                 this.state.activeSubTab = subTabName;
-                this._applyExpandedMenu(expandKey);
+                for (let key in this.state.expandedMenus) {
+                    this.state.expandedMenus[key] = false;
+                }
+                if (this.state.expandedMenus[tabName] !== undefined) {
+                    this.state.expandedMenus[tabName] = true;
+                }
                 this.state.isSidebarOpen = false;
                 await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 10)));
                 return;
@@ -791,7 +668,13 @@ export class ShahtajDashboard extends Component {
 
             this.state.activeTab = tabName;
             this.state.activeSubTab = subTabName;
-            this._applyExpandedMenu(expandKey);
+
+            for (let key in this.state.expandedMenus) {
+                this.state.expandedMenus[key] = false;
+            }
+            if (this.state.expandedMenus[tabName] !== undefined) {
+                this.state.expandedMenus[tabName] = true;
+            }
             this.state.isSidebarOpen = false;
 
             await new Promise((resolve) => setTimeout(resolve, 10));
