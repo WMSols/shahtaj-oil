@@ -99,6 +99,7 @@ export class FinancialsInvoicing extends Component {
             isPaying: false,
             isRefunding: false,
             isLoadingLines: false,
+            invoiceShops: [],
 
             selectedPayment: null,
             selectedShop: null,
@@ -161,11 +162,11 @@ export class FinancialsInvoicing extends Component {
             stats: { totalOrders: 0, toInvoice: 0, openInvoices: 0, creditNotes: 0, approvedShops: 0 },
 
             filters: {
-                allOrders: { search: '', status: 'all' },
-                orders: { search: '' },
-                invoices: { search: '', status: 'all' },
-                creditNotes: { search: '', status: 'all' },
-                payments: { search: '' },
+                allOrders: { search: '', status: 'all', shop: 'all', dateFrom: '', dateTo: '' },
+                orders: { search: '', shop: 'all', dateFrom: '', dateTo: '' },
+                invoices: { search: '', status: 'all', shop: 'all', dateFrom: '', dateTo: '' },
+                creditNotes: { search: '', status: 'all', shop: 'all', dateFrom: '', dateTo: '' },
+                payments: { search: '', shop: 'all', dateFrom: '', dateTo: '' },
                 purchaseOrders: { search: '', status: 'all' },
                 receipts: { search: '', status: 'all' },
                 vendorBills: { search: '', status: 'all' },
@@ -338,6 +339,53 @@ export class FinancialsInvoicing extends Component {
         this.fetchActiveList(); // Dropdowns don't need debouncing, fetch immediately
     }
 
+    async ensureInvoiceShopLookup() {
+        if (this.state.invoiceShops.length) {
+            return;
+        }
+        try {
+            const shops = await this.orm.searchRead(
+                "res.partner",
+                [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"], ["active", "=", true]],
+                ["id", "name"],
+                { order: "name asc", limit: 500 }
+            );
+            this.state.invoiceShops = shops || [];
+        } catch (error) {
+            this.state.invoiceShops = [];
+        }
+    }
+
+    _applyInvoiceListFilters(domain, stateKey, filters) {
+        if (!filters) {
+            return;
+        }
+        if (filters.shop && filters.shop !== "all") {
+            const shopId = parseInt(filters.shop, 10);
+            if (shopId) {
+                domain.push(["partner_id", "=", shopId]);
+            }
+        }
+        const dateFieldByKey = {
+            allOrders: "date_order",
+            orders: "date_order",
+            invoices: "invoice_date",
+            creditNotes: "invoice_date",
+            payments: "date",
+        };
+        const dateField = dateFieldByKey[stateKey];
+        if (!dateField) {
+            return;
+        }
+        if (filters.dateFrom) {
+            domain.push([dateField, ">=", filters.dateFrom]);
+        }
+        if (filters.dateTo) {
+            const toValue = dateField === "date_order" ? `${filters.dateTo} 23:59:59` : filters.dateTo;
+            domain.push([dateField, "<=", toValue]);
+        }
+    }
+
     onHasCreditLimitFilterChange(ev) {
         this.state.filters.credits.hasCreditLimit = Boolean(ev.target.checked);
         this.onFilterChange('credits');
@@ -423,6 +471,9 @@ export class FinancialsInvoicing extends Component {
             const pag = this.state.pagination[stateKey];
             const filters = this.state.filters[stateKey];
             let domain = [];
+            if (["allOrders", "orders", "invoices", "creditNotes", "payments"].includes(stateKey)) {
+                await this.ensureInvoiceShopLookup();
+            }
             
             if (stateKey === 'allOrders') domain.push(["shahtaj_visit_id", "!=", false]);
             if (stateKey === 'orders') domain.push(["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]);
@@ -495,13 +546,29 @@ export class FinancialsInvoicing extends Component {
                 }
             }
 
+            this._applyInvoiceListFilters(domain, stateKey, filters);
+
             // 4. FIRE DUAL QUERIES (Total Count + Paged Records)
             const queryContext = (stateKey === 'vendors' && this.state.vendorViewMode === 'archived') ? { active_test: false } : {};
-            const [total, records] = await Promise.all([
-                this.orm.searchCount(model, domain, { context: queryContext }),
-                this.orm.searchRead(model, domain, fields, { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc", context: queryContext })
+            // outstanding_balance is computed/non-stored, so shop balances must be sorted in JS
+            // (highest outstanding first) then sliced to keep pagination ranking correct.
+            const sortShopBalances = stateKey === 'credits' && this.state.creditSubView === 'balances';
+            const searchReadOptions = sortShopBalances
+                ? { context: queryContext }
+                : { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc", context: queryContext };
+            const [total, fetchedRecords] = await Promise.all([
+                sortShopBalances ? Promise.resolve(0) : this.orm.searchCount(model, domain, { context: queryContext }),
+                this.orm.searchRead(model, domain, fields, searchReadOptions)
             ]);
-            this.state.pagination[stateKey].total = total;
+            let records = fetchedRecords;
+            if (sortShopBalances) {
+                records = [...fetchedRecords].sort((a, b) => (b.outstanding_balance || 0) - (a.outstanding_balance || 0));
+                this.state.pagination[stateKey].total = records.length;
+                const start = (pag.page - 1) * pag.limit;
+                records = records.slice(start, start + pag.limit);
+            } else {
+                this.state.pagination[stateKey].total = total;
+            }
             // 5. MAP DATA TO UI
             if (stateKey === 'credits') {
                 this.state.credits = records.map((shop) => {
@@ -781,6 +848,10 @@ export class FinancialsInvoicing extends Component {
             return matchesSearch && matchesStatus;
         });
     }
+
+    get sortedShopBalances() {
+        return [...(this.state.credits || [])].sort((a, b) => (b.rawOutstanding || 0) - (a.rawOutstanding || 0));
+    }
     get displayPnlLines() {
         if (!this.state.pnl.selectedProductLineId) {
             return this.state.pnl.lines;
@@ -850,7 +921,10 @@ export class FinancialsInvoicing extends Component {
                 creditDomain.push(["credit_limit", ">", 0]);
             }
             const shopsData = await this.orm.searchRead("res.partner", creditDomain, ["name", "owner_name", "shahtaj_shop_category", "credit_limit", "outstanding_balance"]);
-            this.state.credits = (shopsData || []).map((shop) => {
+            const sortedShops = this.state.creditSubView === 'balances'
+                ? [...(shopsData || [])].sort((a, b) => (b.outstanding_balance || 0) - (a.outstanding_balance || 0))
+                : (shopsData || []);
+            this.state.credits = sortedShops.map((shop) => {
                 const limit = shop.credit_limit || 0;
                 const utilized = shop.outstanding_balance || 0;
                 let status = "Healthy";
@@ -860,9 +934,11 @@ export class FinancialsInvoicing extends Component {
                     else if (utilized >= limit * 0.85) status = "Critical";
                 }
                 return {
-                    id: shop.id, shopId: shop.id, shop: shop.name, limit: limit.toLocaleString(),
+                    id: shop.id, shopId: shop.id, shop: shop.name, owner: shop.owner_name || "N/A",
+                    limit: shop.shahtaj_shop_category === "cash" ? "N/A" : limit.toLocaleString(),
                     rawLimit: limit, utilized: utilized.toLocaleString(), rawUtilized: utilized,
                     available: Math.max(0, limit - utilized).toLocaleString(), status,
+                    outstanding: utilized.toLocaleString(), rawOutstanding: utilized,
                 };
             });
         }

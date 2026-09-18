@@ -636,6 +636,27 @@ class ShahtajDmDelivery(models.Model):
         self.ensure_one()
         return self.state in DM_PROCESSING_STATES
 
+    def _shahtaj_planning_field_changed(self, field_name, new_value):
+        """True when a distributor planning field would actually change."""
+        self.ensure_one()
+        old = self[field_name]
+        if field_name == 'delivery_man_id':
+            old_id = old.id if old else False
+            if isinstance(new_value, models.BaseModel):
+                new_id = new_value.id if new_value else False
+            else:
+                new_id = new_value or False
+            return old_id != new_id
+        if field_name == 'scheduled_date':
+            old_d = fields.Date.to_date(old) if old else False
+            new_d = fields.Date.to_date(new_value) if new_value else False
+            return old_d != new_d
+        if field_name == 'scheduled_time':
+            return float_compare(old or 0.0, new_value or 0.0, precision_digits=6) != 0
+        if field_name == 'notes':
+            return (old or '') != (new_value or '')
+        return old != new_value
+
     def write(self, vals):
         planning_vals = DM_DISTRIBUTOR_PLANNING_FIELDS.intersection(vals)
         user = self.env.user
@@ -646,20 +667,27 @@ class ShahtajDmDelivery(models.Model):
             and not user._is_public()
         )
         if planning_vals and is_distributor:
-            locked = self.filtered(lambda rec: rec._shahtaj_is_processing_locked())
+            changing = self.filtered(
+                lambda rec: any(
+                    rec._shahtaj_planning_field_changed(key, vals[key])
+                    for key in planning_vals
+                )
+            )
+            locked = changing.filtered(lambda rec: rec._shahtaj_is_processing_locked())
             if locked:
                 raise UserError(_(
                     'Cannot change delivery planning for %(names)s — '
                     'stock is already picked or delivery is finished.',
                     names=', '.join(locked.mapped('display_name')),
                 ))
-            self.env['shahtaj.activity.log'].log_model_field_changes(
-                self,
-                operation='delivery.update',
-                title='Delivery job updated',
-                vals={k: vals[k] for k in planning_vals},
-                field_labels=DM_PLANNING_FIELD_LABELS,
-            )
+            if changing:
+                self.env['shahtaj.activity.log'].log_model_field_changes(
+                    changing,
+                    operation='delivery.update',
+                    title='Delivery job updated',
+                    vals={k: vals[k] for k in planning_vals},
+                    field_labels=DM_PLANNING_FIELD_LABELS,
+                )
         res = super().write(vals)
         if planning_vals.intersection({'delivery_man_id', 'scheduled_date'}):
             self.filtered(
@@ -848,7 +876,7 @@ class ShahtajDmDelivery(models.Model):
             if new_state not in ('picked', 'partial', 'delivered', 'returned') and rec.pick_picking_id and rec.pick_picking_id.state != 'done':
                 vals['pick_picking_id'] = False
             if vals:
-                rec.sudo().write(vals)
+                rec.sudo().with_context(shahtaj_skip_planning_log=True).write(vals)
             if ensure_visit_task:
                 rec._ensure_visit_task()
 
@@ -1004,10 +1032,6 @@ class ShahtajDmDelivery(models.Model):
             ('delivery_man_id', '=', delivery_man.id),
         ], limit=1)
 
-        if job and job.state in ('picked', 'partial', 'delivered', 'returned'):
-            # Allow qty increase / date change, but not DM swap on this record.
-            pass
-
         if not job:
             job = DmDelivery.create({
                 'delivery_man_id': delivery_man.id,
@@ -1025,12 +1049,16 @@ class ShahtajDmDelivery(models.Model):
                     order=sale_order.name,
                     dm=delivery_man.name,
                 ))
-            job.write({
-                'scheduled_date': day,
-                'scheduled_time': scheduled_time or 0.0,
+            write_vals = {
                 'assigned_by_id': assigned_by.id,
                 'assignment_mode': 'manual',
-            })
+            }
+            # Picked / partial / delivered jobs keep delivery man and day frozen.
+            # Remaining qty can still be assigned (same DM or an extra DM).
+            if not job._shahtaj_is_processing_locked():
+                write_vals['scheduled_date'] = day
+                write_vals['scheduled_time'] = scheduled_time or 0.0
+            job.write(write_vals)
 
         job._sync_lines_from_sale_order()
         if line_qty_map is None:
@@ -1807,6 +1835,11 @@ class ShahtajDmDelivery(models.Model):
                 ('visit_kind', '=', 'delivery_man'),
                 ('dm_delivery_id', '=', rec.id),
             ], limit=1)
+            started = rec.picked_at or rec.delivered_at or fields.Datetime.now()
+            ended = rec.delivered_at or fields.Datetime.now()
+            duration = 0
+            if started and ended:
+                duration = max(int((ended - started).total_seconds()), 0)
             vals = {
                 'visit_kind': 'delivery_man',
                 'dm_delivery_id': rec.id,
@@ -1820,8 +1853,9 @@ class ShahtajDmDelivery(models.Model):
                 'state': 'completed',
                 'outcome': 'order',
                 'sale_order_id': rec.sale_order_id.id,
-                'started_at': rec.picked_at or rec.delivered_at or fields.Datetime.now(),
-                'ended_at': rec.delivered_at or fields.Datetime.now(),
+                'started_at': started,
+                'ended_at': ended,
+                'duration_seconds': duration,
             }
             if visit:
                 visit.with_context(shahtaj_system_visit_write=True).write(vals)

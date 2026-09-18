@@ -236,10 +236,7 @@
 
             <div t-if="this.state.isSidebarOpen" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-md-none" style="z-index: 1040;" t-on-click="toggleSidebar"></div>
 
-            <div t-attf-class="bg-white border-end shadow-sm flex-column overflow-y-auto transition-all #{this.state.isSidebarOpen ? 'position-fixed top-0 start-0 d-flex h-100' : 'd-none d-md-flex h-100 position-relative'}" style="width: 280px; min-width: 280px; z-index: 1050;">
-                <t t-if="this.state.isSwitchingTab">
-                    <div class="position-absolute top-0 start-0 w-100 h-100" style="z-index: 1060; background: rgba(148, 163, 184, 0.28); pointer-events: auto; cursor: wait;" t-on-click.stop.prevent="" t-on-mousedown.stop.prevent=""></div>
-                </t>
+            <div t-attf-class="bg-white border-end shadow-sm flex-column overflow-y-auto transition-all #{this.state.isSidebarOpen ? 'position-fixed top-0 start-0 d-flex h-100' : 'd-none d-md-flex h-100 position-relative'}" t-att-style="'width: 280px; min-width: 280px; z-index: 1050;' + (this.state.isSwitchingTab ? ' cursor: wait;' : '')">
 
                 <div class="p-4 border-bottom text-center bg-white position-relative">
                     <button class="btn btn-sm btn-light position-absolute top-0 end-0 m-2 d-md-none shadow-sm" t-on-click="toggleSidebar">
@@ -347,10 +344,13 @@
                             <div class="smooth-accordion-inner">
                                 <div class="d-flex flex-column ps-4 mt-1 pe-2 gap-1 border-start ms-3 border-2 border-light mb-1">
                                     <button t-on-click="() => this.openCheckins()" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'operations' and this.state.activeSubTab === 'checkins' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Shop Check-ins/GPS</button>
+                                    <button t-on-click="() => this.openDeliveries('dispatch')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'operations' and this.state.activeSubTab === 'deliveries' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">DM Operations</button>
                                     <button t-on-click="() => this.switchTab('operations', 'orders')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'operations' and this.state.activeSubTab === 'orders' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Live Orders</button>
+                                     <button t-on-click="() => this.switchTab('operations', 'all_deliveries')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'operations' and this.state.activeSubTab === 'all_deliveries' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">All Deliveries</button>
                                     <button t-on-click="() => this.switchTab('operations', 'performance')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'operations' and this.state.activeSubTab === 'performance' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Bookers Performance</button>
-                                    <button t-on-click="() => this.switchTab('operations', 'dm_performance')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'operations' and this.state.activeSubTab === 'dm_performance' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Delivery Men Performance</button>
-                                    <button t-on-click="() => this.openDeliveries('dispatch')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'operations' and this.state.activeSubTab === 'deliveries' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Pending Deliveries</button>
+                                    <button t-on-click="() => this.switchTab('operations', 'dm_performance')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'operations' and this.state.activeSubTab === 'dm_performance' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">DM Performance</button>
+                                    
+                                   
                                 </div>
                             </div>
                         </div>
@@ -544,7 +544,7 @@
                                 <button t-if="this.state.kpis.pendingShops > 0" class="so-ov-chip so-ov-chip--warn" t-on-click="() => this.switchTab('territory', 'shops')">
                                     <t t-esc="this.state.kpis.pendingShops"/> shops awaiting approval
                                 </button>
-                                <button t-if="this.state.kpis.pendingDeliveries > 0" class="so-ov-chip so-ov-chip--amber" t-on-click="() => this.openDeliveries('manual')">
+                                <button t-if="this.state.kpis.pendingDeliveries > 0" class="so-ov-chip so-ov-chip--amber" t-on-click="() => this.openDeliveries('dispatch')">
                                     <t t-esc="this.state.kpis.pendingDeliveries"/> pending deliveries
                                 </button>
                                 <button t-if="this.state.kpis.ordersToDispatch > 0" class="so-ov-chip so-ov-chip--amber" t-on-click="() => this.openDeliveries('dispatch')">
@@ -662,7 +662,7 @@
                                                 </div>
                                             </div>
                                             <div class="col-6 col-sm-4 col-xl-4">
-                                                <div t-attf-class="so-ov-metric #{this.state.kpis.pendingDeliveries > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openDeliveries('manual')">
+                                                <div t-attf-class="so-ov-metric #{this.state.kpis.pendingDeliveries > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openDeliveries('dispatch')">
                                                     <div class="so-ov-metric-label">Deliveries</div>
                                                     <div class="so-ov-metric-value" t-esc="this.state.kpis.pendingDeliveries"/>
                                                 </div>

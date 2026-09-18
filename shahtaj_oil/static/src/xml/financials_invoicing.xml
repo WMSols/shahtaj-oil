@@ -252,8 +252,8 @@
                 <!-- i) Sales Orders Tab -->
                 <t t-if="this.state.invoiceSubTab === 'all_orders'">
                     <t t-if="!this.state.selectedOrder">
-                        <div class="d-flex justify-content-between align-items-center p-3 bg-light border-bottom">
-                            <div class="input-group input-group-sm w-25 shadow-sm">
+                        <div class="d-flex flex-wrap align-items-center gap-2 p-3 bg-light border-bottom">
+                            <div class="input-group input-group-sm shadow-sm" style="max-width: 260px;">
                                 <span class="input-group-text bg-white border-end-0">
                                     <i class="fa fa-search text-muted"></i>
                                 </span>
@@ -261,6 +261,23 @@
                                        t-att-value="this.state.filters.allOrders.search" 
                                        t-on-input="(ev) => this.onSearchInput(ev, 'allOrders')"/>
                             </div>
+                            <select class="form-select form-select-sm shadow-sm" style="width: 200px;"
+                                    t-model="this.state.filters.allOrders.shop"
+                                    t-on-change="() => this.onFilterChange('allOrders')"
+                                    title="Filter by shop">
+                                <option value="all">All Shops</option>
+                                <t t-foreach="this.state.invoiceShops" t-as="shop" t-key="shop.id">
+                                    <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
+                                </t>
+                            </select>
+                            <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
+                                   t-model="this.state.filters.allOrders.dateFrom"
+                                   t-on-change="() => this.onFilterChange('allOrders')"
+                                   title="From date"/>
+                            <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
+                                   t-model="this.state.filters.allOrders.dateTo"
+                                   t-on-change="() => this.onFilterChange('allOrders')"
+                                   title="To date"/>
                             <select class="form-select form-select-sm w-auto shadow-sm" 
                                     t-model="this.state.filters.allOrders.status"
                                     t-on-change="() => this.onFilterChange('allOrders')">
@@ -460,8 +477,8 @@
                 <!-- ii) Orders to Invoice Tab -->
                 <t t-if="this.state.invoiceSubTab === 'orders'">
                     <t t-if="!this.state.selectedOrder">
-                        <div class="d-flex justify-content-between align-items-center p-3 bg-light border-bottom">
-                            <div class="input-group input-group-sm w-25 shadow-sm">
+                        <div class="d-flex flex-wrap align-items-center gap-2 p-3 bg-light border-bottom">
+                            <div class="input-group input-group-sm shadow-sm" style="max-width: 260px;">
                                 <span class="input-group-text bg-white border-end-0">
                                     <i class="fa fa-search text-muted"></i>
                                 </span>
@@ -469,6 +486,23 @@
                                        t-att-value="this.state.filters.orders.search" 
                                        t-on-input="(ev) => this.onSearchInput(ev, 'orders')"/>
                             </div>
+                            <select class="form-select form-select-sm shadow-sm" style="width: 200px;"
+                                    t-model="this.state.filters.orders.shop"
+                                    t-on-change="() => this.onFilterChange('orders')"
+                                    title="Filter by shop">
+                                <option value="all">All Shops</option>
+                                <t t-foreach="this.state.invoiceShops" t-as="shop" t-key="shop.id">
+                                    <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
+                                </t>
+                            </select>
+                            <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
+                                   t-model="this.state.filters.orders.dateFrom"
+                                   t-on-change="() => this.onFilterChange('orders')"
+                                   title="From date"/>
+                            <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
+                                   t-model="this.state.filters.orders.dateTo"
+                                   t-on-change="() => this.onFilterChange('orders')"
+                                   title="To date"/>
                         </div>
 
                         <div class="position-relative">
@@ -659,13 +693,30 @@
                 <t t-if="this.state.invoiceSubTab === 'customer_invoices'">
                     <t t-if="!this.state.selectedInvoice">
                         <!-- HEADER WITH NEW HANDLER BINDINGS -->
-                        <div class="d-flex justify-content-between align-items-center p-3 bg-light border-bottom">
-                            <div class="input-group input-group-sm w-25 shadow-sm">
+                        <div class="d-flex flex-wrap align-items-center gap-2 p-3 bg-light border-bottom">
+                            <div class="input-group input-group-sm shadow-sm" style="max-width: 260px;">
                                 <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
                                 <input type="text" class="form-control border-start-0 ps-0" placeholder="Search invoices or shops..." 
                                        t-att-value="this.state.filters.invoices.search" 
                                        t-on-input="(ev) => this.onSearchInput(ev, 'invoices')"/>
                             </div>
+                            <select class="form-select form-select-sm shadow-sm" style="width: 200px;"
+                                    t-model="this.state.filters.invoices.shop"
+                                    t-on-change="() => this.onFilterChange('invoices')"
+                                    title="Filter by shop">
+                                <option value="all">All Shops</option>
+                                <t t-foreach="this.state.invoiceShops" t-as="shop" t-key="shop.id">
+                                    <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
+                                </t>
+                            </select>
+                            <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
+                                   t-model="this.state.filters.invoices.dateFrom"
+                                   t-on-change="() => this.onFilterChange('invoices')"
+                                   title="From date"/>
+                            <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
+                                   t-model="this.state.filters.invoices.dateTo"
+                                   t-on-change="() => this.onFilterChange('invoices')"
+                                   title="To date"/>
                             <select class="form-select form-select-sm w-auto shadow-sm" 
                                     t-model="this.state.filters.invoices.status" 
                                     t-on-change="() => this.onFilterChange('invoices')">
@@ -1149,8 +1200,8 @@
                 <!-- iv) Customer Payments Tab -->
                 <t t-if="this.state.invoiceSubTab === 'payments'">
                     <t t-if="!this.state.selectedPayment">
-                        <div class="d-flex justify-content-between align-items-center p-3 bg-light border-bottom">
-                            <div class="input-group input-group-sm w-25 shadow-sm">
+                        <div class="d-flex flex-wrap align-items-center gap-2 p-3 bg-light border-bottom">
+                            <div class="input-group input-group-sm shadow-sm" style="max-width: 260px;">
                                 <span class="input-group-text bg-white border-end-0">
                                     <i class="fa fa-search text-muted"></i>
                                 </span>
@@ -1158,6 +1209,23 @@
                                        t-att-value="this.state.filters.payments.search"
                                        t-on-input="(ev) => this.onSearchInput(ev, 'payments')"/>
                             </div>
+                            <select class="form-select form-select-sm shadow-sm" style="width: 200px;"
+                                    t-model="this.state.filters.payments.shop"
+                                    t-on-change="() => this.onFilterChange('payments')"
+                                    title="Filter by shop">
+                                <option value="all">All Shops</option>
+                                <t t-foreach="this.state.invoiceShops" t-as="shop" t-key="shop.id">
+                                    <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
+                                </t>
+                            </select>
+                            <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
+                                   t-model="this.state.filters.payments.dateFrom"
+                                   t-on-change="() => this.onFilterChange('payments')"
+                                   title="From date"/>
+                            <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
+                                   t-model="this.state.filters.payments.dateTo"
+                                   t-on-change="() => this.onFilterChange('payments')"
+                                   title="To date"/>
                         </div>
 
                         <div class="position-relative">
@@ -1311,8 +1379,8 @@
                 <!-- v) Credit Notes Tab -->
                 <t t-if="this.state.invoiceSubTab === 'credit_notes'">
                     <t t-if="!this.state.selectedInvoice">
-                        <div class="d-flex justify-content-between align-items-center p-3 bg-light border-bottom">
-                            <div class="input-group input-group-sm w-25 shadow-sm">
+                        <div class="d-flex flex-wrap align-items-center gap-2 p-3 bg-light border-bottom">
+                            <div class="input-group input-group-sm shadow-sm" style="max-width: 260px;">
                                 <span class="input-group-text bg-white border-end-0">
                                     <i class="fa fa-search text-muted"></i>
                                 </span>
@@ -1320,6 +1388,23 @@
                                        t-att-value="this.state.filters.creditNotes.search"
                                        t-on-input="(ev) => this.onSearchInput(ev, 'creditNotes')"/>
                             </div>
+                            <select class="form-select form-select-sm shadow-sm" style="width: 200px;"
+                                    t-model="this.state.filters.creditNotes.shop"
+                                    t-on-change="() => this.onFilterChange('creditNotes')"
+                                    title="Filter by shop">
+                                <option value="all">All Shops</option>
+                                <t t-foreach="this.state.invoiceShops" t-as="shop" t-key="shop.id">
+                                    <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
+                                </t>
+                            </select>
+                            <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
+                                   t-model="this.state.filters.creditNotes.dateFrom"
+                                   t-on-change="() => this.onFilterChange('creditNotes')"
+                                   title="From date"/>
+                            <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
+                                   t-model="this.state.filters.creditNotes.dateTo"
+                                   t-on-change="() => this.onFilterChange('creditNotes')"
+                                   title="To date"/>
                             <select class="form-select form-select-sm w-auto shadow-sm" 
                                     t-model="this.state.filters.creditNotes.status"
                                     t-on-change="() => this.onFilterChange('creditNotes')">
@@ -2828,7 +2913,7 @@
                                         <t t-if="this.state.credits.length === 0 and !this.state.isLoadingList">
                                             <tr><td colspan="5" class="text-center py-5 text-muted fw-bold"><i class="fa fa-balance-scale fs-1 mb-3 opacity-50"></i><p class="mb-1 fs-5 text-dark">No shops found.</p></td></tr>
                                         </t>
-                                        <t t-foreach="this.state.credits" t-as="bal" t-key="bal.id">
+                                        <t t-foreach="this.sortedShopBalances" t-as="bal" t-key="bal.id">
                                             <tr style="cursor:pointer;" t-on-click="() => this.viewShopBalance(bal)">
                                                 <td class="ps-4 fw-bold text-dark"><t t-esc="bal.shop"/><small class="d-block text-muted fw-normal">ID: <t t-esc="bal.shopId"/></small></td>
                                                 <td><t t-esc="bal.owner"/></td>

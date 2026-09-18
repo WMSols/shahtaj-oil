@@ -34,11 +34,30 @@ export class OperationsTracking extends Component {
             
             
             selectedDelivery: null,
-            deliveriesSubTab: this.props.requestedDeliveriesSubTab || 'dispatch',
+            deliveriesSubTab: this.props.requestedDeliveriesSubTab === 'manual' ? 'dispatch' : (this.props.requestedDeliveriesSubTab || 'dispatch'),
             selectedDmJob: null,
+            selectedSettlement: null,
+            selectedRecovery: null,
+            imagePreview: { open: false, src: '', title: '' },
             tableDispatch: [],
             tableDmJobs: [],
+            tableSessions: [],
+            tableCollections: [],
+            tableSettlements: [],
+            tableAllDeliveries: [],
             lookupDeliveryMen: [],
+            dmJobSections: { delivery: true, order: true, shop: false, gps: false, products: true },
+            settleModal: {
+                open: false,
+                wizardId: null,
+                walletBalance: 0,
+                amount: 0,
+                bankJournalId: '',
+                journals: [],
+                notes: '',
+                dmId: '',
+                saving: false,
+            },
             assignModal: {
                 open: false,
                 wizardId: null,
@@ -108,6 +127,10 @@ export class OperationsTracking extends Component {
                 deliveries: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 dispatch: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 dm_jobs: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                sessions: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                collections: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                settlements: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                all_deliveries: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 checkins: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 orders: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 verification: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
@@ -117,7 +140,11 @@ export class OperationsTracking extends Component {
             filters: {
                 deliveries: { search: '', status: '' },
                 dispatch: { search: '' },
-                dm_jobs: { search: '', dm: 'all', date: this.todayStr, state: 'all', field_state: 'all' },
+                dm_jobs: { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all' },
+                sessions: { dm: 'all', dateFrom: '', dateTo: '' },
+                collections: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
+                settlements: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
+                all_deliveries: { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', assignment_mode: 'all' },
                 checkins: { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
                 orders: { search: '', status: '', booker: 'all' },
                 verification: { search: '', booker: 'all', reason: 'all' },
@@ -257,6 +284,8 @@ export class OperationsTracking extends Component {
             qty: 1,
             price: 0,
             tax_id: '',
+            qty_available: null,
+            uom_name: '',
         };
     }
 
@@ -363,6 +392,37 @@ export class OperationsTracking extends Component {
 
     _gpsIsDeliveryCheckin(attempt) {
         return attempt.role === 'delivery_man' || attempt.purpose === 'deliver';
+    }
+
+    _formatTimeSpent(startedAt, endedAt, state, durationMinutes) {
+        const start = this._parseOdooUtc(startedAt);
+        const end = this._parseOdooUtc(endedAt);
+        if (start && end) {
+            const mins = Math.max(0, Math.round((end - start) / 60000));
+            return `${mins} mins`;
+        }
+        if (state === 'in_progress' && start) {
+            return 'Active Now';
+        }
+        if (durationMinutes && durationMinutes > 0) {
+            return `${Math.round(durationMinutes)} mins`;
+        }
+        return '—';
+    }
+
+    _checkinTiming(visit, job) {
+        const startedAt = (visit && visit.started_at) || (job && job.picked_at) || false;
+        const endedAt = (visit && visit.ended_at) || (job && job.delivered_at) || false;
+        const state = visit
+            ? visit.state
+            : (endedAt ? 'completed' : (startedAt ? 'in_progress' : ''));
+        const durationMinutes = visit ? visit.duration_minutes : 0;
+        return {
+            duration: this._formatTimeSpent(startedAt, endedAt, state, durationMinutes),
+            endTime: endedAt
+                ? (this.formatUtcToPkt(endedAt) || '')
+                : (state === 'in_progress' ? 'In Progress' : ''),
+        };
     }
 
     _gpsCheckinOutcome(attempt, hasLinkedOrder = false) {
@@ -548,7 +608,7 @@ export class OperationsTracking extends Component {
                 this.orm.searchRead(
                     'product.product',
                     [['sale_ok', '=', true], ['active', '=', true], ['product_tmpl_id.active', '=', true], ['default_code', '!=', 'SHAHTAJ-LEGACY']],
-                    ['id', 'name', 'display_name', 'list_price', 'taxes_id', 'uom_id']
+                    ['id', 'name', 'display_name', 'list_price', 'taxes_id', 'uom_id', 'qty_available']
                 ),
                 hasFinancialAccess()
                     ? this.orm.searchRead('account.tax', [['type_tax_use', '=', 'sale'], ['active', '=', true]], ['id', 'name', 'amount'])
@@ -561,6 +621,8 @@ export class OperationsTracking extends Component {
                 list_price: p.list_price || 0,
                 tax_id: (p.taxes_id && p.taxes_id[0]) || '',
                 uom_id: p.uom_id ? p.uom_id[0] : false,
+                uom_name: p.uom_id ? p.uom_id[1] : '',
+                qty_available: p.qty_available || 0,
             }));
             if (taxes && taxes.length) {
                 this.state.saleTaxes = taxes;
@@ -572,6 +634,12 @@ export class OperationsTracking extends Component {
 
     _formatRs(value) {
         return `Rs. ${(parseFloat(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    _formatQty(value) {
+        const n = parseFloat(value);
+        if (Number.isNaN(n)) return '0';
+        return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
     }
 
     _formatSnapshotDate(value) {
@@ -593,6 +661,35 @@ export class OperationsTracking extends Component {
     _m2oId(value) {
         if (!value) return false;
         return Array.isArray(value) ? value[0] : value;
+    }
+
+    _dateRangeDomain(filters, field) {
+        const domain = [];
+        if (filters && filters.dateFrom) domain.push([field, ">=", filters.dateFrom]);
+        if (filters && filters.dateTo) domain.push([field, "<=", filters.dateTo]);
+        return domain;
+    }
+
+    _mapDmDeliveryRow(j) {
+        return {
+            id: j.id,
+            name: j.display_name || (j.sale_order_id ? j.sale_order_id[1] : `Job ${j.id}`),
+            dm: j.delivery_man_id ? j.delivery_man_id[1] : '—',
+            dmId: j.delivery_man_id ? j.delivery_man_id[0] : false,
+            shop: j.partner_id ? j.partner_id[1] : '—',
+            shopId: j.partner_id ? j.partner_id[0] : false,
+            order: j.sale_order_id ? j.sale_order_id[1] : '—',
+            orderId: j.sale_order_id ? j.sale_order_id[0] : false,
+            booker: j.order_booker_id ? j.order_booker_id[1] : '—',
+            date: j.scheduled_date || '—',
+            amount: j.amount_total || 0,
+            shopDue: j.shop_outstanding_balance || 0,
+            state: j.state,
+            fieldState: j.field_state,
+            assignmentMode: j.assignment_mode || '',
+            gpsVerified: j.gps_verified,
+            lines: [],
+        };
     }
 
     _applyShopSnapshot(snap, target = null) {
@@ -621,25 +718,62 @@ export class OperationsTracking extends Component {
     async _enrichCheckinRows(records) {
         const visitIds = [...new Set(records.map((a) => this._m2oId(a.visit_id)).filter(Boolean))];
         const taskIds = [...new Set(records.map((a) => this._m2oId(a.visit_task_id)).filter(Boolean))];
+        const dmIds = [...new Set(records.map((a) => this._m2oId(a.dm_delivery_id)).filter(Boolean))];
+        const visitFields = [
+            'notes', 'sale_order_id', 'outcome', 'state',
+            'started_at', 'ended_at', 'duration_seconds', 'duration_minutes',
+            'dm_delivery_id',
+        ];
         const visitsById = {};
+        const visitsByDmId = {};
         const tasksById = {};
+        const jobsById = {};
+        const rememberVisit = (v) => {
+            visitsById[v.id] = v;
+            const dmId = this._m2oId(v.dm_delivery_id);
+            if (dmId) visitsByDmId[dmId] = v;
+        };
         try {
+            const jobs = [];
             if (visitIds.length) {
-                const visits = await this.orm.read(
-                    'shahtaj.visit',
-                    visitIds,
-                    ['notes', 'sale_order_id', 'outcome', 'state'],
+                jobs.push(
+                    this.orm.read('shahtaj.visit', visitIds, visitFields).then((rows) => {
+                        rows.forEach(rememberVisit);
+                    }),
                 );
-                visits.forEach((v) => { visitsById[v.id] = v; });
             }
             if (taskIds.length) {
-                const tasks = await this.orm.read('shahtaj.visit.task', taskIds, ['notes']);
-                tasks.forEach((t) => { tasksById[t.id] = t; });
+                jobs.push(
+                    this.orm.read('shahtaj.visit.task', taskIds, ['notes']).then((rows) => {
+                        rows.forEach((t) => { tasksById[t.id] = t; });
+                    }),
+                );
             }
+            if (dmIds.length) {
+                jobs.push(
+                    this.orm.searchRead(
+                        'shahtaj.visit',
+                        [['dm_delivery_id', 'in', dmIds]],
+                        visitFields,
+                    ).then((rows) => {
+                        rows.forEach(rememberVisit);
+                    }),
+                );
+                jobs.push(
+                    this.orm.read(
+                        'shahtaj.dm.delivery',
+                        dmIds,
+                        ['picked_at', 'delivered_at'],
+                    ).then((rows) => {
+                        rows.forEach((j) => { jobsById[j.id] = j; });
+                    }),
+                );
+            }
+            await Promise.all(jobs);
         } catch (_error) {
             // List still renders GPS rows if visit/task notes cannot be read.
         }
-        return { visitsById, tasksById };
+        return { visitsById, visitsByDmId, tasksById, jobsById };
     }
 
     async _loadCheckinShopSnapshot(checkin) {
@@ -755,6 +889,17 @@ export class OperationsTracking extends Component {
         return ["draft", "sent", "sale"].includes(row.orderState) || ["Draft", "To Invoice"].includes(row.status);
     }
 
+    isConfirmedSaleOrder(row) {
+        if (!row) return false;
+        if (["sale", "done"].includes(row.orderState)) return true;
+        return ["Confirmed", "To Invoice", "Invoiced", "Delivered"].includes(row.status);
+    }
+
+    canRemoveSaleOrderProduct(row, line) {
+        if (line && String(line.id).startsWith("new_")) return true;
+        return !this.isConfirmedSaleOrder(row);
+    }
+
     async invoiceSaleOrder(orderId) {
         await this.orm.call("sale.order", "action_shahtaj_create_and_post_invoice", [[orderId]]);
     }
@@ -810,15 +955,22 @@ export class OperationsTracking extends Component {
         if (tab === 'orders' && this.state.ordersSubTab === 'verification') tab = 'verification';
         if (tab === 'deliveries') {
             if (this.state.deliveriesSubTab === 'jobs') tab = 'dm_jobs';
-            else if (this.state.deliveriesSubTab === 'dispatch') tab = 'dispatch';
-            else tab = 'deliveries';
+            else if (this.state.deliveriesSubTab === 'sessions') tab = 'sessions';
+            else if (this.state.deliveriesSubTab === 'recovery') tab = 'collections';
+            else if (this.state.deliveriesSubTab === 'settlements') tab = 'settlements';
+            else tab = 'dispatch';
         }
         
         this.state.isLoadingList = true;
         notifyPortalBusy(true);
         try {
             const pag = this.state.pagination[tab];
-            const filters = this.state.filters[tab];
+            const filters = this.state.filters[tab] || {};
+            if (!pag) {
+                this.state.isLoadingList = false;
+                notifyPortalBusy(false);
+                return;
+            }
             let domain = []; let model = ''; let fields = []; let targetState = '';
 
             // 1. DOMAIN MAPPINGS
@@ -882,9 +1034,67 @@ export class OperationsTracking extends Component {
                     );
                 }
                 if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
-                if (filters.date) domain.push(['scheduled_date', '=', filters.date]);
+                domain.push(...this._dateRangeDomain(filters, 'scheduled_date'));
                 if (filters.state && filters.state !== 'all') domain.push(['state', '=', filters.state]);
                 if (filters.field_state && filters.field_state !== 'all') domain.push(['field_state', '=', filters.field_state]);
+            }
+            else if (tab === 'all_deliveries') {
+                model = 'shahtaj.dm.delivery';
+                targetState = 'tableAllDeliveries';
+                fields = [
+                    'id', 'display_name', 'delivery_man_id', 'partner_id', 'sale_order_id',
+                    'order_booker_id', 'scheduled_date', 'state', 'field_state',
+                    'amount_total', 'shop_outstanding_balance', 'assignment_mode', 'gps_verified',
+                ];
+                if (filters.search) {
+                    domain.push('|', '|', '|',
+                        ['display_name', 'ilike', filters.search],
+                        ['partner_id.name', 'ilike', filters.search],
+                        ['sale_order_id.name', 'ilike', filters.search],
+                        ['delivery_man_id.name', 'ilike', filters.search],
+                    );
+                }
+                if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
+                domain.push(...this._dateRangeDomain(filters, 'scheduled_date'));
+                if (filters.state && filters.state !== 'all') domain.push(['state', '=', filters.state]);
+                if (filters.field_state && filters.field_state !== 'all') domain.push(['field_state', '=', filters.field_state]);
+                if (filters.assignment_mode && filters.assignment_mode !== 'all') domain.push(['assignment_mode', '=', filters.assignment_mode]);
+            }
+            else if (tab === 'sessions') {
+                model = 'shahtaj.dm.day.session';
+                targetState = 'tableSessions';
+                fields = ['id', 'delivery_man_id', 'session_date', 'state', 'departed_at', 'ended_at'];
+                if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
+                domain.push(...this._dateRangeDomain(filters, 'session_date'));
+            }
+            else if (tab === 'collections') {
+                model = 'account.payment';
+                targetState = 'tableCollections';
+                fields = ['id', 'name', 'date', 'amount', 'partner_id', 'shahtaj_collected_by_dm_id', 'shahtaj_payment_channel', 'state'];
+                domain.push(['shahtaj_is_dm_wallet_collection', '=', true]);
+                if (filters.search) {
+                    domain.push('|', '|',
+                        ['name', 'ilike', filters.search],
+                        ['partner_id.name', 'ilike', filters.search],
+                        ['shahtaj_collected_by_dm_id.name', 'ilike', filters.search],
+                    );
+                }
+                if (filters.dm && filters.dm !== 'all') domain.push(['shahtaj_collected_by_dm_id', '=', parseInt(filters.dm)]);
+                domain.push(...this._dateRangeDomain(filters, 'date'));
+            }
+            else if (tab === 'settlements') {
+                model = 'shahtaj.dm.wallet.settlement';
+                targetState = 'tableSettlements';
+                fields = ['id', 'name', 'delivery_man_id', 'amount', 'settlement_date', 'bank_journal_id', 'settled_by_id', 'move_id', 'state', 'notes'];
+                if (filters.search) {
+                    domain.push('|', '|',
+                        ['name', 'ilike', filters.search],
+                        ['delivery_man_id.name', 'ilike', filters.search],
+                        ['move_id.name', 'ilike', filters.search],
+                    );
+                }
+                if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
+                domain.push(...this._dateRangeDomain(filters, 'settlement_date'));
             }
             else if (tab === 'checkins') {
                 model = 'shahtaj.gps.attempt'; targetState = 'tableCheckins';
@@ -931,7 +1141,17 @@ export class OperationsTracking extends Component {
                 if (filters.type !== 'all') domain.push(['target_type', '=', filters.type]);
             }
 
+            if ((tab === 'collections' || tab === 'settlements') && !this.hasFinancialAccess) {
+                this.state.isLoadingList = false;
+                notifyPortalBusy(false);
+                return;
+            }
             // 2. EXECUTE QUERY
+            if (!model) {
+                this.state.isLoadingList = false;
+                notifyPortalBusy(false);
+                return;
+            }
             const queryKwargs = {
                 limit: pag.limit,
                 offset: (pag.page - 1) * pag.limit,
@@ -944,8 +1164,17 @@ export class OperationsTracking extends Component {
             if (tab === 'checkins') {
                 queryKwargs.order = 'create_date desc, id desc';
             }
-            if (tab === 'dm_jobs') {
+            if (tab === 'dm_jobs' || tab === 'all_deliveries') {
                 queryKwargs.order = 'scheduled_date desc, id desc';
+            }
+            if (tab === 'sessions') {
+                queryKwargs.order = 'session_date desc, id desc';
+            }
+            if (tab === 'collections') {
+                queryKwargs.order = 'date desc, id desc';
+            }
+            if (tab === 'settlements') {
+                queryKwargs.order = 'settlement_date desc, id desc';
             }
             let total;
             let records;
@@ -983,24 +1212,41 @@ export class OperationsTracking extends Component {
                 });
             }
             else if (tab === 'dm_jobs') {
-                this.state.tableDmJobs = records.map((j) => ({
-                    id: j.id,
-                    name: j.display_name || (j.sale_order_id ? j.sale_order_id[1] : `Job ${j.id}`),
-                    dm: j.delivery_man_id ? j.delivery_man_id[1] : '—',
-                    dmId: j.delivery_man_id ? j.delivery_man_id[0] : false,
-                    shop: j.partner_id ? j.partner_id[1] : '—',
-                    shopId: j.partner_id ? j.partner_id[0] : false,
-                    order: j.sale_order_id ? j.sale_order_id[1] : '—',
-                    orderId: j.sale_order_id ? j.sale_order_id[0] : false,
-                    date: j.scheduled_date || '—',
-                    state: j.state,
-                    fieldState: j.field_state,
-                    gpsVerified: j.gps_verified,
-                    lines: [],
+                this.state.tableDmJobs = records.map((j) => this._mapDmDeliveryRow(j));
+            }
+            else if (tab === 'all_deliveries') {
+                this.state.tableAllDeliveries = records.map((j) => this._mapDmDeliveryRow(j));
+            }
+            else if (tab === 'sessions') {
+                this.state.tableSessions = records.map((s) => ({
+                    id: s.id,
+                    dm: s.delivery_man_id ? s.delivery_man_id[1] : '—',
+                    date: s.session_date || '—',
+                    state: s.state,
+                    departed: s.departed_at || '—',
+                    ended: s.ended_at || '—',
+                }));
+            }
+            else if (tab === 'collections') {
+                this.state.tableCollections = records.map((p) => this._mapRecoveryRow(p));
+            }
+            else if (tab === 'settlements') {
+                this.state.tableSettlements = records.map((s) => ({
+                    id: s.id,
+                    name: s.name,
+                    dm: s.delivery_man_id ? s.delivery_man_id[1] : '—',
+                    dmId: s.delivery_man_id ? s.delivery_man_id[0] : false,
+                    amount: s.amount || 0,
+                    date: s.settlement_date || '—',
+                    journal: s.bank_journal_id ? s.bank_journal_id[1] : '—',
+                    settledBy: s.settled_by_id ? s.settled_by_id[1] : '—',
+                    move: s.move_id ? s.move_id[1] : '—',
+                    state: s.state,
+                    notes: s.notes || '',
                 }));
             }
             else if (tab === 'checkins') {
-                const { visitsById, tasksById } = await this._enrichCheckinRows(records);
+                const { visitsById, visitsByDmId, tasksById, jobsById } = await this._enrichCheckinRows(records);
                 this.state.tableCheckins = records.map(a => {
                     const isOk = a.result === 'ok';
                     const status = this._gpsResultLabel(a.result);
@@ -1008,11 +1254,15 @@ export class OperationsTracking extends Component {
                     const distLabel = a.distance_m
                         ? `${Math.round(a.distance_m)} m`
                         : (isOk ? '—' : 'n/a');
-                    const visit = visitsById[this._m2oId(a.visit_id)] || null;
+                    const visit = visitsById[this._m2oId(a.visit_id)]
+                        || visitsByDmId[this._m2oId(a.dm_delivery_id)]
+                        || null;
+                    const job = jobsById[this._m2oId(a.dm_delivery_id)] || null;
                     const task = tasksById[this._m2oId(a.visit_task_id)] || null;
                     const saleOrder = a.sale_order_id || (visit && visit.sale_order_id) || false;
                     const outcome = this._gpsCheckinOutcome(a, Boolean(this._m2oId(saleOrder)));
                     const notes = ((visit && visit.notes) || (task && task.notes) || '').trim();
+                    const timing = this._checkinTiming(visit, job);
                     return {
                         id: a.id,
                         shop: a.shop_id ? a.shop_id[1] : 'Unknown shop',
@@ -1046,8 +1296,8 @@ export class OperationsTracking extends Component {
                         hasOrder: outcome.hasOrder,
                         orderLabel: outcome.orderLabel,
                         notes,
-                        endTime: '',
-                        duration: distLabel,
+                        endTime: timing.endTime,
+                        duration: timing.duration,
                         outcome: purposeLabel,
                     };
                 });
@@ -1137,7 +1387,8 @@ export class OperationsTracking extends Component {
 
   
     closeDelivery() { 
-        this.state.selectedDelivery = null; 
+        this.state.selectedDelivery = null;
+        this.state.shopSnapshotOpen = false;
     }
 
     toggleEditDelivery() {
@@ -1258,7 +1509,8 @@ export class OperationsTracking extends Component {
     // 2. UPDATE THIS METHOD TO MAP TAX NAMES IN DELIVERIES
     async viewDelivery(dlv) {
         this.state.selectedDelivery = dlv;
-        this.state.isEditingDelivery = false; 
+        this.state.isEditingDelivery = false;
+        this.state.shopSnapshotOpen = false;
         // Need tax catalog so line tax labels resolve the same as before.
         await this.ensureCatalogData();
         
@@ -1293,7 +1545,17 @@ export class OperationsTracking extends Component {
                 };
             });
 
-            const orderData = await this.orm.read("sale.order", [dlv.odoo_id], ["amount_untaxed", "amount_tax", "amount_total", "invoice_status", "invoice_ids", "state"]);
+            const orderData = await this.orm.read("sale.order", [dlv.odoo_id], [
+                "amount_untaxed", "amount_tax", "amount_total", "invoice_status", "invoice_ids", "state",
+                "shahtaj_shop_category", "shahtaj_shop_credit_limit", "shahtaj_shop_outstanding",
+                "shahtaj_shop_pending_exposure", "shahtaj_shop_uninvoiced_exposure",
+                "shahtaj_shop_effective_outstanding", "shahtaj_shop_credit_remaining",
+                "shahtaj_shop_credit_would_exceed", "shahtaj_shop_credit_shortfall",
+                "shahtaj_shop_lifetime_sales", "shahtaj_shop_confirmed_order_count",
+                "shahtaj_shop_past_discount_total", "shahtaj_shop_past_discount_count",
+                "shahtaj_shop_last_discount_date", "shahtaj_shop_last_discount_amount",
+                "payment_term_id", "shahtaj_approval_state",
+            ]);
             if (orderData.length > 0) {
                 dlv.amount_untaxed = orderData[0].amount_untaxed;
                 dlv.amount_tax = orderData[0].amount_tax;
@@ -1303,6 +1565,7 @@ export class OperationsTracking extends Component {
                 dlv.orderState = orderData[0].state;
                 const posted = await this._ordersWithPostedInvoices(orderData);
                 dlv.hasPostedInvoice = posted.has(dlv.odoo_id);
+                this._applyShopSnapshot(orderData[0], dlv);
             }
         } catch (error) {
              this.notification.add(error.data?.message || error.message, { type: "danger" });
@@ -1325,6 +1588,11 @@ export class OperationsTracking extends Component {
     }
 
     removeDeliveryLine(lineId) {
+        const line = (this.state.selectedDelivery.full_lines || []).find((l) => l.id === lineId);
+        if (!this.canRemoveSaleOrderProduct(this.state.selectedDelivery, line)) {
+            this.notification.add("Products cannot be removed from a confirmed sales order.", { type: "warning" });
+            return;
+        }
         if (this.state.selectedDelivery.full_lines.length <= 1) {
             this.notification.add("An order must have at least one product line.", { type: "warning" });
             return;
@@ -1450,7 +1718,8 @@ export class OperationsTracking extends Component {
             await this.fetchActiveList();
             if (this.state.selectedDelivery) {
                 // FIX: Look in the new paginated arrays instead of the deleted 'orders' array
-                let updatedOrder = this.state.tableDeliveries.find(o => o.odoo_id === this.state.selectedDelivery.odoo_id) || 
+                let updatedOrder = this.state.tableDispatch.find(o => o.odoo_id === this.state.selectedDelivery.odoo_id) ||
+                                   this.state.tableDeliveries.find(o => o.odoo_id === this.state.selectedDelivery.odoo_id) ||
                                    this.state.tableOrders.find(o => o.odoo_id === this.state.selectedDelivery.odoo_id);
                 
                 if (!updatedOrder) {
@@ -1468,9 +1737,12 @@ export class OperationsTracking extends Component {
     }
 
     setDeliveriesSubTab(tabName) {
+        if (tabName === 'manual') tabName = 'dispatch';
         this.state.deliveriesSubTab = tabName;
         this.state.selectedDelivery = null;
         this.state.selectedDmJob = null;
+        this.state.selectedSettlement = null;
+        this.state.selectedRecovery = null;
         this.state.isEditingDelivery = false;
         this.fetchActiveList();
     }
@@ -1580,7 +1852,7 @@ export class OperationsTracking extends Component {
             ? await this.orm.read(
                 "shahtaj.dm.assign.wizard.job",
                 wiz.job_ids,
-                ["id", "delivery_man_id", "scheduled_date", "line_ids"],
+                ["id", "delivery_man_id", "scheduled_date", "line_ids", "existing_job_id"],
             )
             : [];
         const allLineIds = jobs.flatMap((j) => j.line_ids || []);
@@ -1591,25 +1863,36 @@ export class OperationsTracking extends Component {
                 ["id", "sale_order_line_id", "product_id", "qty_ordered", "qty_assigned"],
             )
             : [];
+        const existingIds = jobs.map((j) => j.existing_job_id && j.existing_job_id[0]).filter(Boolean);
+        const existingRecs = existingIds.length
+            ? await this.orm.read("shahtaj.dm.delivery", existingIds, ["id", "state"])
+            : [];
+        const existingById = Object.fromEntries(existingRecs.map((e) => [e.id, e]));
         const linesById = Object.fromEntries(lineRecs.map((l) => [l.id, l]));
         this.state.assignModal.wizardId = wizardId;
         this.state.assignModal.orderName = wiz.sale_order_id ? wiz.sale_order_id[1] : "";
         this.state.assignModal.shop = wiz.partner_id ? wiz.partner_id[1] : "";
-        this.state.assignModal.jobs = jobs.map((j) => ({
-            id: j.id,
-            deliveryManId: j.delivery_man_id ? String(j.delivery_man_id[0]) : "",
-            scheduledDate: j.scheduled_date || this.todayStr,
-            lines: (j.line_ids || []).map((lid) => {
-                const l = linesById[lid] || {};
-                return {
-                    id: lid,
-                    saleOrderLineId: l.sale_order_line_id ? l.sale_order_line_id[0] : lid,
-                    product: l.product_id ? l.product_id[1] : "Product",
-                    qtyOrdered: l.qty_ordered || 0,
-                    qtyAssigned: l.qty_assigned || 0,
-                };
-            }),
-        }));
+        this.state.assignModal.jobs = jobs.map((j) => {
+            const existingId = j.existing_job_id ? j.existing_job_id[0] : false;
+            const existing = existingId ? existingById[existingId] : null;
+            const lockedStates = ["picked", "partial", "delivered", "returned"];
+            return {
+                id: j.id,
+                deliveryManId: j.delivery_man_id ? String(j.delivery_man_id[0]) : "",
+                scheduledDate: j.scheduled_date || this.todayStr,
+                canRemove: !existing || !lockedStates.includes(existing.state),
+                lines: (j.line_ids || []).map((lid) => {
+                    const l = linesById[lid] || {};
+                    return {
+                        id: lid,
+                        saleOrderLineId: l.sale_order_line_id ? l.sale_order_line_id[0] : lid,
+                        product: l.product_id ? l.product_id[1] : "Product",
+                        qtyOrdered: l.qty_ordered || 0,
+                        qtyAssigned: l.qty_assigned || 0,
+                    };
+                }),
+            };
+        });
     }
 
     closeAssignModal() {
@@ -1647,6 +1930,25 @@ export class OperationsTracking extends Component {
         }
     }
 
+    async removeAssignDeliveryMan(jobId) {
+        if (!this.state.assignModal.wizardId || !jobId) return;
+        this.state.assignModal.saving = true;
+        try {
+            await this.persistAssignEdits();
+            await this.orm.call(
+                "shahtaj.dm.assign.wizard",
+                "action_remove_delivery_man",
+                [[this.state.assignModal.wizardId]],
+                { job_id: jobId },
+            );
+            await this._loadAssignWizard(this.state.assignModal.wizardId);
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        } finally {
+            this.state.assignModal.saving = false;
+        }
+    }
+
     async confirmAssign() {
         if (!this.state.assignModal.wizardId) return;
         this.state.assignModal.saving = true;
@@ -1664,26 +1966,82 @@ export class OperationsTracking extends Component {
     }
 
     async viewDmJob(job) {
-        const lines = await this.orm.searchRead(
-            "shahtaj.dm.delivery.line",
-            [["delivery_id", "=", job.id]],
-            ["id", "product_id", "qty_ordered", "qty_assigned", "qty_picked", "qty_delivered"],
-        );
+        this.state.dmJobSections = { delivery: true, order: true, shop: false, gps: false, products: true };
+        const [detail, lines] = await Promise.all([
+            this.orm.read("shahtaj.dm.delivery", [job.id], [
+                "display_name", "delivery_man_id", "scheduled_date", "scheduled_time",
+                "picked_at", "delivered_at", "state", "field_state", "assignment_mode",
+                "assigned_by_id", "amount_total", "qty_assigned_total", "invoice_status",
+                "sale_order_id", "partner_id", "order_booker_id", "order_date", "notes",
+                "shop_category", "shop_outstanding_balance", "shop_unpaid_invoice_amount",
+                "shop_credit_limit", "shop_unpaid_invoice_count", "shop_invoice_count",
+                "gps_verified", "check_in_distance_m", "receiver_name",
+                "check_in_latitude", "check_in_longitude", "has_delivery_proof", "delivery_proof_image",
+            ]),
+            this.orm.searchRead(
+                "shahtaj.dm.delivery.line",
+                [["delivery_id", "=", job.id]],
+                ["id", "product_id", "qty_ordered", "qty_assigned", "qty_to_pick", "qty_picked", "qty_delivered", "qty_remaining_on_van"],
+            ),
+        ]);
+        const rec = detail[0] || {};
         this.state.selectedDmJob = {
             ...job,
+            name: rec.display_name || job.name,
+            dm: rec.delivery_man_id ? rec.delivery_man_id[1] : job.dm,
+            shop: rec.partner_id ? rec.partner_id[1] : job.shop,
+            order: rec.sale_order_id ? rec.sale_order_id[1] : job.order,
+            booker: rec.order_booker_id ? rec.order_booker_id[1] : (job.booker || "—"),
+            date: rec.scheduled_date || job.date,
+            scheduledTime: rec.scheduled_time || 0,
+            pickedAt: rec.picked_at || "",
+            deliveredAt: rec.delivered_at || "",
+            state: rec.state || job.state,
+            fieldState: rec.field_state || job.fieldState,
+            assignmentMode: rec.assignment_mode || "",
+            assignedBy: rec.assigned_by_id ? rec.assigned_by_id[1] : "—",
+            amount: rec.amount_total || 0,
+            qtyAssignedTotal: rec.qty_assigned_total || 0,
+            invoiceStatus: rec.invoice_status || "",
+            orderDate: rec.order_date || "",
+            notes: rec.notes || "",
+            shopCategory: rec.shop_category || "",
+            shopDue: rec.shop_outstanding_balance || 0,
+            shopUnpaidAmount: rec.shop_unpaid_invoice_amount || 0,
+            shopCreditLimit: rec.shop_credit_limit || 0,
+            shopUnpaidCount: rec.shop_unpaid_invoice_count || 0,
+            shopInvoiceCount: rec.shop_invoice_count || 0,
+            gpsVerified: !!rec.gps_verified,
+            gpsDistance: rec.check_in_distance_m || 0,
+            receiverName: rec.receiver_name || "",
+            gpsLat: rec.check_in_latitude || 0,
+            gpsLng: rec.check_in_longitude || 0,
+            hasProof: !!rec.has_delivery_proof,
+            proofImage: rec.delivery_proof_image || "",
             lines: lines.map((l) => ({
                 id: l.id,
                 product: l.product_id ? l.product_id[1] : "Product",
                 qtyOrdered: l.qty_ordered || 0,
                 qtyAssigned: l.qty_assigned || 0,
+                qtyToPick: l.qty_to_pick || 0,
                 qtyPicked: l.qty_picked || 0,
                 qtyDelivered: l.qty_delivered || 0,
+                qtyOnVan: l.qty_remaining_on_van || 0,
             })),
         };
     }
 
+    toggleDmJobSection(key) {
+        this.state.dmJobSections[key] = !this.state.dmJobSections[key];
+    }
+
+    showDmJobActions() {
+        return this.state.activeSubTab === "deliveries" && this.state.deliveriesSubTab === "jobs";
+    }
+
     closeDmJob() {
         this.state.selectedDmJob = null;
+        this.closeImagePreview();
     }
 
     async resetDmJobField(jobId) {
@@ -1692,8 +2050,7 @@ export class OperationsTracking extends Component {
             this.notification.add("Field status reset to pending.", { type: "success" });
             await this.fetchActiveList();
             if (this.state.selectedDmJob && this.state.selectedDmJob.id === jobId) {
-                const row = this.state.tableDmJobs.find((j) => j.id === jobId);
-                if (row) await this.viewDmJob(row);
+                await this.viewDmJob({ id: jobId });
             }
         } catch (error) {
             this.notification.add(error.data?.message || error.message, { type: "danger" });
@@ -1767,8 +2124,7 @@ export class OperationsTracking extends Component {
             this.closePickModal();
             await this.fetchActiveList();
             if (this.state.selectedDmJob) {
-                const row = this.state.tableDmJobs.find((j) => j.id === this.state.selectedDmJob.id);
-                if (row) await this.viewDmJob(row);
+                await this.viewDmJob({ id: this.state.selectedDmJob.id });
             }
         } catch (error) {
             this.notification.add("Pick failed: " + (error.data?.message || error.message), { type: "danger" });
@@ -1789,6 +2145,215 @@ export class OperationsTracking extends Component {
         return job && ["ready", "picked", "partial"].includes(job.state);
     }
 
+    sessionLabel(state) {
+        const map = { office: "Office", on_the_way: "On the way", ended: "Ended" };
+        return map[state] || state || "—";
+    }
+
+    assignmentModeLabel(mode) {
+        const map = { manual: "Manual", auto: "Auto" };
+        return map[mode] || mode || "—";
+    }
+
+    formatMoney(value) {
+        return (Number(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    proofImageSrc(b64) {
+        if (!b64) return "";
+        return String(b64).startsWith("data:") ? b64 : `data:image/jpeg;base64,${b64}`;
+    }
+
+    openImagePreview(src, title = "Delivery proof") {
+        if (!src) return;
+        this.state.imagePreview = { open: true, src, title };
+    }
+
+    closeImagePreview() {
+        this.state.imagePreview = { open: false, src: "", title: "" };
+    }
+
+    async resetSession(id) {
+        try {
+            await this.orm.call("shahtaj.dm.day.session", "action_reset_office", [[id]]);
+            this.notification.add("Session reset to office.", { type: "success" });
+            await this.fetchActiveList();
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        }
+    }
+
+    _paymentChannelLabel(channel) {
+        return ({
+            cash: 'Cash',
+            cheque: 'Cheque',
+            online: 'Online Bank Transfer',
+            card: 'Card / POS',
+            other: 'Other Bank Payment',
+        })[channel] || channel || '—';
+    }
+
+    _mapRecoveryRow(p) {
+        return {
+            id: p.id,
+            name: p.name || '—',
+            date: p.date || '—',
+            amount: p.amount || 0,
+            shop: p.partner_id ? p.partner_id[1] : '—',
+            shopId: p.partner_id ? p.partner_id[0] : false,
+            dm: p.shahtaj_collected_by_dm_id ? p.shahtaj_collected_by_dm_id[1] : '—',
+            dmId: p.shahtaj_collected_by_dm_id ? p.shahtaj_collected_by_dm_id[0] : false,
+            channel: p.shahtaj_payment_channel || '',
+            channelLabel: this._paymentChannelLabel(p.shahtaj_payment_channel),
+            state: p.state || '—',
+        };
+    }
+
+    async viewRecovery(row) {
+        this.state.selectedRecovery = { ...row };
+        try {
+            const recs = await this.orm.read("account.payment", [row.id], [
+                "name", "date", "amount", "state", "partner_id",
+                "shahtaj_collected_by_dm_id", "shahtaj_payment_channel",
+                "journal_id", "move_id", "memo",
+                "shahtaj_payment_notes", "shahtaj_instrument_reference",
+                "shahtaj_payer_bank_name", "shahtaj_payer_account_number",
+                "shahtaj_has_cheque_image", "shahtaj_cheque_image",
+                "shahtaj_dm_delivery_id", "reconciled_invoice_ids",
+            ]);
+            if (!recs.length || !this.state.selectedRecovery || this.state.selectedRecovery.id !== row.id) {
+                return;
+            }
+            const p = recs[0];
+            const invoices = Array.isArray(p.reconciled_invoice_ids) ? p.reconciled_invoice_ids : [];
+            const invoiceNames = invoices.map((inv) => Array.isArray(inv) ? inv[1] : String(inv)).filter(Boolean);
+            this.state.selectedRecovery = {
+                ...this._mapRecoveryRow(p),
+                journal: p.journal_id ? p.journal_id[1] : '—',
+                move: p.move_id ? p.move_id[1] : '—',
+                reference: p.shahtaj_instrument_reference || p.memo || '',
+                notes: p.shahtaj_payment_notes || '',
+                bankName: p.shahtaj_payer_bank_name || '',
+                accountNumber: p.shahtaj_payer_account_number || '',
+                hasChequeImage: !!p.shahtaj_has_cheque_image,
+                chequeImage: p.shahtaj_cheque_image || '',
+                job: p.shahtaj_dm_delivery_id ? p.shahtaj_dm_delivery_id[1] : '',
+                invoices: invoiceNames,
+                invoiceLabel: invoiceNames.join(', '),
+            };
+        } catch (error) {
+            this.notification.add("Could not load recovery: " + (error.data?.message || error.message), { type: "danger" });
+        }
+    }
+
+    closeRecovery() {
+        this.state.selectedRecovery = null;
+    }
+
+    openRecoverySettle() {
+        const dmId = this.state.selectedRecovery && this.state.selectedRecovery.dmId;
+        return this.openSettleModal(dmId || "");
+    }
+
+    viewSettlement(row) {
+        this.state.selectedSettlement = row;
+    }
+
+    closeSettlement() {
+        this.state.selectedSettlement = null;
+    }
+
+    async _ensureSettleJournals() {
+        if (this.state.settleModal.journals.length) return this.state.settleModal.journals;
+        const journals = await this.orm.searchRead(
+            "account.journal",
+            [["type", "in", ["bank", "cash"]], ["code", "!=", "DMCASH"]],
+            ["id", "name"],
+            { limit: 40, order: "name asc" },
+        );
+        this.state.settleModal.journals = journals;
+        return journals;
+    }
+
+    async openSettleModal(dmId = "") {
+        this.state.settleModal.saving = true;
+        try {
+            const journals = await this._ensureSettleJournals();
+            this.state.settleModal.open = true;
+            this.state.settleModal.wizardId = null;
+            this.state.settleModal.dmId = dmId ? String(dmId) : "";
+            this.state.settleModal.notes = "";
+            this.state.settleModal.bankJournalId = journals[0] ? String(journals[0].id) : "";
+            this.state.settleModal.walletBalance = 0;
+            this.state.settleModal.amount = 0;
+            if (this.state.settleModal.dmId) {
+                await this.onSettleDmChange();
+            }
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        } finally {
+            this.state.settleModal.saving = false;
+        }
+    }
+
+    async onSettleDmChange() {
+        const dmId = parseInt(this.state.settleModal.dmId, 10);
+        if (!dmId) {
+            this.state.settleModal.walletBalance = 0;
+            this.state.settleModal.amount = 0;
+            return;
+        }
+        try {
+            const [user] = await this.orm.read("res.users", [dmId], ["shahtaj_dm_wallet_balance"]);
+            const balance = user?.shahtaj_dm_wallet_balance || 0;
+            this.state.settleModal.walletBalance = balance;
+            this.state.settleModal.amount = balance;
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        }
+    }
+
+    closeSettle() {
+        this.state.settleModal.open = false;
+        this.state.settleModal.wizardId = null;
+    }
+
+    async confirmSettle() {
+        const dmId = parseInt(this.state.settleModal.dmId, 10);
+        if (!dmId) {
+            this.notification.add("Select a delivery man to settle.", { type: "warning" });
+            return;
+        }
+        const journalId = parseInt(this.state.settleModal.bankJournalId, 10);
+        if (!journalId) {
+            this.notification.add("Select a deposit journal.", { type: "warning" });
+            return;
+        }
+        this.state.settleModal.saving = true;
+        try {
+            const wizardIds = await this.orm.create(
+                "shahtaj.dm.wallet.settle",
+                [{}],
+                { context: { default_delivery_man_id: dmId, active_model: "res.users", active_id: dmId } },
+            );
+            const wizardId = Array.isArray(wizardIds) ? wizardIds[0] : wizardIds;
+            await this.orm.write("shahtaj.dm.wallet.settle", [wizardId], {
+                delivery_man_id: dmId,
+                amount: Number(this.state.settleModal.amount) || 0,
+                bank_journal_id: journalId,
+                notes: this.state.settleModal.notes || "",
+            });
+            await this.orm.call("shahtaj.dm.wallet.settle", "action_confirm", [[wizardId]]);
+            this.notification.add("Wallet settled.", { type: "success" });
+            this.closeSettle();
+            await this.fetchActiveList();
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        } finally {
+            this.state.settleModal.saving = false;
+        }
+    }
+
     // --- NAVIGATION & FILTERS ---
 
     setSubTab(tabName) {
@@ -1803,6 +2368,8 @@ export class OperationsTracking extends Component {
             this.state.selectedSchedule = null;
             this.state.selectedTarget = null;
             this.state.selectedDmJob = null;
+            this.state.selectedSettlement = null;
+            this.state.selectedRecovery = null;
             this.state.showSaleOrderForm = false;
             this.state.showRejectModal = false;
             this.state.showCreditOverride = false;
@@ -1826,7 +2393,11 @@ export class OperationsTracking extends Component {
         const defaultFilters = {
             deliveries: { search: '', status: '' },
             dispatch:   { search: '' },
-            dm_jobs:    { search: '', dm: 'all', date: this.todayStr, state: 'all', field_state: 'all' },
+            dm_jobs:    { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all' },
+            sessions:   { dm: 'all', dateFrom: '', dateTo: '' },
+            collections:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
+            settlements:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
+            all_deliveries: { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', assignment_mode: 'all' },
             checkins:   { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
             orders:     { search: '', status: '', booker: 'all' },
             verification: { search: '', booker: 'all', reason: 'all' },
@@ -1849,11 +2420,26 @@ export class OperationsTracking extends Component {
         if (tabName === 'deliveries') {
             this.state.selectedDelivery = null;
             this.state.selectedDmJob = null;
-            this.state.deliveriesSubTab = this.props.requestedDeliveriesSubTab || 'dispatch';
+            this.state.selectedSettlement = null;
+            this.state.selectedRecovery = null;
+            this.state.deliveriesSubTab = this.props.requestedDeliveriesSubTab === 'manual'
+                ? 'dispatch'
+                : (this.props.requestedDeliveriesSubTab || 'dispatch');
             this.state.filters.dispatch = { search: '' };
-            this.state.filters.dm_jobs = { search: '', dm: 'all', date: this.todayStr, state: 'all', field_state: 'all' };
+            this.state.filters.dm_jobs = { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all' };
+            this.state.filters.sessions = { dm: 'all', dateFrom: '', dateTo: '' };
+            this.state.filters.collections = { search: '', dm: 'all', dateFrom: '', dateTo: '' };
+            this.state.filters.settlements = { search: '', dm: 'all', dateFrom: '', dateTo: '' };
             this.state.pagination.dispatch.page = 1;
             this.state.pagination.dm_jobs.page = 1;
+            this.state.pagination.sessions.page = 1;
+            this.state.pagination.collections.page = 1;
+            this.state.pagination.settlements.page = 1;
+        }
+        if (tabName === 'all_deliveries') {
+            this.state.selectedDmJob = null;
+            this.state.filters.all_deliveries = { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', assignment_mode: 'all' };
+            this.state.pagination.all_deliveries.page = 1;
         }
         if (tabName === 'orders') {
             this.state.ordersSubTab = 'live';
@@ -1976,9 +2562,7 @@ export class OperationsTracking extends Component {
         this.state.selectedOrder = null;
         this.state.saleOrderForm = this._emptySaleOrderForm();
         this.state.showSaleOrderForm = true;
-        if (!this.state.lookupShops.length || !this.state.saleProducts.length) {
-            await this.loadSaleOrderCatalog();
-        }
+        await this.loadSaleOrderCatalog();
     }
 
     closeSaleOrderForm() {
@@ -2003,10 +2587,14 @@ export class OperationsTracking extends Component {
         if (!product) {
             line.price = 0;
             line.tax_id = '';
+            line.qty_available = null;
+            line.uom_name = '';
             return;
         }
         line.price = product.list_price || 0;
         line.tax_id = product.tax_id ? String(product.tax_id) : '';
+        line.qty_available = product.qty_available || 0;
+        line.uom_name = product.uom_name || '';
     }
 
     async saveSaleOrder() {
@@ -2021,6 +2609,7 @@ export class OperationsTracking extends Component {
         }
         this.state.isSavingSaleOrder = true;
         try {
+            const requestedByProduct = {};
             const orderLines = [];
             for (const line of form.lines) {
                 if (!line.product_id) {
@@ -2029,6 +2618,18 @@ export class OperationsTracking extends Component {
                     return;
                 }
                 const product = this.state.saleProducts.find((p) => String(p.id) === String(line.product_id));
+                const requested = parseFloat(line.qty) || 0;
+                const productKey = String(line.product_id);
+                requestedByProduct[productKey] = (requestedByProduct[productKey] || 0) + requested;
+                const onHand = product?.qty_available;
+                if (product && onHand != null && requestedByProduct[productKey] > onHand) {
+                    this.notification.add(
+                        `Not enough stock for "${product.name}". On hand: ${this._formatQty(onHand)} ${product.uom_name || 'Units'}, requested: ${this._formatQty(requestedByProduct[productKey])}.`,
+                        { type: "danger" }
+                    );
+                    this.state.isSavingSaleOrder = false;
+                    return;
+                }
                 const lineVals = {
                     product_id: parseInt(line.product_id, 10),
                     product_uom_qty: parseFloat(line.qty) || 1,
@@ -2235,55 +2836,72 @@ export class OperationsTracking extends Component {
         };
         let visitId = this._m2oId(log.visit_id);
         const taskId = this._m2oId(log.visit_task_id);
+        const dmId = this._m2oId(log.dm_delivery_id);
+        const visitFields = [
+            'started_at', 'ended_at', 'outcome', 'state', 'sale_order_id',
+            'notes', 'duration_minutes', 'dm_delivery_id',
+        ];
         try {
             if (!visitId && taskId) {
                 const found = await this.orm.searchRead(
                     'shahtaj.visit',
                     [['visit_task_id', '=', taskId]],
-                    ['started_at', 'ended_at', 'outcome', 'state', 'sale_order_id', 'notes'],
+                    visitFields,
                     { limit: 1, order: 'id desc' },
                 );
                 if (found.length) visitId = found[0].id;
             }
-            if (visitId) {
-                const visits = await this.orm.read(
+            if (!visitId && dmId) {
+                const found = await this.orm.searchRead(
                     'shahtaj.visit',
-                    [visitId],
-                    ['started_at', 'ended_at', 'outcome', 'state', 'sale_order_id', 'notes'],
+                    [['dm_delivery_id', '=', dmId]],
+                    visitFields,
+                    { limit: 1, order: 'id desc' },
                 );
-                if (visits.length && this.state.selectedCheckin && this.state.selectedCheckin.id === log.id) {
-                    const v = visits[0];
-                    let visitOutcome = v.outcome || '';
-                    const isDelivery = this._gpsIsDeliveryCheckin(log);
-                    if (v.state === 'in_progress') visitOutcome = 'In Progress';
-                    else if (v.state === 'completed' && v.outcome === 'incomplete') visitOutcome = 'Incomplete / Auto-Skipped';
-                    else if (v.state === 'completed') {
-                        if (isDelivery) visitOutcome = v.outcome === 'order' ? 'Delivered' : 'No Delivery';
-                        else visitOutcome = v.outcome === 'order' ? 'Order Placed' : 'No Order';
-                    }
-                    else if (v.state === 'cancelled') visitOutcome = 'Cancelled';
-
-                    let durationStr = '';
-                    if (v.started_at && v.ended_at) {
-                        durationStr = `${Math.round((new Date(v.ended_at.replace(' ', 'T') + 'Z') - new Date(v.started_at.replace(' ', 'T') + 'Z')) / 60000)} mins`;
-                    }
-
-                    const visitNotes = (v.notes || '').trim();
-                    if (visitNotes) this.state.selectedCheckin.notes = visitNotes;
-                    this.state.selectedCheckin.sale_order_id = v.sale_order_id || this.state.selectedCheckin.sale_order_id || false;
-                    const outcome = this._gpsCheckinOutcome(
-                        this.state.selectedCheckin,
-                        Boolean(this._m2oId(this.state.selectedCheckin.sale_order_id)),
-                    );
-                    this.state.selectedCheckin.isDeliveryCheckin = outcome.isDeliveryCheckin;
-                    this.state.selectedCheckin.hasOrder = outcome.hasOrder;
-                    this.state.selectedCheckin.orderLabel = outcome.orderLabel;
-                    this.state.selectedCheckin.endTime = this.formatUtcToPkt(v.ended_at) || '';
-                    this.state.selectedCheckin.visitOutcome = visitOutcome;
-                    if (durationStr) {
-                        this.state.selectedCheckin.duration = durationStr;
-                    }
+                if (found.length) visitId = found[0].id;
+            }
+            let visit = null;
+            if (visitId) {
+                const visits = await this.orm.read('shahtaj.visit', [visitId], visitFields);
+                visit = visits[0] || null;
+            }
+            let job = null;
+            if (dmId) {
+                const jobs = await this.orm.read(
+                    'shahtaj.dm.delivery',
+                    [dmId],
+                    ['picked_at', 'delivered_at'],
+                );
+                job = jobs[0] || null;
+            }
+            if (this.state.selectedCheckin && this.state.selectedCheckin.id === log.id) {
+                const timing = this._checkinTiming(visit, job);
+                this.state.selectedCheckin.endTime = timing.endTime;
+                this.state.selectedCheckin.duration = timing.duration;
+            }
+            if (visit && this.state.selectedCheckin && this.state.selectedCheckin.id === log.id) {
+                const v = visit;
+                let visitOutcome = v.outcome || '';
+                const isDelivery = this._gpsIsDeliveryCheckin(log);
+                if (v.state === 'in_progress') visitOutcome = 'In Progress';
+                else if (v.state === 'completed' && v.outcome === 'incomplete') visitOutcome = 'Incomplete / Auto-Skipped';
+                else if (v.state === 'completed') {
+                    if (isDelivery) visitOutcome = v.outcome === 'order' ? 'Delivered' : 'No Delivery';
+                    else visitOutcome = v.outcome === 'order' ? 'Order Placed' : 'No Order';
                 }
+                else if (v.state === 'cancelled') visitOutcome = 'Cancelled';
+
+                const visitNotes = (v.notes || '').trim();
+                if (visitNotes) this.state.selectedCheckin.notes = visitNotes;
+                this.state.selectedCheckin.sale_order_id = v.sale_order_id || this.state.selectedCheckin.sale_order_id || false;
+                const outcome = this._gpsCheckinOutcome(
+                    this.state.selectedCheckin,
+                    Boolean(this._m2oId(this.state.selectedCheckin.sale_order_id)),
+                );
+                this.state.selectedCheckin.isDeliveryCheckin = outcome.isDeliveryCheckin;
+                this.state.selectedCheckin.hasOrder = outcome.hasOrder;
+                this.state.selectedCheckin.orderLabel = outcome.orderLabel;
+                this.state.selectedCheckin.visitOutcome = visitOutcome;
             }
             if (!(this.state.selectedCheckin.notes || '').trim() && taskId) {
                 const tasks = await this.orm.read('shahtaj.visit.task', [taskId], ['notes']);
