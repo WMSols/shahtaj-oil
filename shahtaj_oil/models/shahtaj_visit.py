@@ -696,6 +696,16 @@ class ShahtajVisit(models.Model):
             'state': 'in_progress',
             'outcome': 'none',
         })
+        # Link latest OK check-in attempt to this visit (best-effort).
+        attempt = self.env['shahtaj.gps.attempt'].sudo().search([
+            ('purpose', '=', 'check_in'),
+            ('result', '=', 'ok'),
+            ('user_id', '=', task.order_booker_id.id),
+            ('shop_id', '=', shop.id),
+            ('visit_id', '=', False),
+        ], order='id desc', limit=1)
+        if attempt:
+            attempt.write({'visit_id': visit.id, 'visit_task_id': task.id})
         task.with_context(shahtaj_system_visit_write=True).write({
             'state': 'in_progress',
             'visit_id': visit.id,

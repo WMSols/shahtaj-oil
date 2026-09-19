@@ -250,4 +250,3 @@ class ResPartner(models.Model):
         """Lightweight dict for mobile shop payloads."""
         self.ensure_one()
         return self._shahtaj_credit_snapshots_for_api(self)[self.id]
-

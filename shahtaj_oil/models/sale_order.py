@@ -979,6 +979,32 @@ class SaleOrder(models.Model):
             if write_vals:
                 order.write(write_vals)
 
+    def _shahtaj_check_bookable_qty(self):
+        """Reject draft/sent orders that book more than warehouse bookable stock.
+
+        Bookable = on-hand minus open visit carts and undelivered confirmed SOs.
+        Visit-created orders exclude that visit's cart so place-order is not double-counted.
+        """
+        for order in self.filtered(lambda o: o.state in ('draft', 'sent')):
+            exclude_visit_line_ids = (
+                order.shahtaj_visit_id.line_ids.ids if order.shahtaj_visit_id else []
+            )
+            totals = {}
+            for line in order.order_line.filtered(lambda l: l.product_id and not l.display_type):
+                product = line.product_id
+                qty = line.product_uom_qty
+                line_uom = line.product_uom_id
+                if line_uom and product.uom_id and line_uom != product.uom_id:
+                    qty = line_uom._compute_quantity(
+                        qty, product.uom_id, rounding_method='HALF-UP',
+                    )
+                totals[product] = totals.get(product, 0.0) + qty
+            for product, total_qty in totals.items():
+                product._check_shahtaj_bookable_qty(
+                    total_qty,
+                    exclude_visit_line_ids=exclude_visit_line_ids,
+                )
+
     def action_confirm(self):
         pending_verification = self.filtered(
             lambda o: o.shahtaj_approval_state == 'to_approve'
@@ -1007,11 +1033,13 @@ class SaleOrder(models.Model):
                     effective=snap['effective_outstanding'],
                     limit=snap['credit_limit'],
                 ))
+        self._shahtaj_check_bookable_qty()
         return super().action_confirm()
 
     @api.model_create_multi
     def create(self, vals_list):
         orders = super().create(vals_list)
+        orders._shahtaj_check_bookable_qty()
         orders._shahtaj_recompute_visit_targets()
         try:
             orders._shahtaj_ensure_gps_attempt()
