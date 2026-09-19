@@ -524,8 +524,29 @@ class ShahtajVisit(models.Model):
     @api.model
     def _validate_check_in_coordinates(
         self, shop, latitude, longitude, purpose='start a visit',
+        log_purpose='check_in', visit_task=None, visit=None, dm_delivery=None,
     ):
-        """Reject if booker is outside company min/max shop GPS distance."""
+        """Reject if booker is outside company min/max shop GPS distance.
+
+        Always logs a ``shahtaj.gps.attempt`` row (success or blocked) before
+        returning or raising.
+        """
+        Attempt = self.env['shahtaj.gps.attempt']
+        limits = get_shop_distance_limits(self.env)
+        min_m = limits['min_m']
+        max_m = limits['max_m']
+        log_common = {
+            'purpose': log_purpose,
+            'shop': shop,
+            'latitude': latitude,
+            'longitude': longitude,
+            'min_distance_m': min_m,
+            'max_distance_m': max_m,
+            'visit_task': visit_task,
+            'visit': visit,
+            'dm_delivery': dm_delivery,
+        }
+
         if not shop.partner_latitude or not shop.partner_longitude:
             msg = _(
                 'Shop "%(shop)s" has no GPS coordinates. '
