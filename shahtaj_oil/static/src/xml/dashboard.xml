@@ -85,6 +85,13 @@
                 background: #d1fae5;
                 border-color: #6ee7b7;
             }
+            .so-ov-group-title {
+                font-size: 12px;
+                font-weight: 700;
+                color: #475569;
+                letter-spacing: 0.02em;
+                margin-bottom: 8px;
+            }
             .so-ov-metric-label {
                 font-size: 11px;
                 font-weight: 700;
@@ -647,35 +654,43 @@
                                                 </span>
                                             </div>
                                         </div>
-                                        <div class="row g-2">
-                                            <div class="col-6 col-sm-4 col-xl-4">
-                                                <div class="so-ov-metric" t-on-click="() => this.openTodayCheckins()">
-                                                    <div class="so-ov-metric-label">Check-ins</div>
-                                                    <div class="so-ov-metric-value" t-esc="this.state.kpis.todayCheckins"/>
+                                        <div class="so-ov-ops-group">
+                                            <div class="so-ov-group-title">OB Operations</div>
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <div class="so-ov-metric" t-on-click="() => this.openTodayCheckins()">
+                                                        <div class="so-ov-metric-label">Check-ins</div>
+                                                        <div class="so-ov-metric-value" t-esc="this.state.kpis.todayCheckins"/>
+                                                    </div>
+                                                </div>
+                                                <div class="col-6">
+                                                    <div class="so-ov-metric" t-on-click="() => this.switchTab('operations', 'orders')">
+                                                        <div class="so-ov-metric-label">Orders</div>
+                                                        <div class="so-ov-metric-value" t-esc="this.state.kpis.todayOrders"/>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div class="col-6 col-sm-4 col-xl-4">
-                                                <div class="so-ov-metric" t-on-click="() => this.switchTab('operations', 'orders')">
-                                                    <div class="so-ov-metric-label">Orders</div>
-                                                    <div class="so-ov-metric-value" t-esc="this.state.kpis.todayOrders"/>
+                                        </div>
+                                        <div class="so-ov-ops-group mt-3">
+                                            <div class="so-ov-group-title">DM Operations</div>
+                                            <div class="row g-2">
+                                                <div class="col-6 col-sm-4">
+                                                    <div t-attf-class="so-ov-metric #{this.state.kpis.todayDeliveries > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openDeliveries('dispatch')">
+                                                        <div class="so-ov-metric-label">Active Deliveries</div>
+                                                        <div class="so-ov-metric-value" t-esc="this.state.kpis.todayDeliveries"/>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <div class="col-6 col-sm-4 col-xl-4">
-                                                <div t-attf-class="so-ov-metric #{this.state.kpis.pendingDeliveries > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openDeliveries('dispatch')">
-                                                    <div class="so-ov-metric-label">Deliveries</div>
-                                                    <div class="so-ov-metric-value" t-esc="this.state.kpis.pendingDeliveries"/>
+                                                <div class="col-6 col-sm-4">
+                                                    <div class="so-ov-metric" t-on-click="() => this.openDeliveries('jobs')">
+                                                        <div class="so-ov-metric-label">DM Jobs</div>
+                                                        <div class="so-ov-metric-value" t-esc="this.state.kpis.dmJobsToday"/>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <div class="col-6 col-sm-6">
-                                                <div class="so-ov-metric" t-on-click="() => this.openDeliveries('jobs')">
-                                                    <div class="so-ov-metric-label">Jobs</div>
-                                                    <div class="so-ov-metric-value" t-esc="this.state.kpis.dmJobsToday"/>
-                                                </div>
-                                            </div>
-                                            <div class="col-6 col-sm-6">
-                                                <div t-attf-class="so-ov-metric #{this.state.kpis.dmInTransit > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openDeliveries('jobs')">
-                                                    <div class="so-ov-metric-label">In transit</div>
-                                                    <div class="so-ov-metric-value" t-esc="this.state.kpis.dmInTransit"/>
+                                                <div class="col-6 col-sm-4">
+                                                    <div t-attf-class="so-ov-metric #{this.state.kpis.todayInTransit > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openDeliveries('jobs')">
+                                                        <div class="so-ov-metric-label">In Transit</div>
+                                                        <div class="so-ov-metric-value" t-esc="this.state.kpis.todayInTransit"/>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

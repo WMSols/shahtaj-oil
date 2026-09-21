@@ -54,6 +54,8 @@ export class ShahtajDashboard extends Component {
                 onlineBookers: 0,
                 todayCheckins: 0,
                 todayOrders: 0,
+                todayDeliveries: 0,
+                todayInTransit: 0,
                 pendingDeliveries: 0,
                 totalDeliveryMen: 0,
                 onlineDeliveryMen: 0,
@@ -230,8 +232,10 @@ export class ShahtajDashboard extends Component {
                 this.orm.searchCount("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true]]),
                 this.orm.searchCount("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["state", "!=", "not_ready"]]),
-                this.orm.searchCount("shahtaj.dm.delivery", [["state", "in", ["ready", "picked", "partial"]]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["field_state", "=", "in_transit"]]),
+                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["state", "=", "sale"]]),
+                this.orm.searchCount("shahtaj.dm.delivery", [["state", "in", ["ready", "picked", "partial"]]]),
+                this.orm.searchCount("shahtaj.dm.delivery", [["field_state", "=", "in_transit"]]),
                 this.orm.searchCount("sale.order", [["state", "in", ["sale", "done"]], ["shahtaj_delivery_status", "in", ["pending", "partial"]]]),
             ]);
 
@@ -255,11 +259,12 @@ export class ShahtajDashboard extends Component {
             const [
                 zones, routes, shops, pendingShops, shopsRegisteredByOb,
                 totalBookers, onlineBookers,
-                todayCheckins, todayOrders, pendingDeliveries,
+                todayCheckins, todayOrders, todayDeliveries,
                 totalProducts, outOfStockProducts,
                 activeSchedules, activeTargets,
                 totalDeliveryMen, onlineDeliveryMen,
-                dmJobsToday, dmJobsActive, dmInTransit, ordersToDispatch,
+                dmJobsToday, todayInTransit,
+                pendingDeliveries, dmJobsActive, dmInTransit, ordersToDispatch,
             ] = coreCounts;
 
             Object.assign(this.state.kpis, {
@@ -272,6 +277,8 @@ export class ShahtajDashboard extends Component {
                 onlineBookers,
                 todayCheckins,
                 todayOrders,
+                todayDeliveries,
+                todayInTransit,
                 pendingDeliveries,
                 totalProducts,
                 outOfStockProducts,
@@ -372,7 +379,7 @@ export class ShahtajDashboard extends Component {
         this.state.opsDate = dateStr;
         const opsBounds = this._pktDateToUtcBounds(dateStr);
         try {
-            const [todayCheckins, todayOrders, pendingDeliveries, dmJobsToday, dmInTransit] = await Promise.all([
+            const [todayCheckins, todayOrders, todayDeliveries, dmJobsToday, todayInTransit] = await Promise.all([
                 this.orm.searchCount("shahtaj.gps.attempt", [
                     ["purpose", "=", "check_in"],
                     ["create_date", ">=", opsBounds.start],
@@ -386,9 +393,9 @@ export class ShahtajDashboard extends Component {
             Object.assign(this.state.kpis, {
                 todayCheckins,
                 todayOrders,
-                pendingDeliveries,
+                todayDeliveries,
                 dmJobsToday,
-                dmInTransit,
+                todayInTransit,
             });
         } catch (error) {
             console.error("Failed to fetch field activity counts", error);
