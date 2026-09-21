@@ -362,7 +362,6 @@
                         </button>
                     </div>
                     <div t-if="this.state.selectedStaff.roleKey === 'delivery_man' and this.hasFinancialAccess" class="d-flex flex-wrap gap-2 mt-3">
-                        <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="openCollectModal" t-att-disabled="this.state.loading.wallet">Collect Payment</button>
                         <button class="btn btn-sm btn-dark fw-bold text-white" t-on-click="openSettleModal" t-att-disabled="this.state.loading.wallet">Settle Wallet</button>
                     </div>
                 </div>
@@ -401,19 +400,8 @@
                         </div>
                     </div>
 
-                    <div class="mb-4 border-bottom">
-                        <ul class="nav nav-pills nav-fill mb-3 flex-column flex-md-row gap-2">
-                            <li class="nav-item">
-                                <button t-on-click="() => this.state.detailTab = 'jobs'" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 #{this.state.detailTab === 'jobs' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-light'}">Assigned Jobs</button>
-                            </li>
-                            <li class="nav-item">
-                                <button t-on-click="() => this.state.detailTab = 'coverage'" t-attf-class="nav-link fw-bold rounded-pill border-0 px-4 py-2 w-100 #{this.state.detailTab === 'coverage' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-light'}">Booker Coverage</button>
-                            </li>
-                        </ul>
-                    </div>
-
-                    <t t-if="this.state.detailTab === 'jobs'">
-                        <div class="table-responsive bg-white rounded-3 shadow-sm border">
+                    <h6 class="fw-bold text-muted text-uppercase small mb-3">Assigned Jobs</h6>
+                    <div class="table-responsive bg-white rounded-3 shadow-sm border">
                             <table class="table table-hover mb-0">
                                 <thead class="bg-light text-uppercase small fw-bold text-muted">
                                     <tr>
@@ -455,24 +443,6 @@
                                 <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('detailJobs', 1)" t-att-disabled="this.state.pagination.detailJobs.page &gt;= Math.ceil(this.state.pagination.detailJobs.total / this.state.pagination.detailJobs.limit)">Next</button>
                             </div>
                         </div>
-                    </t>
-
-                    <t t-if="this.state.detailTab === 'coverage'">
-                        <p class="text-muted small">Orders from these bookers can be assigned to this delivery man.</p>
-                        <t t-if="this.state.lookupBookers.length === 0">
-                            <div class="text-muted py-4 fw-bold">No order bookers found.</div>
-                        </t>
-                        <div class="row g-2">
-                            <t t-foreach="this.state.lookupBookers" t-as="booker" t-key="booker.id">
-                                <div class="col-12 col-md-6">
-                                    <label class="d-flex align-items-center gap-2 p-2 border rounded-3 bg-white">
-                                        <input type="checkbox" class="form-check-input mt-0" t-att-checked="this.isBookerCovered(booker.id)" t-on-change="() => this.toggleCoverage(booker.id)" t-att-disabled="this.state.loading.coverage"/>
-                                        <span class="fw-bold"><t t-esc="booker.name"/></span>
-                                    </label>
-                                </div>
-                            </t>
-                        </div>
-                    </t>
                 </t>
 
                 <t t-else="">
@@ -610,58 +580,6 @@
                     </div>
                 </t>
                 </t>
-            </t>
-
-            <t t-if="this.state.collectModal.open">
-                <div class="modal d-block" style="background: rgba(15,23,42,0.45);" tabindex="-1">
-                    <div class="modal-dialog modal-lg modal-dialog-centered">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title fw-bold">Collect Shop Payment</h5>
-                                <button type="button" class="btn-close" t-on-click="closeCollectModal"/>
-                            </div>
-                            <div class="modal-body">
-                                <label class="small fw-bold">Shop</label>
-                                <input type="text" class="form-control mb-2" placeholder="Search shop..." t-on-input="onCollectShopSearch"/>
-                                <select class="form-select mb-3" t-model="this.state.collectModal.shopId" t-on-change="onCollectShopChange">
-                                    <option value="">Select a shop</option>
-                                    <t t-foreach="this.state.collectModal.shops" t-as="shop" t-key="shop.id">
-                                        <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
-                                    </t>
-                                </select>
-                                <div class="d-flex justify-content-between small text-muted mb-2">
-                                    <span>Wallet: Rs. <t t-esc="this.formatMoney(this.state.collectModal.walletBalance)"/></span>
-                                    <span>Outstanding: Rs. <t t-esc="this.formatMoney(this.state.collectModal.shopOutstanding)"/></span>
-                                </div>
-                                <t t-if="this.state.collectModal.lines.length">
-                                    <div class="table-responsive">
-                                        <table class="table table-sm">
-                                            <thead><tr><th>Invoice</th><th class="text-end">Remaining</th><th class="text-end">Collect</th></tr></thead>
-                                            <tbody>
-                                                <t t-foreach="this.state.collectModal.lines" t-as="line" t-key="line.id">
-                                                    <tr>
-                                                        <td><t t-esc="line.move"/></td>
-                                                        <td class="text-end"><t t-esc="line.residual"/></td>
-                                                        <td class="text-end" style="max-width: 120px;">
-                                                            <input type="number" class="form-control form-control-sm text-end" t-model.number="line.amount" min="0" t-att-max="line.residual"/>
-                                                        </td>
-                                                    </tr>
-                                                </t>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <button class="btn btn-sm btn-outline-secondary mb-2" t-on-click="fillCollectResiduals">Fill remaining</button>
-                                </t>
-                                <label class="small fw-bold">Notes</label>
-                                <textarea class="form-control" rows="2" t-model="this.state.collectModal.notes"/>
-                            </div>
-                            <div class="modal-footer">
-                                <button class="btn btn-outline-secondary" t-on-click="closeCollectModal">Cancel</button>
-                                <button class="btn btn-dark text-white" t-on-click="confirmCollect" t-att-disabled="this.state.loading.wallet or !this.state.collectModal.wizardId">Confirm</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </t>
 
             <t t-if="this.state.settleModal.open">

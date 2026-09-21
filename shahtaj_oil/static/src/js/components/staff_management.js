@@ -31,8 +31,6 @@ export class StaffManagement extends Component {
             detailTargets: [],
             detailJobs: [],
             detailBookers: [],
-            coverageBookerIds: [],
-            lookupBookers: [],
             vanSnapshot: {
                 qtyOnHand: 0,
                 skuCount: 0,
@@ -45,7 +43,6 @@ export class StaffManagement extends Component {
                 fetch: false,
                 save: false,
                 toggle: false,
-                coverage: false,
                 wallet: false,
             },
             confirmModal: {
@@ -60,17 +57,6 @@ export class StaffManagement extends Component {
                 email: "",
                 password: "",
                 role: initialRole,
-            },
-            collectModal: {
-                open: false,
-                shopId: "",
-                shopSearch: "",
-                shops: [],
-                wizardId: null,
-                walletBalance: 0,
-                shopOutstanding: 0,
-                lines: [],
-                notes: "",
             },
             settleModal: {
                 open: false,
@@ -336,7 +322,6 @@ export class StaffManagement extends Component {
             await Promise.all([
                 this.fetchDetailJobs(),
                 this.fetchVanSnapshot(staff.id),
-                this.fetchCoverage(staff.id),
             ]);
             return;
         }
@@ -424,42 +409,6 @@ export class StaffManagement extends Component {
             this.state.selectedStaff.jobsToday = rec.shahtaj_dm_jobs_today_count || 0;
             this.state.selectedStaff.openJobs = rec.shahtaj_pending_delivery_count || 0;
             this.state.selectedStaff.vanQty = rec.shahtaj_van_qty_on_hand || 0;
-        }
-    }
-
-    async fetchCoverage(userId) {
-        const [rec] = await this.orm.read("res.users", [userId], ["shahtaj_assigned_booker_ids"]);
-        this.state.coverageBookerIds = rec?.shahtaj_assigned_booker_ids || [];
-        if (!this.state.lookupBookers.length) {
-            this.state.lookupBookers = await this.orm.searchRead(
-                "res.users",
-                [["shahtaj_is_order_booker", "=", true], ["active", "=", true]],
-                ["id", "name"],
-                { order: "name asc", limit: 200 },
-            );
-        }
-    }
-
-    isBookerCovered(bookerId) {
-        return this.state.coverageBookerIds.includes(bookerId);
-    }
-
-    async toggleCoverage(bookerId) {
-        if (!this.state.selectedStaff) return;
-        const current = new Set(this.state.coverageBookerIds);
-        if (current.has(bookerId)) current.delete(bookerId);
-        else current.add(bookerId);
-        const ids = [...current];
-        this.state.loading.coverage = true;
-        try {
-            await this.orm.write("res.users", [this.state.selectedStaff.id], {
-                shahtaj_assigned_booker_ids: [[6, 0, ids]],
-            });
-            this.state.coverageBookerIds = ids;
-        } catch (error) {
-            this.notification.add("Failed to update coverage: " + (error.data?.message || error.message), { type: "danger" });
-        } finally {
-            this.state.loading.coverage = false;
         }
     }
 
@@ -583,141 +532,6 @@ export class StaffManagement extends Component {
             this.notification.add("An error occurred while updating the status.", { type: "danger" });
         } finally {
             this.state.loading.toggle = false;
-        }
-    }
-
-    async openCollectModal() {
-        if (!this.state.selectedStaff) return;
-        this.state.collectModal = {
-            open: true,
-            shopId: "",
-            shopSearch: "",
-            shops: [],
-            wizardId: null,
-            walletBalance: this.state.selectedStaff.wallet || 0,
-            shopOutstanding: 0,
-            lines: [],
-            notes: "",
-        };
-        await this.searchCollectShops("");
-    }
-
-    closeCollectModal() {
-        this.state.collectModal.open = false;
-        this.state.collectModal.wizardId = null;
-        this.state.collectModal.lines = [];
-    }
-
-    async searchCollectShops(query) {
-        const domain = [
-            ["is_shahtaj_shop", "=", true],
-            ["shop_approval_state", "=", "approved"],
-            ["active", "=", true],
-        ];
-        if (query) domain.push(["name", "ilike", query]);
-        this.state.collectModal.shops = await this.orm.searchRead(
-            "res.partner",
-            domain,
-            ["id", "name"],
-            { limit: 30, order: "name asc" },
-        );
-    }
-
-    onCollectShopSearch(ev) {
-        this.state.collectModal.shopSearch = ev.target.value;
-        clearTimeout(this.state.searchTimeout);
-        this.state.searchTimeout = setTimeout(() => this.searchCollectShops(ev.target.value), 400);
-    }
-
-    async onCollectShopChange() {
-        const shopId = parseInt(this.state.collectModal.shopId, 10);
-        if (!shopId || !this.state.selectedStaff) {
-            this.state.collectModal.lines = [];
-            this.state.collectModal.wizardId = null;
-            return;
-        }
-        this.state.loading.wallet = true;
-        try {
-            const wizardIds = await this.orm.create(
-                "shahtaj.dm.collect.payment",
-                [{}],
-                { context: { default_delivery_man_id: this.state.selectedStaff.id, default_partner_id: shopId } },
-            );
-            const wizardId = Array.isArray(wizardIds) ? wizardIds[0] : wizardIds;
-            const [wiz] = await this.orm.read(
-                "shahtaj.dm.collect.payment",
-                [wizardId],
-                ["wallet_balance", "shop_outstanding", "line_ids", "notes"],
-            );
-            const lines = wiz.line_ids?.length
-                ? await this.orm.read(
-                    "shahtaj.dm.collect.payment.line",
-                    wiz.line_ids,
-                    ["id", "move_id", "amount_residual", "amount"],
-                )
-                : [];
-            this.state.collectModal.wizardId = wizardId;
-            this.state.collectModal.walletBalance = wiz.wallet_balance || 0;
-            this.state.collectModal.shopOutstanding = wiz.shop_outstanding || 0;
-            this.state.collectModal.lines = lines.map((l) => ({
-                id: l.id,
-                move: l.move_id ? l.move_id[1] : "Invoice",
-                residual: l.amount_residual || 0,
-                amount: l.amount || 0,
-            }));
-        } catch (error) {
-            this.notification.add("Failed to load invoices: " + (error.data?.message || error.message), { type: "danger" });
-        } finally {
-            this.state.loading.wallet = false;
-        }
-    }
-
-    async fillCollectResiduals() {
-        if (!this.state.collectModal.wizardId) return;
-        this.state.loading.wallet = true;
-        try {
-            await this.orm.call("shahtaj.dm.collect.payment", "action_fill_full_residuals", [[this.state.collectModal.wizardId]]);
-            const lines = this.state.collectModal.lines;
-            if (lines.length) {
-                const refreshed = await this.orm.read(
-                    "shahtaj.dm.collect.payment.line",
-                    lines.map((l) => l.id),
-                    ["id", "move_id", "amount_residual", "amount"],
-                );
-                this.state.collectModal.lines = refreshed.map((l) => ({
-                    id: l.id,
-                    move: l.move_id ? l.move_id[1] : "Invoice",
-                    residual: l.amount_residual || 0,
-                    amount: l.amount || 0,
-                }));
-            }
-        } catch (error) {
-            this.notification.add(error.data?.message || error.message, { type: "danger" });
-        } finally {
-            this.state.loading.wallet = false;
-        }
-    }
-
-    async confirmCollect() {
-        if (!this.state.collectModal.wizardId) return;
-        this.state.loading.wallet = true;
-        try {
-            for (const line of this.state.collectModal.lines) {
-                await this.orm.write("shahtaj.dm.collect.payment.line", [line.id], { amount: Number(line.amount) || 0 });
-            }
-            if (this.state.collectModal.notes) {
-                await this.orm.write("shahtaj.dm.collect.payment", [this.state.collectModal.wizardId], {
-                    notes: this.state.collectModal.notes,
-                });
-            }
-            await this.orm.call("shahtaj.dm.collect.payment", "action_confirm", [[this.state.collectModal.wizardId]]);
-            this.notification.add("Collected into DM wallet.", { type: "success" });
-            this.closeCollectModal();
-            await this.fetchVanSnapshot(this.state.selectedStaff.id);
-        } catch (error) {
-            this.notification.add("Collection failed: " + (error.data?.message || error.message), { type: "danger" });
-        } finally {
-            this.state.loading.wallet = false;
         }
     }
 
