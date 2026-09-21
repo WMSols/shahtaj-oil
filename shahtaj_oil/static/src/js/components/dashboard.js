@@ -10,7 +10,7 @@ import { OperationsTracking } from "./operations_tracking";
 import { DeliveryManPerformance } from "./delivery_man_performance";
 import { TerritoryRoutes } from "./territory_routes";
 import { WarehouseInventory } from "./warehouse_inventory";
-import { FinancialsInvoicing } from "./financials_invoicing";
+import { FinancialsInvoicing } from "./financials/financials_invoicing";
 import { PortalSettings } from "./settings"
 import { SchedulesTargets } from "./schedules_targets";
 import { BankTransactions } from "./bank_transactions";

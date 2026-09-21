@@ -19,7 +19,7 @@
                 </div>
                 <div class="d-flex align-items-center gap-3">
                     <!-- NEW REFRESH BUTTON -->
-                    <button class="btn btn-outline-secondary fw-bold shadow-sm d-inline-flex align-items-center bg-white" t-on-click="refreshData" t-att-disabled="this.state.isRefreshing" title="Refresh Live Data">
+                    <button class="btn btn-dark fw-bold text-white shadow-sm d-inline-flex align-items-center" t-on-click="refreshData" t-att-disabled="this.state.isRefreshing" title="Refresh Live Data">
                         <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.isRefreshing}"></i> Refresh
                     </button>
                 </div>
@@ -246,9 +246,9 @@
                                 of <t t-esc="this.state.pagination.dispatch.total"/>
                             </small>
                             <div class="btn-group shadow-sm">
-                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('dispatch', -1)" t-att-disabled="this.state.pagination.dispatch.page === 1">Prev</button>
+                                <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('dispatch', -1)" t-att-disabled="this.state.pagination.dispatch.page === 1">Prev</button>
                                 <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.dispatch.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.dispatch.total / this.state.pagination.dispatch.limit))"/></button>
-                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('dispatch', 1)" t-att-disabled="this.state.pagination.dispatch.page &gt;= Math.ceil(this.state.pagination.dispatch.total / this.state.pagination.dispatch.limit)">Next</button>
+                                <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('dispatch', 1)" t-att-disabled="this.state.pagination.dispatch.page &gt;= Math.ceil(this.state.pagination.dispatch.total / this.state.pagination.dispatch.limit)">Next</button>
                             </div>
                         </div>
                     </div>
@@ -338,9 +338,9 @@
                                 of <t t-esc="this.state.pagination.dm_jobs.total"/>
                             </small>
                             <div class="btn-group shadow-sm">
-                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('dm_jobs', -1)" t-att-disabled="this.state.pagination.dm_jobs.page === 1">Prev</button>
+                                <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('dm_jobs', -1)" t-att-disabled="this.state.pagination.dm_jobs.page === 1">Prev</button>
                                 <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.dm_jobs.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.dm_jobs.total / this.state.pagination.dm_jobs.limit))"/></button>
-                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('dm_jobs', 1)" t-att-disabled="this.state.pagination.dm_jobs.page &gt;= Math.ceil(this.state.pagination.dm_jobs.total / this.state.pagination.dm_jobs.limit)">Next</button>
+                                <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('dm_jobs', 1)" t-att-disabled="this.state.pagination.dm_jobs.page &gt;= Math.ceil(this.state.pagination.dm_jobs.total / this.state.pagination.dm_jobs.limit)">Next</button>
                             </div>
                         </div>
                     </div>
@@ -402,9 +402,9 @@
                                 of <t t-esc="this.state.pagination.sessions.total"/>
                             </small>
                             <div class="btn-group shadow-sm">
-                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('sessions', -1)" t-att-disabled="this.state.pagination.sessions.page === 1">Prev</button>
+                                <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('sessions', -1)" t-att-disabled="this.state.pagination.sessions.page === 1">Prev</button>
                                 <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.sessions.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.sessions.total / this.state.pagination.sessions.limit))"/></button>
-                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('sessions', 1)" t-att-disabled="this.state.pagination.sessions.page &gt;= Math.ceil(this.state.pagination.sessions.total / this.state.pagination.sessions.limit)">Next</button>
+                                <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('sessions', 1)" t-att-disabled="this.state.pagination.sessions.page &gt;= Math.ceil(this.state.pagination.sessions.total / this.state.pagination.sessions.limit)">Next</button>
                             </div>
                         </div>
                     </div>
@@ -472,9 +472,9 @@
                                 of <t t-esc="this.state.pagination.collections.total"/>
                             </small>
                             <div class="btn-group shadow-sm">
-                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('collections', -1)" t-att-disabled="this.state.pagination.collections.page === 1">Prev</button>
+                                <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('collections', -1)" t-att-disabled="this.state.pagination.collections.page === 1">Prev</button>
                                 <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.collections.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.collections.total / this.state.pagination.collections.limit))"/></button>
-                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('collections', 1)" t-att-disabled="this.state.pagination.collections.page &gt;= Math.ceil(this.state.pagination.collections.total / this.state.pagination.collections.limit)">Next</button>
+                                <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('collections', 1)" t-att-disabled="this.state.pagination.collections.page &gt;= Math.ceil(this.state.pagination.collections.total / this.state.pagination.collections.limit)">Next</button>
                             </div>
                         </div>
                     </div>
@@ -545,9 +545,9 @@
                                 of <t t-esc="this.state.pagination.settlements.total"/>
                             </small>
                             <div class="btn-group shadow-sm">
-                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('settlements', -1)" t-att-disabled="this.state.pagination.settlements.page === 1">Prev</button>
+                                <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('settlements', -1)" t-att-disabled="this.state.pagination.settlements.page === 1">Prev</button>
                                 <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.settlements.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.settlements.total / this.state.pagination.settlements.limit))"/></button>
-                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('settlements', 1)" t-att-disabled="this.state.pagination.settlements.page &gt;= Math.ceil(this.state.pagination.settlements.total / this.state.pagination.settlements.limit)">Next</button>
+                                <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('settlements', 1)" t-att-disabled="this.state.pagination.settlements.page &gt;= Math.ceil(this.state.pagination.settlements.total / this.state.pagination.settlements.limit)">Next</button>
                             </div>
                         </div>
                     </div>
@@ -1234,9 +1234,9 @@
                             of <t t-esc="this.state.pagination.all_deliveries.total"/>
                         </small>
                         <div class="btn-group shadow-sm">
-                            <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('all_deliveries', -1)" t-att-disabled="this.state.pagination.all_deliveries.page === 1">Prev</button>
+                            <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('all_deliveries', -1)" t-att-disabled="this.state.pagination.all_deliveries.page === 1">Prev</button>
                             <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.all_deliveries.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.all_deliveries.total / this.state.pagination.all_deliveries.limit))"/></button>
-                            <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('all_deliveries', 1)" t-att-disabled="this.state.pagination.all_deliveries.page &gt;= Math.ceil(this.state.pagination.all_deliveries.total / this.state.pagination.all_deliveries.limit)">Next</button>
+                            <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('all_deliveries', 1)" t-att-disabled="this.state.pagination.all_deliveries.page &gt;= Math.ceil(this.state.pagination.all_deliveries.total / this.state.pagination.all_deliveries.limit)">Next</button>
                         </div>
                     </div>
                 </div>
@@ -1344,9 +1344,9 @@
                             of <t t-esc="this.state.pagination.checkins.total"/>
                         </small>
                         <div class="btn-group shadow-sm">
-                            <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('checkins', -1)" t-att-disabled="this.state.pagination.checkins.page === 1">Prev</button>
+                            <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('checkins', -1)" t-att-disabled="this.state.pagination.checkins.page === 1">Prev</button>
                             <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.checkins.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.checkins.total / this.state.pagination.checkins.limit))"/></button>
-                            <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('checkins', 1)" t-att-disabled="this.state.pagination.checkins.page &gt;= Math.ceil(this.state.pagination.checkins.total / this.state.pagination.checkins.limit)">Next</button>
+                            <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('checkins', 1)" t-att-disabled="this.state.pagination.checkins.page &gt;= Math.ceil(this.state.pagination.checkins.total / this.state.pagination.checkins.limit)">Next</button>
                         </div>
                     </div>
                 </div>
@@ -1837,9 +1837,9 @@
                                 of <t t-esc="this.state.pagination.orders.total"/>
                             </small>
                             <div class="btn-group shadow-sm">
-                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('orders', -1)" t-att-disabled="this.state.pagination.orders.page === 1">Prev</button>
+                                <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('orders', -1)" t-att-disabled="this.state.pagination.orders.page === 1">Prev</button>
                                 <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.orders.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.orders.total / this.state.pagination.orders.limit))"/></button>
-                                <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('orders', 1)" t-att-disabled="this.state.pagination.orders.page &gt;= Math.ceil(this.state.pagination.orders.total / this.state.pagination.orders.limit)">Next</button>
+                                <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('orders', 1)" t-att-disabled="this.state.pagination.orders.page &gt;= Math.ceil(this.state.pagination.orders.total / this.state.pagination.orders.limit)">Next</button>
                             </div>
                         </div>
                     </div>
@@ -2236,9 +2236,9 @@
                     of <t t-esc="this.state.pagination.verification.total"/>
                 </small>
                 <div class="btn-group shadow-sm">
-                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('verification', -1)" t-att-disabled="this.state.pagination.verification.page === 1">Prev</button>
+                    <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('verification', -1)" t-att-disabled="this.state.pagination.verification.page === 1">Prev</button>
                     <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.verification.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.verification.total / this.state.pagination.verification.limit))"/></button>
-                    <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('verification', 1)" t-att-disabled="this.state.pagination.verification.page &gt;= Math.ceil(this.state.pagination.verification.total / this.state.pagination.verification.limit)">Next</button>
+                    <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('verification', 1)" t-att-disabled="this.state.pagination.verification.page &gt;= Math.ceil(this.state.pagination.verification.total / this.state.pagination.verification.limit)">Next</button>
                 </div>
             </div>
         </div>
@@ -2440,9 +2440,9 @@
             of <t t-esc="this.state.pagination.schedules.total"/>
         </small>
         <div class="btn-group shadow-sm">
-            <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('schedules', -1)" t-att-disabled="this.state.pagination.schedules.page === 1">Prev</button>
+            <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('schedules', -1)" t-att-disabled="this.state.pagination.schedules.page === 1">Prev</button>
             <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.schedules.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.schedules.total / this.state.pagination.schedules.limit))"/></button>
-            <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('schedules', 1)" t-att-disabled="this.state.pagination.schedules.page &gt;= Math.ceil(this.state.pagination.schedules.total / this.state.pagination.schedules.limit)">Next</button>
+            <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('schedules', 1)" t-att-disabled="this.state.pagination.schedules.page &gt;= Math.ceil(this.state.pagination.schedules.total / this.state.pagination.schedules.limit)">Next</button>
         </div>
     </div>
 </div>
@@ -2614,9 +2614,9 @@
             of <t t-esc="this.state.pagination.targets.total"/>
         </small>
         <div class="btn-group shadow-sm">
-            <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('targets', -1)" t-att-disabled="this.state.pagination.targets.page === 1">Prev</button>
+            <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('targets', -1)" t-att-disabled="this.state.pagination.targets.page === 1">Prev</button>
             <button class="btn btn-sm btn-light border px-3 fw-bold disabled text-dark"><t t-esc="this.state.pagination.targets.page"/> / <t t-esc="Math.max(1, Math.ceil(this.state.pagination.targets.total / this.state.pagination.targets.limit))"/></button>
-            <button class="btn btn-sm btn-white border fw-bold" t-on-click="() => this.changePage('targets', 1)" t-att-disabled="this.state.pagination.targets.page &gt;= Math.ceil(this.state.pagination.targets.total / this.state.pagination.targets.limit)">Next</button>
+            <button class="btn btn-sm btn-light bg-white border fw-bold" t-on-click="() => this.changePage('targets', 1)" t-att-disabled="this.state.pagination.targets.page &gt;= Math.ceil(this.state.pagination.targets.total / this.state.pagination.targets.limit)">Next</button>
         </div>
     </div>
 </div>

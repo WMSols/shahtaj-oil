@@ -863,7 +863,7 @@ export class OperationsTracking extends Component {
         row.orderState = so.state;
         const posted = await this._ordersWithPostedInvoices([so]);
         row.hasPostedInvoice = posted.has(orderId);
-        if (row.hasPostedInvoice) {
+        if (so.invoice_status === "invoiced") {
             row.status = "Invoiced";
         } else if (so.state === "sale") {
             row.status = "To Invoice";
@@ -871,9 +871,10 @@ export class OperationsTracking extends Component {
     }
 
     canCreateInvoice(row) {
-        if (!this.hasFinancialAccess || !row || row.hasPostedInvoice) return false;
+        if (!this.hasFinancialAccess || !row) return false;
         if (["Draft", "Needs Verification", "Rejected", "Cancelled"].includes(row.status)) return false;
         if (row.orderState === "cancel") return false;
+        if (row.invoice_status === "invoiced") return false;
         return true;
     }
 
