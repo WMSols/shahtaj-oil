@@ -8,7 +8,7 @@ import { hasFinancialAccess, notifyPortalBusy, resetPortalBusy } from "../shahta
 import { StaffManagement } from "./staff_management";
 import { OperationsTracking } from "./operations/operations_tracking";
 import { DeliveryManPerformance } from "./delivery_man_performance";
-import { TerritoryRoutes } from "./territory_routes";
+import { TerritoryRoutes } from "./territory/territory_routes";
 import { WarehouseInventory } from "./warehouse_inventory";
 import { FinancialsInvoicing } from "./financials/financials_invoicing";
 import { PortalSettings } from "./settings"

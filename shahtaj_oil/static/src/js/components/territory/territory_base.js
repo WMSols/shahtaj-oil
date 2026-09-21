@@ -2,12 +2,16 @@
 
 import { Component, useState, onWillStart, useEffect, useRef,onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { ConfirmModal } from "./confirm_modal";
-import { hasFinancialAccess } from "../shahtaj_access"; 
+import { ConfirmModal } from "../confirm_modal";
+import { hasFinancialAccess } from "../../shahtaj_access";
+import { applyTerritoryDashboardToState, getTerritoryDashboard } from "./territory_cache";
 
-export class TerritoryRoutes extends Component {
+export class TerritoryBase extends Component {
     static props = {
         requestedSubTab: { type: String, optional: true },
+        refreshNonce: { type: Number, optional: true },
+        previousSubTab: { type: String, optional: true },
+        onBack: { type: Function, optional: true },
     };
     static components = { ConfirmModal };
     
@@ -117,13 +121,15 @@ export class TerritoryRoutes extends Component {
         this.debouncedFetchAddRouteCandidates = this.debounceSearch(() => this.fetchAddRouteCandidates(), 400);
 
         onWillStart(async () => {
-            await this.fetchDashboardData();
+            await this.fetchDashboardData({ force: false });
             await this.fetchActiveList(); // Force the paginator to run on initial load
         });
-        // ADD THIS NEW BLOCK RIGHT AFTER THE STATE CLOSING BRACKET:
         onWillUpdateProps((nextProps) => {
-            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.state.activeSubTab) {
+            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.props.requestedSubTab) {
                 this.setSubTab(nextProps.requestedSubTab);
+            }
+            if (nextProps.refreshNonce !== undefined && nextProps.refreshNonce !== this.props.refreshNonce) {
+                this.reloadFromRefresh();
             }
         });
 
@@ -277,15 +283,8 @@ export class TerritoryRoutes extends Component {
             this.state.isLoadingList = false;
         }
     }
-    // NEW Refresh Method
     async refreshData() {
-        this.state.isLoading = true;
-        try {
-            await this.fetchDashboardData();
-            await this.fetchActiveList();
-        } finally {
-            this.state.isLoading = false;
-        }
+        await this.reloadFromRefresh();
     }
     // Custom Modal Controller
     showConfirm(title, message, onConfirmCallback) {
@@ -376,35 +375,19 @@ export class TerritoryRoutes extends Component {
     }
 
     // --- Data Fetching Logic (areas/routes/shops in parallel) ---
-    async fetchDashboardData() {
-        const includeArchivedDomain = ['|', ['active', '=', true], ['active', '=', false]];
-        const [areas, routes, archivedShops, bookerGroups] = await Promise.all([
-            this.orm.searchRead("shahtaj.zone", includeArchivedDomain, ["id", "name", "active", "route_count"]),
-            this.orm.searchRead("shahtaj.route", includeArchivedDomain, ["id", "name", "zone_id", "shop_count", "active"]),
-            // ONLY fetch inactive shops to keep the Archive tab working without loading thousands of active shops!
-            this.orm.searchRead("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", false]], ["id", "name", "owner_name", "shahtaj_routes_display", "shahtaj_route_tag", "active"]),
-            
-            // FIX: Replaced this.orm.readGroup with this.orm.call
-            this.orm.call(
-                "res.partner", 
-                "read_group", 
-                [
-                    [["is_shahtaj_shop", "=", true], ["registered_by_id", "!=", false]], // domain
-                    ["registered_by_id"], // fields
-                    ["registered_by_id"]  // groupby
-                ]
-            )
-        ]);
+    async fetchDashboardData({ force = true } = {}) {
+        const data = await getTerritoryDashboard(this.orm, { force });
+        applyTerritoryDashboardToState(this.state, data);
+    }
 
-        this.state.areas = areas;
-        this.state.routes = routes;
-        this.state.shops = archivedShops;
-        
-        // Map the results to format the bookers list
-        this.state.bookers = bookerGroups.map(g => ({ 
-            id: g.registered_by_id[0], 
-            name: g.registered_by_id[1] 
-        }));
+    async reloadFromRefresh() {
+        this.state.isLoading = true;
+        try {
+            await this.fetchDashboardData({ force: true });
+            await this.fetchActiveList();
+        } finally {
+            this.state.isLoading = false;
+        }
     }
     setSubTab(tabName) {
         if (tabName === 'archive' && this.state.activeSubTab !== 'archive') {
@@ -1462,4 +1445,3 @@ export class TerritoryRoutes extends Component {
     }
 }
 
-TerritoryRoutes.template = "shahtaj_oil.TerritoryRoutes";

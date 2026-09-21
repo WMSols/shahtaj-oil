@@ -71,6 +71,20 @@ export class InvoiceManagement extends Component {
                 method: "cash", bank_name: "", account_number: "", reference: "", notes: "",
             },
             confirmModal: { isOpen: false, title: "", message: "", onConfirm: null },
+            collectModal: {
+                open: false,
+                deliveryManId: "",
+                deliveryMen: [],
+                shopId: "",
+                shopSearch: "",
+                shops: [],
+                wizardId: null,
+                walletBalance: 0,
+                shopOutstanding: 0,
+                lines: [],
+                notes: "",
+                loading: false,
+            },
             itemsPerPage: ITEMS_PER_PAGE,
             isLoadingList: false,
             searchTimeout: null,
@@ -1082,6 +1096,174 @@ export class InvoiceManagement extends Component {
     }
 
     closePaymentModal() { this.state.showPaymentModal = false; }
+
+    formatMoney(value) {
+        const amount = Number(value) || 0;
+        return amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    _emptyCollectModal() {
+        return {
+            open: false,
+            deliveryManId: "",
+            deliveryMen: [],
+            shopId: "",
+            shopSearch: "",
+            shops: [],
+            wizardId: null,
+            walletBalance: 0,
+            shopOutstanding: 0,
+            lines: [],
+            notes: "",
+            loading: false,
+        };
+    }
+
+    async openCollectModal() {
+        this.state.collectModal = {
+            ...this._emptyCollectModal(),
+            open: true,
+        };
+        await Promise.all([
+            this.searchCollectShops(""),
+            this.loadCollectDeliveryMen(),
+        ]);
+    }
+
+    closeCollectModal() {
+        this.state.collectModal.open = false;
+        this.state.collectModal.wizardId = null;
+        this.state.collectModal.lines = [];
+    }
+
+    async loadCollectDeliveryMen() {
+        this.state.collectModal.deliveryMen = await this.orm.searchRead(
+            "res.users",
+            [["shahtaj_is_delivery_man", "=", true], ["active", "=", true]],
+            ["id", "name"],
+            { order: "name asc", limit: 200 },
+        );
+    }
+
+    async searchCollectShops(query) {
+        const domain = [
+            ["is_shahtaj_shop", "=", true],
+            ["shop_approval_state", "=", "approved"],
+            ["active", "=", true],
+        ];
+        if (query) domain.push(["name", "ilike", query]);
+        this.state.collectModal.shops = await this.orm.searchRead(
+            "res.partner",
+            domain,
+            ["id", "name"],
+            { limit: 30, order: "name asc" },
+        );
+    }
+
+    onCollectShopSearch(ev) {
+        this.state.collectModal.shopSearch = ev.target.value;
+        clearTimeout(this.collectShopSearchTimeout);
+        this.collectShopSearchTimeout = setTimeout(() => this.searchCollectShops(ev.target.value), 400);
+    }
+
+    async onCollectFieldChange() {
+        await this.loadCollectWizard();
+    }
+
+    async loadCollectWizard() {
+        const shopId = parseInt(this.state.collectModal.shopId, 10);
+        const deliveryManId = parseInt(this.state.collectModal.deliveryManId, 10);
+        if (!shopId || !deliveryManId) {
+            this.state.collectModal.lines = [];
+            this.state.collectModal.wizardId = null;
+            this.state.collectModal.walletBalance = 0;
+            this.state.collectModal.shopOutstanding = 0;
+            return;
+        }
+        this.state.collectModal.loading = true;
+        try {
+            const wizardIds = await this.orm.create(
+                "shahtaj.dm.collect.payment",
+                [{}],
+                { context: { default_delivery_man_id: deliveryManId, default_partner_id: shopId } },
+            );
+            const wizardId = Array.isArray(wizardIds) ? wizardIds[0] : wizardIds;
+            const [wiz] = await this.orm.read(
+                "shahtaj.dm.collect.payment",
+                [wizardId],
+                ["wallet_balance", "shop_outstanding", "line_ids", "notes"],
+            );
+            const lines = wiz.line_ids?.length
+                ? await this.orm.read(
+                    "shahtaj.dm.collect.payment.line",
+                    wiz.line_ids,
+                    ["id", "move_id", "amount_residual", "amount"],
+                )
+                : [];
+            this.state.collectModal.wizardId = wizardId;
+            this.state.collectModal.walletBalance = wiz.wallet_balance || 0;
+            this.state.collectModal.shopOutstanding = wiz.shop_outstanding || 0;
+            this.state.collectModal.lines = lines.map((l) => ({
+                id: l.id,
+                move: l.move_id ? l.move_id[1] : "Invoice",
+                residual: l.amount_residual || 0,
+                amount: l.amount || 0,
+            }));
+        } catch (error) {
+            this.notification.add("Failed to load invoices: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.collectModal.loading = false;
+        }
+    }
+
+    async fillCollectResiduals() {
+        if (!this.state.collectModal.wizardId) return;
+        this.state.collectModal.loading = true;
+        try {
+            await this.orm.call("shahtaj.dm.collect.payment", "action_fill_full_residuals", [[this.state.collectModal.wizardId]]);
+            const lines = this.state.collectModal.lines;
+            if (lines.length) {
+                const refreshed = await this.orm.read(
+                    "shahtaj.dm.collect.payment.line",
+                    lines.map((l) => l.id),
+                    ["id", "move_id", "amount_residual", "amount"],
+                );
+                this.state.collectModal.lines = refreshed.map((l) => ({
+                    id: l.id,
+                    move: l.move_id ? l.move_id[1] : "Invoice",
+                    residual: l.amount_residual || 0,
+                    amount: l.amount || 0,
+                }));
+            }
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        } finally {
+            this.state.collectModal.loading = false;
+        }
+    }
+
+    async confirmCollect() {
+        if (!this.state.collectModal.wizardId) return;
+        this.state.collectModal.loading = true;
+        try {
+            for (const line of this.state.collectModal.lines) {
+                await this.orm.write("shahtaj.dm.collect.payment.line", [line.id], { amount: Number(line.amount) || 0 });
+            }
+            if (this.state.collectModal.notes) {
+                await this.orm.write("shahtaj.dm.collect.payment", [this.state.collectModal.wizardId], {
+                    notes: this.state.collectModal.notes,
+                });
+            }
+            await this.orm.call("shahtaj.dm.collect.payment", "action_confirm", [[this.state.collectModal.wizardId]]);
+            this.notification.add("Collected into DM wallet.", { type: "success" });
+            this.closeCollectModal();
+            await this.refreshFinancialLists();
+        } catch (error) {
+            this.notification.add("Collection failed: " + (error.data?.message || error.message), { type: "danger" });
+        } finally {
+            this.state.collectModal.loading = false;
+        }
+    }
 
     async processPayment() {
         this.state.isPaying = true;

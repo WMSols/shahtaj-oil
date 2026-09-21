@@ -1009,6 +1009,13 @@
                                    t-model="this.state.filters.payments.dateTo"
                                    t-on-change="() => this.onFilterChange('payments')"
                                    title="To date"/>
+                            <div class="ms-auto">
+                                <button class="btn btn-sm btn-dark fw-bold text-white shadow-sm"
+                                        t-on-click="openCollectModal"
+                                        t-att-disabled="this.state.collectModal.loading">
+                                    Collect Payment
+                                </button>
+                            </div>
                         </div>
 
                         <div class="position-relative">
@@ -1570,6 +1577,64 @@
                         </t>
                     </t>
                 </t>
+            <t t-if="this.state.collectModal.open">
+                <div class="modal d-block" style="background: rgba(15,23,42,0.45);" tabindex="-1">
+                    <div class="modal-dialog modal-lg modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title fw-bold">Collect Shop Payment</h5>
+                                <button type="button" class="btn-close" t-on-click="closeCollectModal"/>
+                            </div>
+                            <div class="modal-body">
+                                <label class="small fw-bold">Delivery Man</label>
+                                <select class="form-select mb-3" t-model="this.state.collectModal.deliveryManId" t-on-change="onCollectFieldChange">
+                                    <option value="">Select a delivery man</option>
+                                    <t t-foreach="this.state.collectModal.deliveryMen" t-as="dm" t-key="dm.id">
+                                        <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
+                                    </t>
+                                </select>
+                                <label class="small fw-bold">Shop</label>
+                                <input type="text" class="form-control mb-2" placeholder="Search shop..." t-on-input="onCollectShopSearch"/>
+                                <select class="form-select mb-3" t-model="this.state.collectModal.shopId" t-on-change="onCollectFieldChange">
+                                    <option value="">Select a shop</option>
+                                    <t t-foreach="this.state.collectModal.shops" t-as="shop" t-key="shop.id">
+                                        <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
+                                    </t>
+                                </select>
+                                <div class="d-flex justify-content-between small text-muted mb-2">
+                                    <span>Wallet: Rs. <t t-esc="this.formatMoney(this.state.collectModal.walletBalance)"/></span>
+                                    <span>Outstanding: Rs. <t t-esc="this.formatMoney(this.state.collectModal.shopOutstanding)"/></span>
+                                </div>
+                                <t t-if="this.state.collectModal.lines.length">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead><tr><th>Invoice</th><th class="text-end">Remaining</th><th class="text-end">Collect</th></tr></thead>
+                                            <tbody>
+                                                <t t-foreach="this.state.collectModal.lines" t-as="line" t-key="line.id">
+                                                    <tr>
+                                                        <td><t t-esc="line.move"/></td>
+                                                        <td class="text-end"><t t-esc="line.residual"/></td>
+                                                        <td class="text-end" style="max-width: 120px;">
+                                                            <input type="number" class="form-control form-control-sm text-end" t-model.number="line.amount" min="0" t-att-max="line.residual"/>
+                                                        </td>
+                                                    </tr>
+                                                </t>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-secondary mb-2" t-on-click="fillCollectResiduals">Fill remaining</button>
+                                </t>
+                                <label class="small fw-bold">Notes</label>
+                                <textarea class="form-control" rows="2" t-model="this.state.collectModal.notes"/>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="btn btn-outline-secondary" t-on-click="closeCollectModal">Cancel</button>
+                                <button class="btn btn-dark text-white" t-on-click="confirmCollect" t-att-disabled="this.state.collectModal.loading or !this.state.collectModal.wizardId">Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
             <t t-if="this.state.confirmModal.isOpen">
                 <ConfirmModal title="this.state.confirmModal.title" message="this.state.confirmModal.message" onConfirm="this.state.confirmModal.onConfirm" onCancel="() => this.closeConfirm()" />
             </t>
