@@ -2,10 +2,17 @@
 
 import { Component, useState, onWillStart, onWillUpdateProps, useEffect, useRef } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
-import { ConfirmModal } from "./confirm_modal";
+import { hasFinancialAccess, notifyPortalBusy } from "../../shahtaj_access";
+import { ConfirmModal } from "../confirm_modal";
+import {
+    applyOperationsCatalogsToState,
+    applyOperationsLookupsToState,
+    getOperationsCatalogs,
+    getOperationsLookups,
+    getOperationsTaxCatalog,
+} from "./operations_cache";
 
-export class OperationsTracking extends Component {
+export class OperationsBase extends Component {
      static components = { ConfirmModal };
      static props = {
         requestedSubTab: { type: String, optional: true },
@@ -13,6 +20,7 @@ export class OperationsTracking extends Component {
         requestedCheckinPurpose: { type: String, optional: true },
         requestedCheckinRole: { type: String, optional: true },
         requestedCheckinDate: { type: String, optional: true },
+        refreshNonce: { type: Number, optional: true },
     };
     setup() {
         this.orm = useService("orm");
@@ -44,7 +52,6 @@ export class OperationsTracking extends Component {
             tableSessions: [],
             tableCollections: [],
             tableSettlements: [],
-            tableAllDeliveries: [],
             lookupDeliveryMen: [],
             dmJobSections: { delivery: true, order: true, shop: false, gps: false, products: true },
             settleModal: {
@@ -130,8 +137,7 @@ export class OperationsTracking extends Component {
                 sessions: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 collections: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 settlements: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
-                all_deliveries: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
-                checkins: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                                checkins: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 orders: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 verification: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
                 schedules: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
@@ -140,12 +146,11 @@ export class OperationsTracking extends Component {
             filters: {
                 deliveries: { search: '', status: '' },
                 dispatch: { search: '' },
-                dm_jobs: { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all' },
+                dm_jobs: { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', assignment_mode: 'all' },
                 sessions: { dm: 'all', dateFrom: '', dateTo: '' },
                 collections: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
                 settlements: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
-                all_deliveries: { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', assignment_mode: 'all' },
-                checkins: { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
+                                checkins: { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
                 orders: { search: '', status: '', booker: 'all' },
                 verification: { search: '', booker: 'all', reason: 'all' },
                 schedules: { booker: 'all', date: '' },
@@ -154,10 +159,10 @@ export class OperationsTracking extends Component {
         });
          // ADD THIS NEW BLOCK RIGHT AFTER THE STATE CLOSING BRACKET:
         onWillUpdateProps((nextProps) => {
-            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.state.activeSubTab) {
+            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.props.requestedSubTab) {
                 this.setSubTab(nextProps.requestedSubTab);
             }
-            if (nextProps.requestedDeliveriesSubTab && nextProps.requestedDeliveriesSubTab !== this.state.deliveriesSubTab) {
+            if (nextProps.requestedDeliveriesSubTab && nextProps.requestedDeliveriesSubTab !== this.props.requestedDeliveriesSubTab) {
                 this.setDeliveriesSubTab(nextProps.requestedDeliveriesSubTab);
             }
             const purpose = nextProps.requestedCheckinPurpose || 'all';
@@ -174,6 +179,9 @@ export class OperationsTracking extends Component {
                     this.state.pagination.checkins.page = 1;
                     this.fetchActiveList();
                 }
+            }
+            if (nextProps.refreshNonce !== undefined && nextProps.refreshNonce !== this.props.refreshNonce) {
+                this.reloadFromRefresh();
             }
         })
 
@@ -557,76 +565,14 @@ export class OperationsTracking extends Component {
     }
 
    async loadDropdownData() {
-        try {
-            const bookers = await this.orm.searchRead(
-                'res.users',
-                [['shahtaj_is_order_booker', '=', true]],
-                ['id', 'name'],
-            );
-            let deliveryMen = [];
-            try {
-                deliveryMen = await this.orm.searchRead(
-                    'res.users',
-                    [['shahtaj_is_delivery_man', '=', true]],
-                    ['id', 'name'],
-                );
-            } catch (error) {
-                // GPS/DM filter is optional; Live Orders must still load.
-            }
-            const byId = new Map();
-            for (const user of [...bookers, ...deliveryMen]) {
-                byId.set(user.id, user);
-            }
-            this.state.lookupBookers = bookers.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-            this.state.lookupDeliveryMen = deliveryMen.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-            this.state.lookupFieldUsers = [...byId.values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        } catch (error) {
-            this.state.lookupBookers = [];
-            this.state.lookupDeliveryMen = [];
-            this.state.lookupFieldUsers = [];
-        }
-
-        try {
-            const types = await this.orm.call('shahtaj.visit.target', 'read_group', [[], ['target_type'], ['target_type']]);
-            this.state.lookupTargetTypes = types.map(t => ({
-                value: t.target_type, 
-                label: t.target_type ? t.target_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown'
-            })).filter(t => t.value);
-        } catch (error) {
-            this.state.lookupTargetTypes = [];
-        }
+        const data = await getOperationsLookups(this.orm);
+        applyOperationsLookupsToState(this.state, data);
     }
 
     async loadSaleOrderCatalog() {
         try {
-            const [shops, products, taxes] = await Promise.all([
-                this.orm.searchRead(
-                    'res.partner',
-                    [['is_shahtaj_shop', '=', true], ['shop_approval_state', '=', 'approved'], ['active', '=', true]],
-                    ['id', 'name', 'phone', 'email']
-                ),
-                this.orm.searchRead(
-                    'product.product',
-                    [['sale_ok', '=', true], ['active', '=', true], ['product_tmpl_id.active', '=', true], ['default_code', '!=', 'SHAHTAJ-LEGACY']],
-                    ['id', 'name', 'display_name', 'list_price', 'taxes_id', 'uom_id', 'qty_available']
-                ),
-                hasFinancialAccess()
-                    ? this.orm.searchRead('account.tax', [['type_tax_use', '=', 'sale'], ['active', '=', true]], ['id', 'name', 'amount'])
-                    : Promise.resolve(this.state.saleTaxes || []),
-            ]);
-            this.state.lookupShops = shops || [];
-            this.state.saleProducts = (products || []).map((p) => ({
-                id: p.id,
-                name: p.display_name || p.name,
-                list_price: p.list_price || 0,
-                tax_id: (p.taxes_id && p.taxes_id[0]) || '',
-                uom_id: p.uom_id ? p.uom_id[0] : false,
-                uom_name: p.uom_id ? p.uom_id[1] : '',
-                qty_available: p.qty_available || 0,
-            }));
-            if (taxes && taxes.length) {
-                this.state.saleTaxes = taxes;
-            }
+            const data = await getOperationsCatalogs(this.orm);
+            applyOperationsCatalogsToState(this.state, data);
         } catch (error) {
             this.notification.add("Failed to load shops/products for sales orders: " + (error.data?.message || error.message), { type: "danger" });
         }
@@ -1026,22 +972,6 @@ export class OperationsTracking extends Component {
             else if (tab === 'dm_jobs') {
                 model = 'shahtaj.dm.delivery';
                 targetState = 'tableDmJobs';
-                fields = ['id', 'display_name', 'delivery_man_id', 'partner_id', 'sale_order_id', 'scheduled_date', 'state', 'field_state', 'gps_verified'];
-                if (filters.search) {
-                    domain.push('|', '|',
-                        ['display_name', 'ilike', filters.search],
-                        ['partner_id.name', 'ilike', filters.search],
-                        ['sale_order_id.name', 'ilike', filters.search],
-                    );
-                }
-                if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
-                domain.push(...this._dateRangeDomain(filters, 'scheduled_date'));
-                if (filters.state && filters.state !== 'all') domain.push(['state', '=', filters.state]);
-                if (filters.field_state && filters.field_state !== 'all') domain.push(['field_state', '=', filters.field_state]);
-            }
-            else if (tab === 'all_deliveries') {
-                model = 'shahtaj.dm.delivery';
-                targetState = 'tableAllDeliveries';
                 fields = [
                     'id', 'display_name', 'delivery_man_id', 'partner_id', 'sale_order_id',
                     'order_booker_id', 'scheduled_date', 'state', 'field_state',
@@ -1165,7 +1095,7 @@ export class OperationsTracking extends Component {
             if (tab === 'checkins') {
                 queryKwargs.order = 'create_date desc, id desc';
             }
-            if (tab === 'dm_jobs' || tab === 'all_deliveries') {
+            if (tab === 'dm_jobs') {
                 queryKwargs.order = 'scheduled_date desc, id desc';
             }
             if (tab === 'sessions') {
@@ -1214,9 +1144,6 @@ export class OperationsTracking extends Component {
             }
             else if (tab === 'dm_jobs') {
                 this.state.tableDmJobs = records.map((j) => this._mapDmDeliveryRow(j));
-            }
-            else if (tab === 'all_deliveries') {
-                this.state.tableAllDeliveries = records.map((j) => this._mapDmDeliveryRow(j));
             }
             else if (tab === 'sessions') {
                 this.state.tableSessions = records.map((s) => ({
@@ -1357,12 +1284,18 @@ export class OperationsTracking extends Component {
     async refreshData() {
         this.state.isRefreshing = true;
         try {
-            await this.loadDropdownData();
-            await this.loadSaleOrderCatalog();
-            await this.fetchActiveList();
+            await this.reloadFromRefresh();
         } finally {
             this.state.isRefreshing = false;
         }
+    }
+    async reloadFromRefresh() {
+        await this.loadDropdownData();
+        await this.loadSaleOrderCatalog();
+        if (hasFinancialAccess()) {
+            await this.loadTaxAndProductData();
+        }
+        await this.fetchActiveList();
     }
     // --- DATA FETCHING (EXISTING) ---
 
@@ -1487,20 +1420,9 @@ export class OperationsTracking extends Component {
             return;
         }
         try {
-            const [taxes, prods] = await Promise.all([
-                this.orm.searchRead(
-                "account.tax",
-                [["type_tax_use", "=", "sale"], ["active", "=", true]],
-                ["id", "name", "amount"]
-                ),
-                this.orm.searchRead("product.template", [
-                    ["sale_ok", "=", true],
-                    ["active", "=", true],
-                    ["default_code", "!=", "SHAHTAJ-LEGACY"],
-                ], ["id", "name"]),
-            ]);
-            this.state.saleTaxes = taxes;
-            this.state.allProducts = prods;
+            const data = await getOperationsTaxCatalog(this.orm);
+            this.state.saleTaxes = data.saleTaxes;
+            this.state.allProducts = data.allProducts;
             this._catalogsLoaded = true;
         } catch (error) {
             this.notification.add("Failed to load product catalog: " + (error.data?.message || error.message), { type: "warning" });
@@ -2358,6 +2280,10 @@ export class OperationsTracking extends Component {
     // --- NAVIGATION & FILTERS ---
 
     setSubTab(tabName) {
+        if (tabName === 'all_deliveries') {
+            tabName = 'deliveries';
+            this.state.deliveriesSubTab = 'jobs';
+        }
         this.state.activeSubTab = tabName;
 
         // If we are programmatically jumping to a record, protect the view from being cleared
@@ -2394,12 +2320,11 @@ export class OperationsTracking extends Component {
         const defaultFilters = {
             deliveries: { search: '', status: '' },
             dispatch:   { search: '' },
-            dm_jobs:    { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all' },
+            dm_jobs:    { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', assignment_mode: 'all' },
             sessions:   { dm: 'all', dateFrom: '', dateTo: '' },
             collections:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
             settlements:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
-            all_deliveries: { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', assignment_mode: 'all' },
-            checkins:   { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
+                        checkins:   { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
             orders:     { search: '', status: '', booker: 'all' },
             verification: { search: '', booker: 'all', reason: 'all' },
             schedules:  { booker: 'all', date: '' },
@@ -2427,7 +2352,7 @@ export class OperationsTracking extends Component {
                 ? 'dispatch'
                 : (this.props.requestedDeliveriesSubTab || 'dispatch');
             this.state.filters.dispatch = { search: '' };
-            this.state.filters.dm_jobs = { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all' };
+            this.state.filters.dm_jobs = { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', assignment_mode: 'all' };
             this.state.filters.sessions = { dm: 'all', dateFrom: '', dateTo: '' };
             this.state.filters.collections = { search: '', dm: 'all', dateFrom: '', dateTo: '' };
             this.state.filters.settlements = { search: '', dm: 'all', dateFrom: '', dateTo: '' };
@@ -2436,11 +2361,6 @@ export class OperationsTracking extends Component {
             this.state.pagination.sessions.page = 1;
             this.state.pagination.collections.page = 1;
             this.state.pagination.settlements.page = 1;
-        }
-        if (tabName === 'all_deliveries') {
-            this.state.selectedDmJob = null;
-            this.state.filters.all_deliveries = { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', assignment_mode: 'all' };
-            this.state.pagination.all_deliveries.page = 1;
         }
         if (tabName === 'orders') {
             this.state.ordersSubTab = 'live';
@@ -3004,5 +2924,3 @@ export class OperationsTracking extends Component {
         });
     }
 }
-
-OperationsTracking.template = "shahtaj_oil.OperationsTracking";

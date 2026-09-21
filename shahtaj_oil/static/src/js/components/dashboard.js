@@ -6,7 +6,7 @@ import { registry } from "@web/core/registry";
 import { loadBundle, loadJS } from "@web/core/assets";
 import { hasFinancialAccess, notifyPortalBusy, resetPortalBusy } from "../shahtaj_access";
 import { StaffManagement } from "./staff_management";
-import { OperationsTracking } from "./operations_tracking";
+import { OperationsTracking } from "./operations/operations_tracking";
 import { DeliveryManPerformance } from "./delivery_man_performance";
 import { TerritoryRoutes } from "./territory_routes";
 import { WarehouseInventory } from "./warehouse_inventory";
@@ -623,6 +623,10 @@ export class ShahtajDashboard extends Component {
         }
         if (tabName === 'staff' && !this.state.staffRole) {
             this.state.staffRole = 'order_booker';
+        }
+        if (tabName === 'operations' && subTabName === 'all_deliveries') {
+            subTabName = 'deliveries';
+            this.state.deliveriesSubTab = 'jobs';
         }
         if (tabName === 'operations' && subTabName === 'deliveries' && !this.state.deliveriesSubTab) {
             this.state.deliveriesSubTab = 'dispatch';
