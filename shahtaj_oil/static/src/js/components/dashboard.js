@@ -108,15 +108,11 @@ export class ShahtajDashboard extends Component {
         useEffect(
             () => {
                 this.renderCashChart();
-                return () => this.destroyCashChart();
             },
             () => [
                 this.state.activeTab,
                 this.state.isSwitchingTab,
-                this.state.cashRangeDays,
-                this.state.kpis.cashIn,
-                this.state.kpis.cashOut,
-                this.state.kpis.cashTrend.labels.join("|"),
+                this._cashTrendKey(),
             ]
         );
         this._onPortalBusy = (ev) => {
@@ -188,6 +184,15 @@ export class ShahtajDashboard extends Component {
     _labelForDay(dayKey) {
         const date = new Date(`${dayKey}T00:00:00`);
         return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    }
+
+    _cashTrendKey() {
+        const trend = this.state.kpis.cashTrend || {};
+        return [
+            (trend.labels || []).join("\u001f"),
+            (trend.cashIn || []).join("\u001f"),
+            (trend.cashOut || []).join("\u001f"),
+        ].join("\u001e");
     }
 
     formatMoney(value) {
@@ -445,6 +450,13 @@ export class ShahtajDashboard extends Component {
         }
     }
 
+    _applyCashTrend(chart, trend) {
+        chart.data.labels = (trend.labels || []).slice();
+        chart.data.datasets[0].data = (trend.cashIn || []).slice();
+        chart.data.datasets[1].data = (trend.cashOut || []).slice();
+        chart.update();
+    }
+
     async renderCashChart() {
         if (!this.hasFinancialAccess || this.state.activeTab !== "overview" || this.state.isSwitchingTab) {
             this.destroyCashChart();
@@ -454,14 +466,19 @@ export class ShahtajDashboard extends Component {
         if (!canvas) {
             return;
         }
+        const trend = this.state.kpis.cashTrend || { labels: [], cashIn: [], cashOut: [] };
+        if (this.cashChart && this.cashChart.canvas === canvas) {
+            this._cashChartToken += 1;
+            this._applyCashTrend(this.cashChart, trend);
+            return;
+        }
         this._cashChartToken += 1;
         const token = this._cashChartToken;
         const ChartLib = await this.ensureChartJs();
-        if (!ChartLib || token !== this._cashChartToken) {
+        if (!ChartLib || token !== this._cashChartToken || this.cashChartRef.el !== canvas) {
             return;
         }
         this.destroyCashChart();
-        const trend = this.state.kpis.cashTrend || { labels: [], cashIn: [], cashOut: [] };
         this.cashChart = new ChartLib(canvas, {
             type: "bar",
             data: {

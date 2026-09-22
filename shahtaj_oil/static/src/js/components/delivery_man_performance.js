@@ -21,7 +21,8 @@ export class DeliveryManPerformance extends Component {
             weekTasks: [],
             taskTab: "today",
             pagination: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
-            filters: { search: "", status: "all" },
+            deliveryMen: [],
+            filters: { search: "", dm: "all" },
             searchTimeout: null,
         });
 
@@ -31,7 +32,7 @@ export class DeliveryManPerformance extends Component {
         };
 
         onWillStart(async () => {
-            await this.fetchProgress();
+            await Promise.all([this.fetchDeliveryMen(), this.fetchProgress()]);
         });
     }
 
@@ -64,10 +65,23 @@ export class DeliveryManPerformance extends Component {
         if (search) {
             domain.push("|", ["name", "ilike", search], ["shahtaj_employee_code", "ilike", search]);
         }
-        if (this.state.filters.status && this.state.filters.status !== "all") {
-            domain.push(["shahtaj_online_status", "=", this.state.filters.status]);
+        if (this.state.filters.dm && this.state.filters.dm !== "all") {
+            domain.push(["id", "=", parseInt(this.state.filters.dm, 10)]);
         }
         return domain;
+    }
+
+    async fetchDeliveryMen() {
+        try {
+            this.state.deliveryMen = await this.orm.searchRead(
+                "res.users",
+                [["shahtaj_is_delivery_man", "=", true], ["active", "=", true]],
+                ["id", "name"],
+                { order: "name asc" },
+            );
+        } catch (error) {
+            this.state.deliveryMen = [];
+        }
     }
 
     _countMap(groups) {
@@ -207,6 +221,15 @@ export class DeliveryManPerformance extends Component {
         this.state.filters.search = ev.target.value;
         this.state.pagination.page = 1;
         this.debouncedFetch();
+    }
+
+    isDmSelected(id) {
+        return String(id) === String(this.state.filters.dm);
+    }
+
+    onDmFilterChange(ev) {
+        this.state.filters.dm = ev.target.value || "all";
+        this.onFilterChange();
     }
 
     onFilterChange() {

@@ -67,6 +67,7 @@ export class OperationsBase extends Component {
             },
             assignModal: {
                 open: false,
+                readOnly: false,
                 wizardId: null,
                 orderName: '',
                 shop: '',
@@ -1737,14 +1738,39 @@ export class OperationsBase extends Component {
         return { rows, message, messageClass, messageStrong };
     }
 
-    async openAssignModal(orderId) {
+    optionId(id) {
+        return id === false || id === null || id === undefined || id === "" ? "" : String(id);
+    }
+
+    isSelectedId(current, id) {
+        return this.optionId(current) === this.optionId(id);
+    }
+
+    assignDmOptions(job) {
+        const list = this.state.lookupDeliveryMen || [];
+        const selected = this.optionId(job && job.deliveryManId);
+        if (!selected || list.some((dm) => this.optionId(dm.id) === selected)) {
+            return list;
+        }
+        return [{ id: selected, name: (job && job.deliveryManName) || "Delivery man" }, ...list];
+    }
+
+    setAssignDeliveryMan(job, value) {
+        const id = this.optionId(value);
+        job.deliveryManId = id;
+        const match = (this.state.lookupDeliveryMen || []).find((dm) => this.optionId(dm.id) === id);
+        job.deliveryManName = match ? match.name : (id ? job.deliveryManName : "");
+    }
+
+    async openAssignModal(orderId, readOnly = false) {
+        const fromJob = !!readOnly || (this.state.selectedDmJob && this.state.selectedDmJob.orderId === orderId);
         const rows = [...this.state.tableDispatch, ...this.state.tableDeliveries, ...this.state.tableOrders];
         const row = rows.find((r) => r.odoo_id === orderId) || this.state.selectedDelivery;
-        if (row && (row.status === "Cancelled" || row.orderState === "cancel")) {
+        if (!fromJob && row && (row.status === "Cancelled" || row.orderState === "cancel")) {
             this.notification.add("Cancelled orders cannot be delivered.", { type: "warning" });
             return;
         }
-        if (row && !this.canAssignDeliveryMan(row)) {
+        if (!fromJob && row && !this.canAssignDeliveryMan(row)) {
             this.notification.add("Invoice and post this order before assigning a delivery man.", { type: "warning" });
             return;
         }
@@ -1757,6 +1783,7 @@ export class OperationsBase extends Component {
             );
             const wizardId = Array.isArray(wizardIds) ? wizardIds[0] : wizardIds;
             await this._loadAssignWizard(wizardId);
+            this.state.assignModal.readOnly = !!readOnly;
             this.state.assignModal.open = true;
         } catch (error) {
             this.notification.add("Failed to open assign: " + (error.data?.message || error.message), { type: "danger" });
@@ -1788,7 +1815,7 @@ export class OperationsBase extends Component {
             : [];
         const existingIds = jobs.map((j) => j.existing_job_id && j.existing_job_id[0]).filter(Boolean);
         const existingRecs = existingIds.length
-            ? await this.orm.read("shahtaj.dm.delivery", existingIds, ["id", "state"])
+            ? await this.orm.read("shahtaj.dm.delivery", existingIds, ["id", "state", "delivery_man_id"])
             : [];
         const existingById = Object.fromEntries(existingRecs.map((e) => [e.id, e]));
         const linesById = Object.fromEntries(lineRecs.map((l) => [l.id, l]));
@@ -1798,10 +1825,12 @@ export class OperationsBase extends Component {
         this.state.assignModal.jobs = jobs.map((j) => {
             const existingId = j.existing_job_id ? j.existing_job_id[0] : false;
             const existing = existingId ? existingById[existingId] : null;
+            const dm = j.delivery_man_id || (existing && existing.delivery_man_id) || false;
             const lockedStates = ["picked", "partial", "delivered", "returned"];
             return {
                 id: j.id,
-                deliveryManId: j.delivery_man_id ? String(j.delivery_man_id[0]) : "",
+                deliveryManId: dm ? String(Array.isArray(dm) ? dm[0] : dm) : "",
+                deliveryManName: Array.isArray(dm) ? (dm[1] || "") : "",
                 scheduledDate: j.scheduled_date || this.todayStr,
                 canRemove: !existing || !lockedStates.includes(existing.state),
                 lines: (j.line_ids || []).map((lid) => {
@@ -1820,6 +1849,7 @@ export class OperationsBase extends Component {
 
     closeAssignModal() {
         this.state.assignModal.open = false;
+        this.state.assignModal.readOnly = false;
         this.state.assignModal.wizardId = null;
         this.state.assignModal.jobs = [];
     }
@@ -1879,8 +1909,16 @@ export class OperationsBase extends Component {
             await this.persistAssignEdits();
             await this.orm.call("shahtaj.dm.assign.wizard", "action_confirm_assign", [[this.state.assignModal.wizardId]]);
             this.notification.add("Delivery men assigned.", { type: "success" });
+            const openJob = this.state.selectedDmJob;
             this.closeAssignModal();
             await this.fetchActiveList();
+            if (openJob && openJob.id) {
+                try {
+                    await this.viewDmJob({ id: openJob.id, orderId: openJob.orderId });
+                } catch (refreshError) {
+                    this.state.selectedDmJob = null;
+                }
+            }
         } catch (error) {
             this.notification.add("Assign failed: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
@@ -1914,6 +1952,7 @@ export class OperationsBase extends Component {
             dm: rec.delivery_man_id ? rec.delivery_man_id[1] : job.dm,
             shop: rec.partner_id ? rec.partner_id[1] : job.shop,
             order: rec.sale_order_id ? rec.sale_order_id[1] : job.order,
+            orderId: rec.sale_order_id ? rec.sale_order_id[0] : (job.orderId || false),
             booker: rec.order_booker_id ? rec.order_booker_id[1] : (job.booker || "—"),
             date: rec.scheduled_date || job.date,
             scheduledTime: rec.scheduled_time || 0,

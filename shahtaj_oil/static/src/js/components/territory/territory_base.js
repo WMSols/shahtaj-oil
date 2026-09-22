@@ -30,6 +30,7 @@ export class TerritoryBase extends Component {
             showRouteForm: false,
             showShopForm: false,
             selectedShopDetails: null,
+            shopImagePreview: { open: false, key: "" },
             shopCategoryEdit: 'credit',
             shopActionMenuId: null,
             isResettingShopVerification: false,
@@ -1135,6 +1136,149 @@ export class TerritoryBase extends Component {
             }));
     }
 
+    get shopDetailImages() {
+        const shop = this.state.selectedShopDetails;
+        const fields = [
+            { key: "owner_cnic_front", title: "CNIC Front", filename: "cnic-front" },
+            { key: "owner_cnic_back", title: "CNIC Back", filename: "cnic-back" },
+            { key: "owner_photo", title: "Owner Photo", filename: "owner-photo" },
+            { key: "shop_exterior_photo", title: "Shop Exterior / PFA License Number", filename: "shop-exterior" },
+        ];
+        return fields.map((field) => ({
+            ...field,
+            meta: shop ? this.shopImageMeta(shop[field.key]) : null,
+        }));
+    }
+
+    get activeShopImagePreview() {
+        if (!this.state.shopImagePreview.open) {
+            return null;
+        }
+        return this.shopDetailImages.find((image) => image.key === this.state.shopImagePreview.key && image.meta) || null;
+    }
+
+    shopImageMeta(value) {
+        const raw = this._cleanImageB64(value);
+        if (!raw) {
+            return null;
+        }
+        const kind = this._sniffImageKind(raw);
+        return {
+            raw,
+            src: `data:${kind.mime};base64,${raw}`,
+            ext: kind.ext,
+            mime: kind.mime,
+            sizeLabel: this._formatImageSize(this._base64ByteLength(raw)),
+        };
+    }
+
+    _cleanImageB64(value) {
+        if (!value || typeof value !== "string") {
+            return "";
+        }
+        let raw = value.trim();
+        const marker = "base64,";
+        const markerAt = raw.indexOf(marker);
+        if (raw.startsWith("data:") && markerAt !== -1) {
+            raw = raw.slice(markerAt + marker.length);
+        }
+        return raw.replace(/\s/g, "");
+    }
+
+    _base64ByteLength(raw) {
+        const padding = raw.endsWith("==") ? 2 : raw.endsWith("=") ? 1 : 0;
+        return Math.max(0, Math.floor((raw.length * 3) / 4) - padding);
+    }
+
+    _formatImageSize(bytes) {
+        if (bytes < 1024) {
+            return `${bytes} B`;
+        }
+        const kb = bytes / 1024;
+        if (kb < 1024) {
+            return kb < 10 ? `${kb.toFixed(1)} KB` : `${Math.round(kb)} KB`;
+        }
+        const mb = bytes / (1024 * 1024);
+        return mb < 10 ? `${mb.toFixed(1)} MB` : `${Math.round(mb)} MB`;
+    }
+
+    _sniffImageKind(raw) {
+        const fallback = { ext: "JPG", mime: "image/jpeg" };
+        const sample = raw.slice(0, 24);
+        const padded = sample + "=".repeat((4 - (sample.length % 4)) % 4);
+        let binary = "";
+        try {
+            binary = atob(padded);
+        } catch (_error) {
+            return fallback;
+        }
+        const bytes = [];
+        for (let i = 0; i < Math.min(binary.length, 16); i++) {
+            bytes.push(binary.charCodeAt(i));
+        }
+        if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+            return fallback;
+        }
+        if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+            return { ext: "PNG", mime: "image/png" };
+        }
+        if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+            return { ext: "GIF", mime: "image/gif" };
+        }
+        if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
+            return { ext: "BMP", mime: "image/bmp" };
+        }
+        if (
+            bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+            && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+        ) {
+            return { ext: "WEBP", mime: "image/webp" };
+        }
+        return fallback;
+    }
+
+    openShopImagePreview(image) {
+        if (!image?.meta) {
+            return;
+        }
+        this.state.shopImagePreview = { open: true, key: image.key };
+    }
+
+    closeShopImagePreview() {
+        this.state.shopImagePreview = { open: false, key: "" };
+    }
+
+    downloadShopImage(image) {
+        const meta = image?.meta;
+        if (!meta) {
+            return;
+        }
+        let binary = "";
+        try {
+            binary = atob(meta.raw);
+        } catch (_error) {
+            this.notification.add("This image could not be downloaded.", { type: "warning" });
+            return;
+        }
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        const shopName = (this.state.selectedShopDetails?.name || "shop")
+            .replace(/[^\w\-]+/g, "-")
+            .replace(/-+/g, "-")
+            .replace(/^-|-$/g, "")
+            .slice(0, 40) || "shop";
+        const url = URL.createObjectURL(new Blob([bytes], { type: meta.mime }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${shopName}-${image.filename}.${meta.ext.toLowerCase()}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    }
+
     async viewShopDetails(shopId) {
         this.closeShopActionMenu();
         const details = await this.orm.read(
@@ -1163,6 +1307,7 @@ export class TerritoryBase extends Component {
 
     closeShopDetails() {
         this.closeAddRouteModal();
+        this.closeShopImagePreview();
         this.state.selectedShopDetails = null;
         this.state.shopCategoryEdit = 'credit';
         this.state.shopRouteSearchQuery = '';

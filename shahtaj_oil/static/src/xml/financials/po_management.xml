@@ -35,7 +35,9 @@
                                     <h4 class="fw-bold mb-0">Create Purchase Order</h4>
                                     <small class="text-muted">Create a PO for a vendor and add product lines.</small>
                                 </div>
-                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.state.showPurchaseOrderForm = false">Close</button>
+                                <button type="button" class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center justify-content-center p-0" style="width: 32px; height: 32px;" t-on-click="() => this.state.showPurchaseOrderForm = false" title="Close" aria-label="Close">
+                                    <i class="fa fa-times"></i>
+                                </button>
                             </div>
                             <div class="row g-3 mb-3">
                                 <div class="col-md-4">
@@ -76,7 +78,9 @@
                                 <div class="card border-0 shadow-sm rounded-3 p-3 mb-3 bg-white">
                                     <div class="d-flex justify-content-between align-items-center mb-3">
                                         <h6 class="fw-bold mb-0">New Vendor</h6>
-                                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.state.showVendorForm = false">Close</button>
+                                        <button type="button" class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center justify-content-center p-0" style="width: 32px; height: 32px;" t-on-click="() => this.state.showVendorForm = false" title="Close" aria-label="Close">
+                                            <i class="fa fa-times"></i>
+                                        </button>
                                     </div>
                                     <div class="row g-3">
                                         <div class="col-md-4"><label class="small fw-bold">Vendor Name</label><input type="text" class="form-control" t-model="this.state.vendorForm.name"/></div>
@@ -695,7 +699,9 @@
                                     <h4 class="fw-bold mb-0">Create Vendor</h4>
                                     <small class="text-muted">Add a manufacturer or supplier for purchase orders.</small>
                                 </div>
-                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.state.showVendorForm = false">Close</button>
+                                <button type="button" class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center justify-content-center p-0" style="width: 32px; height: 32px;" t-on-click="() => this.state.showVendorForm = false" title="Close" aria-label="Close">
+                                    <i class="fa fa-times"></i>
+                                </button>
                             </div>
                             <div class="row g-3">
                                 <div class="col-md-4"><label class="small fw-bold">Vendor Name</label><input type="text" class="form-control" t-model="this.state.vendorForm.name"/></div>

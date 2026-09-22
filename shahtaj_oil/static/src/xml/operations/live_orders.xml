@@ -27,7 +27,9 @@
                 <h4 class="fw-bold mb-0">Create Sales Order</h4>
                 <small class="text-muted">Place an order for a shop directly from the portal.</small>
             </div>
-            <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="closeSaleOrderForm">Close</button>
+            <button type="button" class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center justify-content-center p-0" style="width: 32px; height: 32px;" t-on-click="closeSaleOrderForm" title="Close" aria-label="Close">
+                <i class="fa fa-times"></i>
+            </button>
         </div>
         <div class="row g-3 mb-3">
             <div class="col-md-5">

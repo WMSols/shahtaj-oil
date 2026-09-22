@@ -11,6 +11,7 @@
                                 ← Back to Jobs
                             </button>
                             <div class="d-flex gap-2" t-if="this.showDmJobActions()">
+                                <button t-if="this.state.selectedDmJob.orderId" class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openAssignModal(this.state.selectedDmJob.orderId, true)">View DM Assignment</button>
                                 <button t-if="this.canPickJob(this.state.selectedDmJob)" class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openPickModal(this.state.selectedDmJob.id)">Pick Stock</button>
                                 <button t-if="this.canResetField(this.state.selectedDmJob)" class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.resetDmJobField(this.state.selectedDmJob.id)">Reset Pending</button>
                                 <button t-if="this.canReturnWarehouse(this.state.selectedDmJob)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.returnDmJobWarehouse(this.state.selectedDmJob.id)">Return to WH</button>
@@ -629,6 +630,7 @@
 
                         <div class="d-flex align-items-center gap-2">
                             <t t-if="!this.state.isEditingDelivery">
+                                <button t-if="this.state.deliveriesSubTab === 'dispatch' and this.canAssignDeliveryMan(this.state.selectedDelivery)" class="btn btn-sm btn-dark text-white shadow-sm fw-bold px-3" t-on-click="() => this.openAssignModal(this.state.selectedDelivery.odoo_id)">Assign / Split</button>
 
                                     <!-- Create Invoice Button -->
                                 <t t-if="this.canCreateInvoice(this.state.selectedDelivery)">
@@ -970,10 +972,12 @@
                     <div class="card border-0 shadow-lg rounded-4" style="width: 100%; max-width: 820px; max-height: 90vh; overflow: auto;">
                         <div class="p-4 border-bottom d-flex justify-content-between align-items-center">
                             <div>
-                                <h5 class="fw-bold mb-0">Assign / Split</h5>
+                                <h5 class="fw-bold mb-0"><t t-esc="this.state.assignModal.readOnly ? 'DM Assignment' : 'Assign / Split'"/></h5>
                                 <small class="text-muted"><t t-esc="this.state.assignModal.orderName"/> · <t t-esc="this.state.assignModal.shop"/></small>
                             </div>
-                            <button class="btn btn-sm btn-light" t-on-click="closeAssignModal">Close</button>
+                            <button type="button" class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center justify-content-center p-0" style="width: 32px; height: 32px;" t-on-click="closeAssignModal" title="Close" aria-label="Close">
+                                <i class="fa fa-times"></i>
+                            </button>
                         </div>
                         <div class="p-4">
                             <div class="mb-3">
@@ -1014,19 +1018,19 @@
                                     <div class="row g-2 mb-2">
                                         <div class="col-md-6">
                                             <label class="small fw-bold">Delivery man</label>
-                                            <select class="form-select form-select-sm" t-model="job.deliveryManId">
-                                                <option value="">Select</option>
-                                                <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="dm.id">
-                                                    <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
+                                            <select class="form-select form-select-sm" t-att-disabled="this.state.assignModal.readOnly" t-on-change="(ev) => this.setAssignDeliveryMan(job, ev.target.value)">
+                                                <option value="" t-att-selected="this.isSelectedId(job.deliveryManId, '')">Select</option>
+                                                <t t-foreach="this.assignDmOptions(job)" t-as="dm" t-key="dm.id">
+                                                    <option t-att-value="this.optionId(dm.id)" t-att-selected="this.isSelectedId(job.deliveryManId, dm.id)"><t t-esc="dm.name"/></option>
                                                 </t>
                                             </select>
                                         </div>
                                         <div class="col-md-4">
                                             <label class="small fw-bold">Delivery day</label>
-                                            <input type="date" class="form-control form-control-sm" t-model="job.scheduledDate"/>
+                                            <input type="date" class="form-control form-control-sm" t-model="job.scheduledDate" t-att-disabled="this.state.assignModal.readOnly"/>
                                         </div>
                                         <div class="col-md-2 d-flex align-items-end">
-                                            <button class="btn btn-sm btn-outline-danger fw-bold w-100" t-on-click="() => this.removeAssignDeliveryMan(job.id)" t-att-disabled="this.state.assignModal.saving || !job.canRemove" title="Remove this delivery man">Remove</button>
+                                            <button class="btn btn-sm btn-outline-danger fw-bold w-100" t-on-click="() => this.removeAssignDeliveryMan(job.id)" t-att-disabled="this.state.assignModal.readOnly || this.state.assignModal.saving || !job.canRemove" title="Remove this delivery man">Remove</button>
                                         </div>
                                     </div>
                                     <table class="table table-sm mb-0">
@@ -1037,7 +1041,7 @@
                                                     <td><t t-esc="line.product"/></td>
                                                     <td class="text-end"><t t-esc="line.qtyOrdered"/></td>
                                                     <td class="text-end" style="max-width: 110px;">
-                                                        <input type="number" class="form-control form-control-sm text-end" t-model.number="line.qtyAssigned" min="0"/>
+                                                        <input type="number" class="form-control form-control-sm text-end" t-model.number="line.qtyAssigned" min="0" t-att-disabled="this.state.assignModal.readOnly"/>
                                                     </td>
                                                 </tr>
                                             </t>
@@ -1045,7 +1049,7 @@
                                     </table>
                                 </div>
                             </t>
-                            <div class="d-flex justify-content-between">
+                            <div class="d-flex justify-content-between" t-if="!this.state.assignModal.readOnly">
                                 <button class="btn btn-outline-secondary fw-bold" t-on-click="addAssignDeliveryMan" t-att-disabled="this.state.assignModal.saving">Add delivery man</button>
                                 <button class="btn btn-dark text-white fw-bold" t-on-click="confirmAssign" t-att-disabled="this.state.assignModal.saving">Confirm assign</button>
                             </div>
@@ -1059,7 +1063,9 @@
                     <div class="card border-0 shadow-lg rounded-4" style="width: 100%; max-width: 640px;">
                         <div class="p-4 border-bottom d-flex justify-content-between">
                             <h5 class="fw-bold mb-0">Pick stock to van</h5>
-                            <button class="btn btn-sm btn-light" t-on-click="closePickModal">Close</button>
+                            <button type="button" class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center justify-content-center p-0" style="width: 32px; height: 32px;" t-on-click="closePickModal" title="Close" aria-label="Close">
+                                <i class="fa fa-times"></i>
+                            </button>
                         </div>
                         <div class="p-4">
                             <table class="table table-sm">
@@ -1090,7 +1096,9 @@
                     <div class="card border-0 shadow-lg rounded-4" style="width: 100%; max-width: 480px;">
                         <div class="p-4 border-bottom d-flex justify-content-between align-items-center">
                             <h5 class="fw-bold mb-0">Settle Wallet</h5>
-                            <button class="btn btn-sm btn-light" t-on-click="closeSettle">Close</button>
+                            <button type="button" class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center justify-content-center p-0" style="width: 32px; height: 32px;" t-on-click="closeSettle" title="Close" aria-label="Close">
+                                <i class="fa fa-times"></i>
+                            </button>
                         </div>
                         <div class="p-4">
                             <label class="small fw-bold">Delivery man</label>
@@ -1206,7 +1214,9 @@
                 <div class="bg-white rounded-4 shadow-lg p-3" style="max-width: min(720px, 92vw);" t-on-click.stop="() => {}">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <h6 class="fw-bold mb-0"><t t-esc="this.state.imagePreview.title"/></h6>
-                        <button class="btn btn-sm btn-light border fw-bold" t-on-click="closeImagePreview">Close</button>
+                        <button type="button" class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center justify-content-center p-0" style="width: 32px; height: 32px;" t-on-click="closeImagePreview" title="Close" aria-label="Close">
+                            <i class="fa fa-times"></i>
+                        </button>
                     </div>
                     <img t-att-src="this.state.imagePreview.src"
                          t-att-alt="this.state.imagePreview.title"

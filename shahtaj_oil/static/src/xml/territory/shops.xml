@@ -276,42 +276,34 @@
 
             <h6 class="fw-bold text-dark mb-3">Verification Images</h6>
             <div class="row">
-                <div class="col-md-3 text-center mb-3">
-                    <small class="fw-bold d-block mb-2">CNIC Front</small>
-                    <t t-if="this.state.selectedShopDetails.owner_cnic_front">
-                        <img t-att-src="'data:image/jpeg;base64,' + this.state.selectedShopDetails.owner_cnic_front" class="img-fluid rounded border shadow-sm"/>
-                    </t>
-                    <t t-else="">
-                        <div class="p-4 bg-light border rounded text-muted small">No Image Uploaded</div>
-                    </t>
-                </div>
-                <div class="col-md-3 text-center mb-3">
-                    <small class="fw-bold d-block mb-2">CNIC Back</small>
-                    <t t-if="this.state.selectedShopDetails.owner_cnic_back">
-                        <img t-att-src="'data:image/jpeg;base64,' + this.state.selectedShopDetails.owner_cnic_back" class="img-fluid rounded border shadow-sm"/>
-                    </t>
-                    <t t-else="">
-                        <div class="p-4 bg-light border rounded text-muted small">No Image Uploaded</div>
-                    </t>
-                </div>
-                <div class="col-md-3 text-center mb-3">
-                    <small class="fw-bold d-block mb-2">Owner Photo</small>
-                    <t t-if="this.state.selectedShopDetails.owner_photo">
-                        <img t-att-src="'data:image/jpeg;base64,' + this.state.selectedShopDetails.owner_photo" class="img-fluid rounded border shadow-sm"/>
-                    </t>
-                    <t t-else="">
-                        <div class="p-4 bg-light border rounded text-muted small">No Image Uploaded</div>
-                    </t>
-                </div>
-                <div class="col-md-3 text-center mb-3">
-                    <small class="fw-bold d-block mb-2">Shop Exterior / PFA License Number</small>
-                    <t t-if="this.state.selectedShopDetails.shop_exterior_photo">
-                        <img t-att-src="'data:image/jpeg;base64,' + this.state.selectedShopDetails.shop_exterior_photo" class="img-fluid rounded border shadow-sm"/>
-                    </t>
-                    <t t-else="">
-                        <div class="p-4 bg-light border rounded text-muted small">No Image Uploaded</div>
-                    </t>
-                </div>
+                <t t-foreach="this.shopDetailImages" t-as="image" t-key="image.key">
+                    <div class="col-md-3 text-center mb-3">
+                        <small class="fw-bold d-block mb-2" t-esc="image.title"/>
+                        <t t-if="image.meta">
+                            <button type="button" class="btn p-0 border-0 bg-transparent"
+                                    t-on-click="() => this.openShopImagePreview(image)"
+                                    title="Click to enlarge">
+                                <img t-att-src="image.meta.src"
+                                     t-att-alt="image.title"
+                                     class="img-fluid rounded border shadow-sm"
+                                     style="cursor: zoom-in;"/>
+                            </button>
+                            <div class="text-muted small mt-1">
+                                <t t-esc="image.meta.ext"/> · <t t-esc="image.meta.sizeLabel"/>
+                            </div>
+                            <div class="text-muted small">Click to enlarge</div>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary fw-bold mt-2"
+                                    t-on-click="() => this.downloadShopImage(image)"
+                                    title="Download this image">
+                                <i class="fa fa-download me-1"></i> Download
+                            </button>
+                        </t>
+                        <t t-else="">
+                            <div class="p-4 bg-light border rounded text-muted small">No Image Uploaded</div>
+                        </t>
+                    </div>
+                </t>
             </div>
 
             <div class="border-top pt-3 mt-2 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
@@ -789,6 +781,35 @@
                             </button>
                         </div>
                     </div>
+                </div>
+            </div>
+        </t>
+        <t t-if="this.activeShopImagePreview">
+            <div class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center p-3"
+                 style="background: rgba(15, 23, 42, 0.75); z-index: 1080;"
+                 t-on-click="closeShopImagePreview">
+                <div class="bg-white rounded-4 shadow-lg p-3" style="max-width: min(720px, 92vw);" t-on-click.stop="">
+                    <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                        <div>
+                            <h6 class="fw-bold mb-0" t-esc="this.activeShopImagePreview.title"/>
+                            <small class="text-muted">
+                                <t t-esc="this.activeShopImagePreview.meta.ext"/> · <t t-esc="this.activeShopImagePreview.meta.sizeLabel"/>
+                            </small>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary fw-bold"
+                                    t-on-click="() => this.downloadShopImage(this.activeShopImagePreview)">
+                                <i class="fa fa-download me-1"></i> Download
+                            </button>
+                            <button type="button" class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center justify-content-center p-0" style="width: 32px; height: 32px;" t-on-click="closeShopImagePreview" title="Close" aria-label="Close">
+                                <i class="fa fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <img t-att-src="this.activeShopImagePreview.meta.src"
+                         t-att-alt="this.activeShopImagePreview.title"
+                         class="rounded border d-block"
+                         style="max-width: 100%; max-height: 78vh; object-fit: contain;"/>
                 </div>
             </div>
         </t>
