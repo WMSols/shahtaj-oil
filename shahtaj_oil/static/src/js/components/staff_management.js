@@ -13,7 +13,7 @@ export class StaffManagement extends Component {
     setup() {
         this.orm = useService("orm");
         this.notification = useService("notification");
-        const ITEMS_PER_PAGE = 10;
+        const ITEMS_PER_PAGE = 50;
         const initialRole = this.props.requestedStaffRole === "delivery_man"
             ? "delivery_man"
             : "order_booker";
@@ -609,6 +609,18 @@ export class StaffManagement extends Component {
         return map[state] || state || "—";
     }
 
+    stockStateBadgeClass(state) {
+        const map = {
+            not_ready: "bg-danger text-white",
+            ready: "bg-info text-white",
+            picked: "bg-warning text-dark",
+            partial: "bg-warning text-dark",
+            delivered: "bg-success text-white",
+            returned: "bg-danger text-white",
+        };
+        return map[state] || "bg-secondary text-white";
+    }
+
     fieldStateLabel(state) {
         const map = {
             pending: "Pending",
@@ -618,6 +630,17 @@ export class StaffManagement extends Component {
             failed: "Failed",
         };
         return map[state] || state || "—";
+    }
+
+    fieldStateBadgeClass(state) {
+        const map = {
+            pending: "bg-warning text-dark",
+            in_transit: "bg-info text-white",
+            not_attended: "bg-warning text-dark",
+            failed: "bg-danger text-white",
+            done: "bg-success text-white",
+        };
+        return map[state] || "bg-secondary text-white";
     }
 }
 

@@ -28,7 +28,7 @@ export class PoManagement extends Component {
         this.action = useService("action");
         const today = new Date();
         this.todayStr = formatDate(today);
-        const ITEMS_PER_PAGE = 10;
+        const ITEMS_PER_PAGE = 50;
         this.state = useState({
             activeSubTab: "po_management",
             poSubTab: this.props.requestedPoSubTab || "purchase_orders",

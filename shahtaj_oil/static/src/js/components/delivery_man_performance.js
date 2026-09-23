@@ -10,7 +10,7 @@ export class DeliveryManPerformance extends Component {
         this.notification = useService("notification");
         const today = new Date();
         this.todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-        const ITEMS_PER_PAGE = 10;
+        const ITEMS_PER_PAGE = 50;
         this.state = useState({
             dateFrom: "",
             dateTo: "",

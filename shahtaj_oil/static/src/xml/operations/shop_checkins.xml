@@ -10,6 +10,28 @@
                 .list-group-item-action.so-checkin-dm-row:focus {
                     background-color: #e0effe !important;
                 }
+                .so-gps-tag {
+                    font-size: 0.68rem;
+                    font-weight: 600;
+                    line-height: 1.15;
+                    padding: 0.15rem 0.45rem;
+                    letter-spacing: 0.01em;
+                }
+                .so-gps-tag-ok {
+                    background: #ccfbf1;
+                    color: #0f766e;
+                    border: 1px solid #5eead4;
+                }
+                .so-gps-tag-far {
+                    background: #ffe4e6;
+                    color: #be123c;
+                    border: 1px solid #fecdd3;
+                }
+                .so-gps-tag-warn {
+                    background: #ffedd5;
+                    color: #c2410c;
+                    border: 1px solid #fed7aa;
+                }
             </style>
         <!-- Shop Checkins Tab (GPS attempts: success + blocked) -->
         <t t-if="this.state.activeSubTab === 'checkins'">
@@ -89,7 +111,7 @@
                                 </div>
                                 <div class="text-end d-flex align-items-center">
                                     <div class="me-3 text-end">
-                                        <span t-attf-class="badge #{this._gpsStatusBadgeClass(log.result)} p-2 fs-6 mb-1 d-inline-block"><t t-esc="log.status"/></span>
+                                        <span t-attf-class="badge so-gps-tag mb-1 d-inline-block #{this._gpsListTagClass(log.result)}"><t t-esc="log.status"/></span>
                                         <div class="text-muted fw-bold small"><t t-esc="log.distLabel"/></div>
                                         <div class="text-muted fw-bold small" title="Total time spent at the shop">
                                             <t t-esc="log.duration"/>

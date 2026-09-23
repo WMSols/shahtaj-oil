@@ -15,7 +15,7 @@ export class CreditControl extends Component {
     setup() {
         this.notification = useService("notification");
         this.orm = useService("orm");
-        const ITEMS_PER_PAGE = 10;
+        const ITEMS_PER_PAGE = 50;
         this.state = useState({
             activeSubTab: "credit",
             creditSubView: this.props.requestedCreditSubView || "risk",

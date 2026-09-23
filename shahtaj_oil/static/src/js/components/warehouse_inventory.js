@@ -14,7 +14,7 @@ export class WarehouseInventory extends Component {
         this.orm = useService("orm");
         this.notification = useService("notification");
         // Universal items per page shared across Inventory, Stock, and Taxes
-        const ITEMS_PER_PAGE = 10;
+        const ITEMS_PER_PAGE = 50;
         this.state = useState({
             activeSubTab: this._normalizeSubTab(this.props.requestedSubTab || 'inventory'),
             previousSubTab: 'inventory',

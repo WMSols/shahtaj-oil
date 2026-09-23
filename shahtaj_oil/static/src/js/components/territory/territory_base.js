@@ -21,7 +21,7 @@ export class TerritoryBase extends Component {
         this.mapRef = useRef("mapContainer");
         this.mapInstance = null; 
         // Universal items per page shared across Zones, Routes, and Shops
-        const ITEMS_PER_PAGE = 10;
+        const ITEMS_PER_PAGE = 50;
         this.state = useState({
            activeSubTab: this.props.requestedSubTab || 'areas', 
            previousSubTab: 'areas',

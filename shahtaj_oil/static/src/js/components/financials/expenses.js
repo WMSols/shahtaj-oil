@@ -17,7 +17,7 @@ export class Expenses extends Component {
         this.notification = useService("notification");
         this.orm = useService("orm");
         const today = new Date();
-        const ITEMS_PER_PAGE = 10;
+        const ITEMS_PER_PAGE = 50;
         this.state = useState({
             activeSubTab: "expenses",
             expenseSubTab: "expenses",

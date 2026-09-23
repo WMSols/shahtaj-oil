@@ -24,7 +24,7 @@ export class InvoiceManagement extends Component {
         this.notification = useService("notification");
         this.orm = useService("orm");
         this.action = useService("action");
-        const ITEMS_PER_PAGE = 10;
+        const ITEMS_PER_PAGE = 50;
         this.state = useState({
             activeSubTab: "invoices",
             invoiceSubTab: this.props.requestedInvoiceSubTab || "all_orders",

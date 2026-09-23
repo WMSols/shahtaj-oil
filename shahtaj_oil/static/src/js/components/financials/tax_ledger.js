@@ -22,7 +22,7 @@ export class TaxLedger extends Component {
                 date_to: formatDate(today),
                 stats: { amount_tax_invoiced: 0, amount_tax_credited: 0, amount_tax_net: 0 },
                 summaries: [], history: [], isLoading: false,
-                page: 1, limit: 15,
+                page: 1, limit: 50,
             },
         });
         onWillUpdateProps(async (nextProps) => {

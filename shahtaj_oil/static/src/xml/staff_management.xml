@@ -424,8 +424,8 @@
                                                 <small class="text-muted"><t t-esc="job.order"/></small>
                                             </td>
                                             <td><t t-esc="job.date"/></td>
-                                            <td><span class="badge bg-light text-dark"><t t-esc="this.stockStateLabel(job.state)"/></span></td>
-                                            <td class="pe-4"><span class="badge bg-secondary text-dark"><t t-esc="this.fieldStateLabel(job.fieldState)"/></span></td>
+                                            <td><span t-attf-class="badge #{this.stockStateBadgeClass(job.state)}"><t t-esc="this.stockStateLabel(job.state)"/></span></td>
+                                            <td class="pe-4"><span t-attf-class="badge #{this.fieldStateBadgeClass(job.fieldState)}"><t t-esc="this.fieldStateLabel(job.fieldState)"/></span></td>
                                         </tr>
                                     </t>
                                 </tbody>

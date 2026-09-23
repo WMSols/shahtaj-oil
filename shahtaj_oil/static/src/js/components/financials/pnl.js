@@ -25,7 +25,7 @@ export class Pnl extends Component {
                 lines: [],
                 isLoading: false,
                 selectedProductLineId: "",
-                page: 1, limit: 15,
+                page: 1, limit: 50,
             },
         });
         onWillUpdateProps(async (nextProps) => {

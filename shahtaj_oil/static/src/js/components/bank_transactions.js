@@ -13,7 +13,7 @@ export class BankTransactions extends Component {
     setup() {
         this.orm = useService("orm");
         this.notification = useService("notification");
-        const ITEMS_PER_PAGE = 10;
+        const ITEMS_PER_PAGE = 50;
         
         this.state = useState({
             activeTab: 'transactions', 
@@ -153,7 +153,8 @@ export class BankTransactions extends Component {
                         "id", "name", "date", "journal_id", "partner_id", "amount", "amount_signed",
                         "state", "payment_type", "shahtaj_payment_channel",
                         "shahtaj_payer_bank_name", "shahtaj_payer_account_number",
-                        "shahtaj_instrument_reference", "shahtaj_payment_notes"
+                        "shahtaj_instrument_reference", "shahtaj_payment_notes",
+                        "shahtaj_is_dm_wallet_collection", "shahtaj_collected_by_dm_id"
                     ], { limit: 2000, order: "date desc" }),
                     
                     this.orm.searchRead('shahtaj.expense', expDomain, [
@@ -176,6 +177,8 @@ export class BankTransactions extends Component {
                         date: p.date,
                         journal_name: p.journal_id ? p.journal_id[1] : 'Unknown',
                         partner_name: p.partner_id ? p.partner_id[1] : 'Unknown',
+                        dm_name: p.shahtaj_collected_by_dm_id ? p.shahtaj_collected_by_dm_id[1] : '',
+                        is_dm_collection: !!p.shahtaj_is_dm_wallet_collection,
                         method_or_desc: p.shahtaj_payment_channel || 'System',
                         display_amount: Math.abs(p.amount_signed || p.amount || 0),
                         payment_type: p.payment_type, 

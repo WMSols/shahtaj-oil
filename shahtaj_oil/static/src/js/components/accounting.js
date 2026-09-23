@@ -6,7 +6,7 @@ import { session } from "@web/session";
 import { ConfirmModal } from "./confirm_modal";
 import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
 
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 50;
 
 const JOURNAL_LIST_FIELDS = ["id", "name", "type", "code", "active", "default_account_id", "currency_id"];
 const JOURNAL_FORM_FIELDS = [

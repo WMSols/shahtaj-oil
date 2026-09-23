@@ -19,8 +19,8 @@
                         </div>
                         <h4 class="fw-bold"><t t-esc="this.state.selectedDmJob.name"/></h4>
                         <div class="d-flex gap-2 mb-3 flex-wrap">
-                            <span class="badge bg-light text-dark"><t t-esc="this.stockStateLabel(this.state.selectedDmJob.state)"/></span>
-                            <span class="badge bg-secondary text-dark"><t t-esc="this.fieldStateLabel(this.state.selectedDmJob.fieldState)"/></span>
+                            <span t-attf-class="badge #{this.stockStateBadgeClass(this.state.selectedDmJob.state)}"><t t-esc="this.stockStateLabel(this.state.selectedDmJob.state)"/></span>
+                            <span t-attf-class="badge #{this.fieldStateBadgeClass(this.state.selectedDmJob.fieldState)}"><t t-esc="this.fieldStateLabel(this.state.selectedDmJob.fieldState)"/></span>
                         </div>
 
                         <div class="card border-0 shadow-sm rounded-3 mb-3 overflow-hidden">
@@ -309,8 +309,8 @@
                                             </td>
                                             <td class="text-end" t-if="this.hasFinancialAccess">Rs. <t t-esc="this.formatMoney(job.amount)"/></td>
                                             <td class="text-end" t-attf-class="#{job.shopDue &gt; 0 ? 'text-danger fw-bold' : ''}">Rs. <t t-esc="this.formatMoney(job.shopDue)"/></td>
-                                            <td><span class="badge bg-light text-dark"><t t-esc="this.stockStateLabel(job.state)"/></span></td>
-                                            <td><span class="badge bg-secondary text-dark"><t t-esc="this.fieldStateLabel(job.fieldState)"/></span></td>
+                                            <td><span t-attf-class="badge #{this.stockStateBadgeClass(job.state)}"><t t-esc="this.stockStateLabel(job.state)"/></span></td>
+                                            <td><span t-attf-class="badge #{this.fieldStateBadgeClass(job.fieldState)}"><t t-esc="this.fieldStateLabel(job.fieldState)"/></span></td>
                                             <td class="text-end pe-4">
                                                 <button class="btn btn-sm btn-outline-dark fw-bold me-1" t-on-click="() => this.viewDmJob(job)">View</button>
                                                 <button t-if="this.canResetField(job)" class="btn btn-sm btn-outline-secondary fw-bold me-1" t-on-click="() => this.resetDmJobField(job.id)">Reset</button>
@@ -975,7 +975,7 @@
                                 <h5 class="fw-bold mb-0"><t t-esc="this.state.assignModal.readOnly ? 'DM Assignment' : 'Assign / Split'"/></h5>
                                 <small class="text-muted"><t t-esc="this.state.assignModal.orderName"/> · <t t-esc="this.state.assignModal.shop"/></small>
                             </div>
-                            <button type="button" class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center justify-content-center p-0" style="width: 32px; height: 32px;" t-on-click="closeAssignModal" title="Close" aria-label="Close">
+                            <button type="button" class="btn btn-light border-0 rounded-circle d-flex align-items-center justify-content-center p-0" style="width: 40px; height: 40px; font-size: 22px;" t-on-click="closeAssignModal" title="Close" aria-label="Close">
                                 <i class="fa fa-times"></i>
                             </button>
                         </div>
@@ -1050,7 +1050,7 @@
                                 </div>
                             </t>
                             <div class="d-flex justify-content-between" t-if="!this.state.assignModal.readOnly">
-                                <button class="btn btn-outline-secondary fw-bold" t-on-click="addAssignDeliveryMan" t-att-disabled="this.state.assignModal.saving">Add delivery man</button>
+                                <button class="btn btn-primary text-white fw-bold shadow-sm" t-on-click="addAssignDeliveryMan" t-att-disabled="this.state.assignModal.saving">Add delivery man</button>
                                 <button class="btn btn-dark text-white fw-bold" t-on-click="confirmAssign" t-att-disabled="this.state.assignModal.saving">Confirm assign</button>
                             </div>
                         </div>
