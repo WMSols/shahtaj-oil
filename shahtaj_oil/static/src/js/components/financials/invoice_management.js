@@ -683,9 +683,18 @@ export class InvoiceManagement extends Component {
     async triggerCreateInvoice(order) {
         this.state.isCreatingInvoice = true;
         try {
-            await this.orm.call("sale.order", "action_shahtaj_create_and_post_invoice", [[order.id]]);
+            const invoiceIds = await this.orm.call("sale.order", "action_shahtaj_create_and_post_invoice", [[order.id]]);
+            const invoiceId = Array.isArray(invoiceIds) ? invoiceIds[0] : invoiceIds;
+            this.state.invoiceSubTab = 'customer_invoices';
+            this.state.selectedOrder = null;
+            this.state.selectedOrderLines = [];
+            if (this.state.pagination.invoices) {
+                this.state.pagination.invoices.page = 1;
+            }
             await this.refreshFinancialLists();
-            this.setInvoiceSubTab('customer_invoices');
+            if (invoiceId) {
+                await this._refreshSelectedInvoiceState(invoiceId);
+            }
         } catch (error) { 
             this.notification.add(`Backend rejected the invoice creation:\n\n${error.data?.message || error.message}`, { type: "danger" });
         }

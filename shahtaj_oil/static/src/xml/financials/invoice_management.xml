@@ -142,7 +142,7 @@
                                     <span t-if="this.state.isCreatingInvoice" class="spinner-border spinner-border-sm me-2"/>
                                     <t t-if="this.state.isCreatingInvoice">Generating...</t>
                                     <t t-else="">
-                                        <i class="fa fa-file-text me-1"></i> Generate Draft Invoice</t>
+                                        <i class="fa fa-file-text me-1"></i> Generate Invoice</t>
                                 </button>
                             </div>
                             <div class="card p-0 shadow-sm border-0 border-start border-4 border-dark overflow-hidden">
@@ -359,7 +359,7 @@
                                     <span t-if="this.state.isCreatingInvoice" class="spinner-border spinner-border-sm me-2"/>
                                     <t t-if="this.state.isCreatingInvoice">Generating...</t>
                                     <t t-else="">
-                                        <i class="fa fa-file-text me-1"></i> Generate Draft Invoice</t>
+                                        <i class="fa fa-file-text me-1"></i> Generate Invoice</t>
                                 </button>
                             </div>
 

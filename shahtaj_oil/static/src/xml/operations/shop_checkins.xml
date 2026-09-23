@@ -95,7 +95,7 @@
                                             <t t-esc="log.duration"/>
                                         </div>
                                     </div>
-                                    <div class="me-3 text-end" style="min-width: 7.5rem;">
+                                    <div t-if="log.isOk" class="me-3 text-end" style="min-width: 7.5rem;">
                                         <span t-attf-class="badge p-2 fs-6 d-inline-block #{log.hasOrder ? 'bg-success text-white' : 'bg-light text-dark border'}">
                                             <t t-esc="log.orderLabel"/>
                                         </span>
@@ -211,7 +211,7 @@
                             <t t-esc="Math.round(this.state.selectedCheckin.max_distance_m || 0)"/> m
                         </span>
                     </div>
-                    <div class="d-flex justify-content-between mb-2 pb-2 border-bottom" t-if="this.state.selectedCheckin.visitOutcome">
+                    <div class="d-flex justify-content-between mb-2 pb-2 border-bottom" t-if="this.state.selectedCheckin.isOk and this.state.selectedCheckin.visitOutcome">
                         <span class="text-muted small">Visit Outcome:</span>
                         <span t-attf-class="fw-bold #{this.state.selectedCheckin.visitOutcome === 'Order Placed' or this.state.selectedCheckin.visitOutcome === 'Delivered' ? 'text-success' : 'text-warning'}">
                             <t t-esc="this.state.selectedCheckin.visitOutcome"/>
@@ -224,7 +224,7 @@
                         </p>
                     </div>
 
-                    <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                    <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top" t-if="this.state.selectedCheckin.isOk">
                         <span class="text-muted small"><t t-esc="this.state.selectedCheckin.isDeliveryCheckin ? 'Delivery:' : 'Order:'"/></span>
                         <t t-if="this.state.selectedCheckin.sale_order_id">
                             <button class="btn btn-sm btn-primary shadow-sm fw-bold" t-on-click="() => this.viewOrderFromCheckin(this.state.selectedCheckin)" title="Open the sales order linked to this visit">
