@@ -532,6 +532,55 @@ export class OperationsBase extends Component {
         return { total, records: pageIds.map((id) => byId[id]).filter(Boolean) };
     }
 
+    async _fetchDmJobsPinnedPage(domain, fields, pag) {
+        // Picked stock, or field Pending → In Transit, first. No status filter applied.
+        const pinClause = ['|', ['state', '=', 'picked'], ['field_state', '=', 'in_transit']];
+        const pinDomain = [...domain, ...pinClause];
+        const restDomain = [...domain, '!', ...pinClause];
+        const [total, pinTotal] = await Promise.all([
+            this.orm.searchCount('shahtaj.dm.delivery', domain),
+            this.orm.searchCount('shahtaj.dm.delivery', pinDomain),
+        ]);
+        const offset = (pag.page - 1) * pag.limit;
+        const records = [];
+        if (offset < pinTotal) {
+            const pinned = await this.orm.searchRead(
+                'shahtaj.dm.delivery',
+                pinDomain,
+                fields,
+                {
+                    limit: Math.min(pag.limit, pinTotal - offset),
+                    offset,
+                    order: 'write_date desc, id desc',
+                },
+            );
+            records.push(...pinned);
+            const remain = pag.limit - records.length;
+            if (remain > 0) {
+                const rest = await this.orm.searchRead(
+                    'shahtaj.dm.delivery',
+                    restDomain,
+                    fields,
+                    { limit: remain, offset: 0, order: 'scheduled_date desc, id desc' },
+                );
+                records.push(...rest);
+            }
+        } else {
+            const rest = await this.orm.searchRead(
+                'shahtaj.dm.delivery',
+                restDomain,
+                fields,
+                {
+                    limit: pag.limit,
+                    offset: Math.max(0, offset - pinTotal),
+                    order: 'scheduled_date desc, id desc',
+                },
+            );
+            records.push(...rest);
+        }
+        return { total, records };
+    }
+
     async _loadScheduleProgressForDate(records, dateStr) {
         const stats = {};
         if (!records.length) {
@@ -1103,9 +1152,6 @@ export class OperationsBase extends Component {
             if (tab === 'checkins') {
                 queryKwargs.order = 'create_date desc, id desc';
             }
-            if (tab === 'dm_jobs') {
-                queryKwargs.order = 'scheduled_date desc, id desc';
-            }
             if (tab === 'sessions') {
                 queryKwargs.order = 'session_date desc, id desc';
             }
@@ -1119,6 +1165,8 @@ export class OperationsBase extends Component {
             let records;
             if (tab === 'schedules') {
                 ({ total, records } = await this._fetchSchedulesSortedPage(domain, fields, pag));
+            } else if (tab === 'dm_jobs') {
+                ({ total, records } = await this._fetchDmJobsPinnedPage(domain, fields, pag));
             } else {
                 [total, records] = await Promise.all([
                     this.orm.searchCount(
