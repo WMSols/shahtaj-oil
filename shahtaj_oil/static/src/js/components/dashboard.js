@@ -15,10 +15,11 @@ import { PortalSettings } from "./settings"
 import { SchedulesTargets } from "./schedules_targets";
 import { BankTransactions } from "./bank_transactions";
 import { Accounting } from "./accounting";
+import { FieldReports } from "./field_reports";
 import { ConfirmModal } from "./confirm_modal";
 
 export class ShahtajDashboard extends Component {
-    static components = { StaffManagement, OperationsTracking, DeliveryManPerformance, TerritoryRoutes, WarehouseInventory, FinancialsInvoicing, PortalSettings, SchedulesTargets, BankTransactions, Accounting, ConfirmModal }; 
+    static components = { StaffManagement, OperationsTracking, DeliveryManPerformance, TerritoryRoutes, WarehouseInventory, FinancialsInvoicing, PortalSettings, SchedulesTargets, BankTransactions, Accounting, FieldReports, ConfirmModal }; 
 
     setup() {
         this.orm = useService("orm");
@@ -85,6 +86,7 @@ export class ShahtajDashboard extends Component {
                 operations: false,
                 financials: false,
                 schedules: false,
+                reports: false,
                 accounting: false,
             }
         });

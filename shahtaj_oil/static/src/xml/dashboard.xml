@@ -445,6 +445,32 @@
                         Staff Management
                     </button>
 
+                    <div class="mb-2">
+                        <button t-on-click="() => this.toggleMenu('reports', 'field_reports')" class="list-group-item list-group-item-action border-0 rounded text-start d-flex align-items-center justify-content-between transition-all w-100" t-att-style="this.state.activeTab === 'reports' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
+                            <div class="d-flex align-items-center">
+                                <span class="me-3 d-flex align-items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-flag">
+                                        <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+                                        <line x1="4" x2="4" y1="22" y2="15"/>
+                                    </svg>
+                                </span>
+                                Reports
+                            </div>
+                            <span class="d-flex align-items-center transition-all" t-att-style="this.state.expandedMenus.reports ? 'transform: rotate(180deg);' : ''">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down">
+                                    <path d="m6 9 6 6 6-6"/>
+                                </svg>
+                            </span>
+                        </button>
+                        <div t-attf-class="smooth-accordion #{this.state.expandedMenus.reports ? 'open' : ''}">
+                            <div class="smooth-accordion-inner">
+                                <div class="d-flex flex-column ps-4 mt-1 pe-2 gap-1 border-start ms-3 border-2 border-light mb-1">
+                                    <button t-on-click="() => this.switchTab('reports', 'field_reports')" class="list-group-item list-group-item-action border-0 rounded text-start py-2 px-3 small transition-all" t-att-style="this.state.activeTab === 'reports' and this.state.activeSubTab === 'field_reports' ? 'color: #0f172a; background-color: #e2e8f0; font-weight: 700;' : 'color: #6b7280; background-color: transparent;'">Field Reports</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="mb-2" t-if="this.hasFinancialAccess">
                         <button t-on-click="() => this.toggleMenu('accounting', 'journals')" class="list-group-item list-group-item-action border-0 rounded text-start d-flex align-items-center justify-content-between transition-all w-100" t-att-style="this.state.activeTab === 'accounting' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
                             <div class="d-flex align-items-center">
@@ -970,6 +996,10 @@
 
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'staff'" class="h-100">
                         <StaffManagement requestedStaffRole="this.state.staffRole" />
+                    </div>
+
+                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'reports'" class="h-100">
+                        <FieldReports requestedSubTab="this.state.activeSubTab" />
                     </div>
 
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'schedules'" class="h-100">
