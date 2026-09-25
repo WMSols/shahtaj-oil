@@ -127,6 +127,12 @@
                        groups="shahtaj_oil.group_shahtaj_distributor_financial"
                        invisible="shahtaj_delivery_status in ('done', 'no_stock')"/>
             </field>
+            <xpath expr="//field[@name='order_line']" position="attributes">
+                <attribute name="delete">state not in ('sale', 'done')</attribute>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list" position="attributes">
+                <attribute name="delete">parent.state not in ('sale', 'done')</attribute>
+            </xpath>
             <xpath expr="//sheet/group[1]" position="before">
                 <div class="alert alert-info mb-3" role="alert"
                      invisible="not partner_id or shahtaj_approval_state != 'to_approve'"

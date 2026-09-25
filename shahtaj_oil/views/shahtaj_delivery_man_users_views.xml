@@ -48,6 +48,9 @@
                     <button name="action_shahtaj_dm_collect_payment" type="object"
                             string="Collect Payment" class="btn-secondary"
                             groups="shahtaj_oil.group_shahtaj_distributor,shahtaj_oil.group_shahtaj_native_distributor_ui"/>
+                    <button name="action_shahtaj_dm_walk_in" type="object"
+                            string="Walk-in Delivery" class="btn-secondary"
+                            groups="shahtaj_oil.group_shahtaj_distributor,shahtaj_oil.group_shahtaj_native_distributor_ui,shahtaj_oil.group_shahtaj_delivery_man"/>
                     <button name="action_shahtaj_dm_settle_wallet" type="object"
                             string="Settle Wallet to Bank" class="btn-primary"
                             groups="shahtaj_oil.group_shahtaj_distributor,shahtaj_oil.group_shahtaj_native_distributor_ui"
@@ -161,7 +164,8 @@
                             </field>
                             <div class="alert alert-info mt-2" role="alert">
                                 <b>Stock</b> = warehouse flow.
-                                <b>Stop</b> = field story (On the Way / Shop Closed / Could Not Deliver).
+                                <b>Stop</b> = this shop (Heading to Shop / Shop Closed / Could Not Deliver).
+                                <b>Day</b> = My Day Session (Left Office) — not a single delivery.
                                 Use <b>Assign / Split DM</b> on the sales order to set
                                 day/time and product quantities per delivery man.
                             </div>

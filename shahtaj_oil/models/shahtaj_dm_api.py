@@ -97,11 +97,14 @@ class ShahtajDmApiService(models.AbstractModel):
 
     @api.model
     def get_today_load(self, dm=None, day=None):
-        """Office load screen: shops + products still to pick + van/WH snapshot."""
+        """Office load screen: today's jobs + van-first pick suggestion."""
         dm = dm or self._dm_user()
         day = day or self._today()
         Delivery = self.env['shahtaj.dm.delivery']
-        jobs = Delivery.search(self._jobs_domain(dm, day, open_only=True), order='id')
+        jobs = Delivery.search(
+            Delivery._shahtaj_today_open_jobs_domain(dm, day),
+            order='id',
+        )
         for job in jobs:
             job.sudo()._sync_with_sale_order(ensure_visit_task=False)
         self._prefetch_jobs(jobs)
@@ -152,13 +155,28 @@ class ShahtajDmApiService(models.AbstractModel):
         product_ids = list(pick_needed.keys())
         van_map = self._van_qty_map(dm, product_ids or None)
         wh_map = self._wh_free_qty_map(product_ids or None)
+        free_van = (
+            Delivery._shahtaj_unattributed_van_qty_map(dm, set(product_ids))
+            if product_ids else {}
+        )
         pick_lines = []
         for pid, row in pick_needed.items():
+            still = row['qty_still']
+            product = self.env['product.product'].browse(pid)
+            rounding = product.uom_id.rounding or 0.01
+            van_cover = float_round(
+                min(still, free_van.get(pid, 0.0)),
+                precision_rounding=rounding,
+            )
             pick_lines.append({
                 **row,
                 'qty_on_van': van_map.get(pid, 0.0),
                 'qty_in_warehouse': wh_map.get(pid, 0.0),
-                'qty_to_pick': row['qty_still'],
+                'qty_van_cover': van_cover,
+                'qty_to_pick': float_round(
+                    max(0.0, still - van_cover),
+                    precision_rounding=rounding,
+                ),
             })
         pick_lines.sort(key=lambda r: r['name'] or '')
 
@@ -179,68 +197,115 @@ class ShahtajDmApiService(models.AbstractModel):
 
     @api.model
     def pick_today_load(self, qty_by_product, dm=None, day=None):
-        """Step 1: load stock for today's jobs (product_id → qty)."""
+        """Van-first load for today's jobs, then WH→van for remaining Pick Now."""
         dm = dm or self._dm_user()
         day = day or self._today()
         Delivery = self.env['shahtaj.dm.delivery']
-        if not qty_by_product:
-            raise UserError(_('Set a pick quantity on at least one product.'))
+        if qty_by_product is None:
+            qty_by_product = {}
 
         cleaned = {}
-        for pid, qty in qty_by_product.items():
+        for pid, qty in (qty_by_product or {}).items():
             qty = float(qty or 0.0)
             if qty > 0:
                 cleaned[int(pid)] = qty
-        if not cleaned:
-            raise UserError(_('Set a pick quantity on at least one product.'))
 
         deliveries = Delivery.search(
-            self._jobs_domain(dm, day, open_only=True) + [
-                ('state', 'in', ('ready', 'picked', 'partial')),
-            ],
+            Delivery._shahtaj_today_open_jobs_domain(dm, day),
             order='id',
         )
         for delivery in deliveries:
             delivery.sudo()._sync_with_sale_order(ensure_visit_task=False)
 
-        remaining = dict(cleaned)
-        qty_by_delivery = defaultdict(dict)
+        live_still = defaultdict(float)
         for delivery in deliveries:
             for line in delivery.line_ids:
-                pid = line.product_id.id
-                if pid not in remaining:
-                    continue
-                left = remaining[pid]
-                if left <= 0:
-                    continue
-                still = max(line.qty_assigned - line.qty_picked, 0.0)
-                if still <= 0:
-                    continue
-                rounding = line.product_uom_id.rounding or 0.01
-                take = float_round(min(still, left), precision_rounding=rounding)
-                if take <= 0:
-                    continue
-                qty_by_delivery[delivery.id][line.id] = take
-                remaining[pid] = float_round(left - take, precision_rounding=rounding)
+                if line.product_id:
+                    live_still[line.product_id.id] += max(
+                        line.qty_assigned - line.qty_picked, 0.0,
+                    )
 
-        for pid, left in remaining.items():
+        free_van = Delivery._shahtaj_unattributed_van_qty_map(
+            dm, set(live_still) | set(cleaned),
+        )
+        van_apply = {}
+        wh_move = {}
+        for pid, still in live_still.items():
+            if still <= 0:
+                continue
             product = self.env['product.product'].browse(pid)
             rounding = product.uom_id.rounding or 0.01
-            if float_compare(left, 0.0, precision_rounding=rounding) > 0:
+            user_wh = float(cleaned.get(pid) or 0.0)
+            if float_compare(user_wh, still, precision_rounding=rounding) > 0:
                 raise UserError(_(
-                    'Could not allocate %(qty)s of %(product)s across today\'s shops.',
-                    qty=left,
+                    'Cannot pick %(qty)s of %(product)s — only %(max)s still needed today.',
+                    qty=user_wh,
                     product=product.display_name,
+                    max=still,
                 ))
-        if not qty_by_delivery:
-            raise UserError(_('Nothing left to pick for today.'))
+            wh = float_round(min(user_wh, still), precision_rounding=rounding)
+            cover = float_round(
+                min(free_van.get(pid, 0.0), max(0.0, still - wh)),
+                precision_rounding=rounding,
+            )
+            if cover > 0:
+                van_apply[pid] = cover
+            if wh > 0:
+                wh_move[pid] = wh
 
-        picked = 0
-        for delivery_id, qty_map in qty_by_delivery.items():
-            Delivery.browse(delivery_id)._pick_stock_with_qtys(qty_map, reload_form=False)
-            picked += 1
+        if not van_apply and not wh_move:
+            raise UserError(_(
+                'Nothing to load for today. Free van stock may already cover jobs, '
+                'or pick quantities are zero.'
+            ))
+
+        shops_touched = set()
+        if van_apply:
+            qty_by_delivery, remaining = Delivery._shahtaj_fifo_allocate_product_qtys(
+                deliveries, van_apply,
+            )
+            for pid, left in remaining.items():
+                product = self.env['product.product'].browse(pid)
+                rounding = product.uom_id.rounding or 0.01
+                if float_compare(left, 0.0, precision_rounding=rounding) > 0:
+                    raise UserError(_(
+                        'Could not apply %(qty)s of %(product)s from van to today’s shops.',
+                        qty=left,
+                        product=product.display_name,
+                    ))
+            for delivery_id, qty_map in qty_by_delivery.items():
+                Delivery.browse(delivery_id)._attribute_van_stock_with_qtys(
+                    qty_map, reload_form=False,
+                )
+                shops_touched.add(delivery_id)
+
+        if wh_move:
+            deliveries = Delivery.search(
+                Delivery._shahtaj_today_open_jobs_domain(dm, day),
+                order='id',
+            )
+            qty_by_delivery, remaining = Delivery._shahtaj_fifo_allocate_product_qtys(
+                deliveries, wh_move,
+            )
+            for pid, left in remaining.items():
+                product = self.env['product.product'].browse(pid)
+                rounding = product.uom_id.rounding or 0.01
+                if float_compare(left, 0.0, precision_rounding=rounding) > 0:
+                    raise UserError(_(
+                        'Could not allocate %(qty)s of %(product)s across today\'s shops.',
+                        qty=left,
+                        product=product.display_name,
+                    ))
+            for delivery_id, qty_map in qty_by_delivery.items():
+                Delivery.browse(delivery_id)._pick_stock_with_qtys(
+                    qty_map, reload_form=False,
+                )
+                shops_touched.add(delivery_id)
+
         return {
-            'jobs_picked': picked,
+            'jobs_picked': len(shops_touched),
+            'van_skus_applied': len(van_apply),
+            'warehouse_skus_picked': len(wh_move),
             'load': self.get_today_load(dm, day),
         }
 
@@ -283,6 +348,9 @@ class ShahtajDmApiService(models.AbstractModel):
         van = dm._shahtaj_get_van_location()
         items = []
         van_map = self._van_qty_map(dm)
+        free_map = self.env['shahtaj.dm.delivery']._shahtaj_unattributed_van_qty_map(
+            dm, set(van_map) if van_map else set(),
+        )
         Product = self.env['product.product'].sudo()
         products = Product.browse(list(van_map.keys()))
         product_by_id = {product.id: product for product in products}
@@ -294,12 +362,14 @@ class ShahtajDmApiService(models.AbstractModel):
                 'product_id': pid,
                 'name': product.display_name,
                 'qty': qty,
+                'qty_free': free_map.get(pid, 0.0),
                 'uom': product.uom_id.name if product.uom_id else '',
             })
         return {
             'van_location_id': van.id if van else False,
             'items': items,
             'qty_total': sum(i['qty'] for i in items),
+            'qty_free_total': sum(i['qty_free'] for i in items),
         }
 
     @api.model
@@ -314,10 +384,14 @@ class ShahtajDmApiService(models.AbstractModel):
         pids = products.ids
         van_map = self._van_qty_map(dm, pids)
         wh_map = self._wh_free_qty_map(pids)
+        free_map = self.env['shahtaj.dm.delivery']._shahtaj_unattributed_van_qty_map(
+            dm, set(pids),
+        )
         rows = []
         for product in products:
             wh_qty = wh_map.get(product.id, 0.0)
             van_qty = van_map.get(product.id, 0.0)
+            free_qty = free_map.get(product.id, 0.0)
             if wh_qty <= 0 and van_qty <= 0:
                 continue
             rows.append({
@@ -325,6 +399,7 @@ class ShahtajDmApiService(models.AbstractModel):
                 'name': product.display_name,
                 'qty_in_warehouse': wh_qty,
                 'qty_on_van': van_qty,
+                'qty_free_on_van': free_qty,
                 'uom': product.uom_id.name if product.uom_id else '',
             })
         return {'products': rows}
@@ -485,36 +560,125 @@ class ShahtajDmApiService(models.AbstractModel):
         return {'job': self.job_detail(job)}
 
     @api.model
-    def free_deliver(
+    def _company_sale_pricelist(self, company=None):
+        """Company default pricelist (walk-in never uses DM-entered prices).
+
+        Creates a company pricelist automatically if the DB has none yet
+        (common on fresh Shahtaj DBs). Empty rules → product list_price.
+        """
+        company = company or self.env.company
+        Pricelist = self.env['product.pricelist'].sudo()
+        partner = company.partner_id.with_company(company)
+        pl = partner.property_product_pricelist
+        if pl:
+            return pl
+        pl = Pricelist.search([
+            '|', ('company_id', '=', False), ('company_id', '=', company.id),
+        ], limit=1, order='sequence, id')
+        if pl:
+            return pl
+        return Pricelist.create({
+            'name': _('Company Pricelist'),
+            'currency_id': company.currency_id.id,
+            'company_id': company.id,
+            'sequence': 1,
+        })
+
+    @api.model
+    def _validate_walk_in_gps(self, latitude, longitude, partner=None):
+        """Require valid GPS for walk-in (capture is the location of sale)."""
+        Attempt = self.env['shahtaj.gps.attempt']
+        if latitude is None or longitude is None:
+            msg = _('Your GPS coordinates are required for walk-in delivery.')
+            Attempt.log_attempt(
+                purpose='walk_in',
+                result='blocked_missing_user_gps',
+                shop=partner,
+                latitude=latitude,
+                longitude=longitude,
+                message=msg,
+            )
+            raise UserError(msg)
+        lat = float(latitude)
+        lng = float(longitude)
+        if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+            msg = _('GPS latitude/longitude values are out of range.')
+            Attempt.log_attempt(
+                purpose='walk_in',
+                result='blocked_invalid_coords',
+                shop=partner,
+                latitude=lat,
+                longitude=lng,
+                message=msg,
+            )
+            raise UserError(msg)
+        return lat, lng
+
+    @api.model
+    def _ensure_walk_in_partner(self, customer_name, phone, latitude, longitude):
+        """Create or reuse a minimal non-shop walk-in customer."""
+        name = (customer_name or '').strip()
+        if not name:
+            raise UserError(_('customer_name is required.'))
+        phone_clean = (phone or '').strip() or False
+        Partner = self.env['res.partner'].sudo()
+        partner = Partner.browse()
+        if phone_clean:
+            partner = Partner.search([
+                ('shahtaj_is_walk_in', '=', True),
+                ('is_shahtaj_shop', '=', False),
+                ('phone', '=', phone_clean),
+                ('company_id', 'in', [False, self.env.company.id]),
+            ], limit=1)
+        if partner:
+            partner.write({
+                'partner_latitude': latitude,
+                'partner_longitude': longitude,
+                'name': name,
+            })
+            return partner
+        return Partner.with_context(
+            tracking_disable=True,
+            mail_create_nosubscribe=True,
+            mail_notrack=True,
+        ).create({
+            'name': name,
+            'phone': phone_clean,
+            'customer_rank': 1,
+            'company_type': 'person',
+            'is_shahtaj_shop': False,
+            'shahtaj_is_walk_in': True,
+            'partner_latitude': latitude,
+            'partner_longitude': longitude,
+            'company_id': self.env.company.id,
+            'comment': _('Created by DM walk-in delivery'),
+        })
+
+    @api.model
+    def walk_in_deliver(
         self,
-        shop_id,
+        customer_name,
         latitude,
         longitude,
         lines,
-        notes='',
         receiver_name=None,
         delivery_proof_image=None,
+        phone=None,
+        notes='',
+        payment_method='cash',
+        cheque_number=None,
+        cheque_image=None,
         dm=None,
     ):
-        """Deliver free van stock to a shop (no assigned job required) + notes."""
+        """Walk-in: minimal customer + SO (company pricelist) + van deliver + full DM wallet pay."""
         dm = dm or self._dm_user()
-        shop = self.env['res.partner'].sudo().browse(int(shop_id))
-        if not shop.exists() or not shop.is_shahtaj_shop:
-            raise UserError(_('Shop not found.'))
+        company = self.env.company
+        lat, lng = self._validate_walk_in_gps(latitude, longitude)
 
         Delivery = self.env['shahtaj.dm.delivery']
         proof_vals = Delivery._shahtaj_prepare_delivery_proof(
             receiver_name=receiver_name,
             delivery_proof_image=delivery_proof_image,
-        )
-
-        Visit = self.env['shahtaj.visit']
-        distance = Visit._validate_check_in_coordinates(
-            shop,
-            float(latitude) if latitude is not None else None,
-            float(longitude) if longitude is not None else None,
-            purpose='confirm free delivery',
-            log_purpose='deliver',
         )
 
         qty_map = {}
@@ -526,57 +690,116 @@ class ShahtajDmApiService(models.AbstractModel):
         if not qty_map:
             raise UserError(_('Enter a deliver quantity on at least one product.'))
 
+        # Only surplus (unattributed) van stock — never drain reserved job stock.
+        Delivery._shahtaj_assert_van_surplus(dm, qty_map, _('walk-in deliver'))
+
         van = Delivery._ensure_van_location_for_dm(dm)
+        van_map = self._van_qty_map(dm, list(qty_map.keys()))
+        Product = self.env['product.product'].sudo()
+        for pid, qty in qty_map.items():
+            available = van_map.get(pid, 0.0)
+            if available + 1e-6 < qty:
+                product = Product.browse(pid)
+                raise UserError(_(
+                    'Not enough %(product)s on van (need %(need)s, have %(avail)s).',
+                    product=product.display_name if product.exists() else pid,
+                    need=qty,
+                    avail=available,
+                ))
+
+        partner = self._ensure_walk_in_partner(customer_name, phone, lat, lng)
+        # Audit GPS against the walk-in customer record.
+        self.env['shahtaj.gps.attempt'].log_attempt(
+            purpose='walk_in',
+            result='ok',
+            shop=partner,
+            latitude=lat,
+            longitude=lng,
+            distance_m=0.0,
+            message=_('Walk-in delivery GPS captured'),
+        )
+
+        pricelist = self._company_sale_pricelist(company)
+        # Always available after ensure/create above.
+        Sale = self.env['sale.order'].sudo()
+        order_lines = []
+        for pid, qty in qty_map.items():
+            product = Product.browse(pid)
+            if not product.exists() or not product.sale_ok:
+                raise UserError(_(
+                    'Product %(name)s cannot be sold.',
+                    name=product.display_name if product.exists() else pid,
+                ))
+            order_lines.append((0, 0, {
+                'product_id': product.id,
+                'product_uom_qty': qty,
+                'product_uom_id': product.uom_id.id,
+            }))
+
+        order = Sale.with_context(
+            shahtaj_skip_credit_check=True,
+            tracking_disable=True,
+        ).create({
+            'partner_id': partner.id,
+            'partner_invoice_id': partner.id,
+            'partner_shipping_id': partner.id,
+            'pricelist_id': pricelist.id,
+            'company_id': company.id,
+            'user_id': dm.id,
+            'origin': _('DM Walk-in'),
+            'client_order_ref': _('WALK-IN'),
+            'note': (notes or '').strip() or False,
+            'order_line': order_lines,
+        })
+        order.with_context(shahtaj_skip_credit_check=True).action_confirm()
+
+        # Drop auto WH→customer pickings; stock leaves from the van instead.
+        auto_pickings = order.picking_ids.filtered(
+            lambda p: p.state not in ('done', 'cancel')
+        )
+        if auto_pickings:
+            auto_pickings.action_cancel()
+
         warehouse = Delivery._get_warehouse()
-        customer_loc = shop.property_stock_customer
+        customer_loc = partner.property_stock_customer
         if not customer_loc:
-            customer_loc = self.env.ref('stock.stock_location_customers', raise_if_not_found=False)
+            customer_loc = self.env.ref(
+                'stock.stock_location_customers', raise_if_not_found=False,
+            )
         if not customer_loc:
             raise UserError(_('No customer stock location found.'))
         out_type = warehouse.out_type_id
         if not out_type:
             raise UserError(_('No delivery operation type on the warehouse.'))
 
-        Product = self.env['product.product'].sudo()
+        sol_by_product = {
+            line.product_id.id: line
+            for line in order.order_line
+            if line.product_id and not line.display_type
+        }
         move_vals_list = []
         for pid, qty in qty_map.items():
             product = Product.browse(pid)
-            if not product.exists():
-                continue
-            move_vals_list.append({
+            sol = sol_by_product.get(pid)
+            vals = {
                 'product_id': product.id,
                 'product_uom_qty': qty,
                 'product_uom': product.uom_id.id,
                 'location_id': van.id,
                 'location_dest_id': customer_loc.id,
-            })
-        if not move_vals_list:
-            raise UserError(_('No products to deliver.'))
-
-        # Availability check
-        Quant = self.env['stock.quant'].sudo()
-        for move in move_vals_list:
-            quants = Quant.search([
-                ('product_id', '=', move['product_id']),
-                ('location_id', '=', van.id),
-            ])
-            available = sum(quants.mapped('quantity'))
-            if available + 1e-6 < move['product_uom_qty']:
-                product = Product.browse(move['product_id'])
-                raise UserError(_(
-                    'Not enough %(product)s on van (need %(need)s, have %(avail)s).',
-                    product=product.display_name,
-                    need=move['product_uom_qty'],
-                    avail=available,
-                ))
+            }
+            if sol:
+                vals['sale_line_id'] = sol.id
+            move_vals_list.append(vals)
 
         picking = Delivery._create_stock_picking(
             picking_type=out_type,
             location_id=van,
             location_dest_id=customer_loc,
-            origin=f'DM Free Deliver: {shop.display_name}',
+            origin=_('DM Walk-in: %s', order.name),
             move_vals_list=move_vals_list,
-            partner_id=shop.id,
+            partner_id=partner.id,
+            sale_id=order.id,
         )
         picking.write({
             'shahtaj_receiver_name': proof_vals['receiver_name'],
@@ -586,39 +809,62 @@ class ShahtajDmApiService(models.AbstractModel):
         picking.action_assign()
         for move in picking.move_ids:
             move.quantity = move.product_uom_qty
+            if hasattr(move, 'picked'):
+                move.picked = True
         picking.with_context(skip_backorder=True, skip_sms=True).button_validate()
 
+        invoices = order._create_invoices()
+        if not invoices:
+            raise UserError(_('Could not create an invoice for the walk-in order.'))
+        invoices.action_post()
+        invoice = invoices[0]
+        residual = abs(invoice.amount_residual)
+        if float_compare(residual, 0.0, precision_rounding=company.currency_id.rounding) <= 0:
+            raise UserError(_('Walk-in invoice has nothing to collect.'))
+
+        Service = self._recovery_service()
+        payments = Service.collect_payments(
+            delivery_man=dm,
+            allocations=[(invoice, residual)],
+            notes=notes or _('Walk-in collection — %s', partner.display_name),
+            company=company,
+            payment_method=payment_method or 'cash',
+            cheque_number=cheque_number,
+            cheque_image=cheque_image,
+        )
+        payment = payments[:1]
+        channel = payment.shahtaj_payment_channel if payment else (payment_method or 'cash')
+
         return {
-            'distance_m': distance,
-            'shop_id': shop.id,
-            'shop_name': shop.display_name,
-            'notes': (notes or '').strip(),
+            'partner_id': partner.id,
+            'partner_name': partner.display_name,
+            'phone': partner.phone or '',
+            'latitude': lat,
+            'longitude': lng,
+            'sale_order_id': order.id,
+            'sale_order_name': order.name,
+            'invoice_id': invoice.id,
+            'invoice_name': invoice.name,
+            'amount_total': invoice.amount_total,
+            'payment_id': payment.id if payment else False,
+            'payment_ids': payments.ids,
+            'payment_method': channel or 'cash',
+            'cheque_number': (
+                payment.shahtaj_instrument_reference or ''
+            ) if payment and (channel or '') == 'cheque' else '',
+            'picking_id': picking.id,
             'receiver_name': proof_vals['receiver_name'],
             'has_delivery_proof': True,
-            'picking_id': picking.id,
+            'notes': (notes or '').strip(),
+            'wallet': Service.wallet_summary(dm),
             'van': self.van_snapshot(dm),
-        }
-
-    @api.model
-    def shops_search(self, query='', limit=30):
-        """Find Shahtaj shops for free deliver."""
-        domain = [('is_shahtaj_shop', '=', True), ('shop_approval_state', '=', 'approved')]
-        if query:
-            domain = ['&'] + domain + [
-                '|', '|',
-                ('name', 'ilike', query),
-                ('display_name', 'ilike', query),
-                ('phone', 'ilike', query),
-            ]
-        shops = self.env['res.partner'].sudo().search(domain, limit=limit, order='name')
-        return {
-            'shops': [{
-                'shop_id': s.id,
-                'name': s.display_name,
-                'address': s.contact_address or '',
-                'latitude': s.partner_latitude or 0.0,
-                'longitude': s.partner_longitude or 0.0,
-            } for s in shops],
+            'lines': [{
+                'product_id': line.product_id.id,
+                'name': line.product_id.display_name,
+                'qty': line.product_uom_qty,
+                'price_unit': line.price_unit,
+                'price_subtotal': line.price_subtotal,
+            } for line in order.order_line if line.product_id and not line.display_type],
         }
 
     # ── Recovery / wallet (independent of check-in) ───────────────────

@@ -30,6 +30,7 @@ from . import shahtaj_orders_hub
 from . import shahtaj_order_booker_hub
 from . import shahtaj_delivery_man_hub
 from . import shahtaj_pnl_dashboard
+from . import shahtaj_financial_statements
 from . import shahtaj_tax_ledger
 from . import shahtaj_expense
 from . import shahtaj_stock_receipt
@@ -41,4 +42,5 @@ from . import shahtaj_dm_day_session
 from . import shahtaj_dm_recovery
 from . import shahtaj_dm_api
 from . import shahtaj_activity_log
+from . import shahtaj_field_report
 from . import stock_picking

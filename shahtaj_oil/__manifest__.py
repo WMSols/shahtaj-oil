@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Shahtaj Oil',
-    'version': '19.0.1.1.130',
+    'version': '19.0.1.1.142',
     'post_init_hook': 'post_init_hook',
     'category': 'Sales/Distribution',
     'summary': 'Unified Command Center for Shahtaj Oil distributions, field booking, and SPA frontend',
     'author': 'WMsols',
     'depends': [
-        'base',
-        'web',
-        'contacts',
-        'sale',
-        'sale_stock',
-        'mail',
-        'account',
+        'base', 
+        'web', 
+        'contacts', 
+        'sale', 
+        'sale_stock', 
+        'mail', 
+        'account', 
         'stock',
         'purchase',
         'purchase_stock',
@@ -33,6 +33,7 @@
         'data/shahtaj_cron.xml',
         'data/shahtaj_expense_data.xml',
         'data/shahtaj_dm_data.xml',
+        'data/shahtaj_field_report_data.xml',
 
         # ── 3. CORE VIEWS + ACTIONS (no inherit from other module views) ──
         'views/shahtaj_route_views.xml',
@@ -43,6 +44,7 @@
         'views/shahtaj_target_views.xml',
         'views/shahtaj_activity_log_views.xml',
         'views/shahtaj_gps_attempt_views.xml',
+        'views/shahtaj_field_report_views.xml',
         'data/shahtaj_activity_log_data.xml',
 
         # ── 4. VISIT VIEWS (before sale_accounting which inherits visit views) ──
@@ -61,6 +63,7 @@
         'views/shahtaj_purchase_views.xml',
         'views/shahtaj_expense_views.xml',
         'views/shahtaj_pnl_dashboard_views.xml',
+        'views/shahtaj_financial_statements_views.xml',
         'views/shahtaj_tax_ledger_views.xml',
         'views/shahtaj_manufacturer_summary_views.xml',
         'views/shahtaj_product_views.xml',
@@ -91,13 +94,16 @@
         'wizard/shahtaj_dm_van_transfer_views.xml',
         'wizard/shahtaj_dm_assign_views.xml',
         'wizard/shahtaj_dm_collect_payment_views.xml',
+        'wizard/shahtaj_dm_walk_in_views.xml',
         'views/shahtaj_order_reject_views.xml',
         'wizard/shahtaj_credit_override_views.xml',
 
         'report/shahtaj_manufacturer_summary_report.xml',
-
+        'report/shahtaj_financial_statements_report.xml',
+        
         # ── 8. SECURITY FIXES (must update rules created in step 1) ──
         'security/shahtaj_record_rules_fix.xml',
+        'security/shahtaj_field_report_rules.xml',
         'security/shahtaj_booker_ui_fix.xml',
         'security/shahtaj_partner_access_upgrade.xml',
 
@@ -108,20 +114,36 @@
         'data/shahtaj_user_access_sync.xml',
 
         # ── 10. MENUS (ALWAYS LAST; includes distributor portal client action) ──
-        'views/menus.xml',
+        'views/menus.xml', # All combined Menus
         'views/shahtaj_api_test_menu.xml',
     ],
     'assets': {
-        'web.assets_backend': [
-            'shahtaj_oil/static/src/scss/custom_portal_shell.scss',
-            'shahtaj_oil/static/src/scss/shahtaj_route_checklist.scss',
-            'shahtaj_oil/static/src/js/custom_portal_shell.js',
-            'shahtaj_oil/static/src/js/shahtaj_access.js',
-            'shahtaj_oil/static/src/js/components/*.js',
-            'shahtaj_oil/static/src/xml/*.xml',
-            'shahtaj_oil/static/src/lib/leaflet/leaflet.css',
-            'shahtaj_oil/static/src/lib/leaflet/leaflet.js',
-        ],
+    'web.assets_backend': [
+    'shahtaj_oil/static/src/scss/custom_portal_shell.scss',
+    'shahtaj_oil/static/src/scss/shahtaj_route_checklist.scss',
+    'shahtaj_oil/static/src/js/custom_portal_shell.js',
+    'shahtaj_oil/static/src/js/shahtaj_access.js',
+    'shahtaj_oil/static/src/js/shahtaj_geolocate_widget.js',
+    'shahtaj_oil/static/src/xml/dashboard.xml',
+    'shahtaj_oil/static/src/js/components/staff_management.js',
+    'shahtaj_oil/static/src/js/components/operations/*.js',
+    'shahtaj_oil/static/src/xml/operations/*.xml',
+    'shahtaj_oil/static/src/js/components/territory/*.js',
+    'shahtaj_oil/static/src/xml/territory/*.xml',
+    'shahtaj_oil/static/src/js/components/warehouse_inventory.js',
+    'shahtaj_oil/static/src/js/components/financials/*.js',
+    'shahtaj_oil/static/src/xml/financials/*.xml',
+    'shahtaj_oil/static/src/js/components/settings.js',
+    'shahtaj_oil/static/src/js/components/schedules_targets.js',
+    'shahtaj_oil/static/src/js/components/accounting.js',
+    'shahtaj_oil/static/src/js/components/dashboard.js',
+    'shahtaj_oil/static/src/js/components/bank_transactions.js',
+    'shahtaj_oil/static/src/js/components/*.js',
+    'shahtaj_oil/static/src/xml/*.xml',
+    'shahtaj_oil/static/src/lib/leaflet/leaflet.css',
+    'shahtaj_oil/static/src/lib/leaflet/leaflet.js',
+
+],
     },
     'application': True,
     'installable': True,

@@ -3,7 +3,7 @@
 import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { ConfirmModal } from "./confirm_modal";
-import { hasFinancialAccess } from "../shahtaj_access";
+import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
 
 export class WarehouseInventory extends Component {
     static props = {
@@ -14,7 +14,7 @@ export class WarehouseInventory extends Component {
         this.orm = useService("orm");
         this.notification = useService("notification");
         // Universal items per page shared across Inventory, Stock, and Taxes
-        const ITEMS_PER_PAGE = 10;
+        const ITEMS_PER_PAGE = 50;
         this.state = useState({
             activeSubTab: this._normalizeSubTab(this.props.requestedSubTab || 'inventory'),
             previousSubTab: 'inventory',
@@ -29,12 +29,14 @@ export class WarehouseInventory extends Component {
             editingTaxId: null,
             taxForm: { name: '', amount: 0.0, active: true },
             warehouseForm: { name: '', type: '', location: '', manager: '' },
-            adjustmentForm: { product_id: '', qty: 0 },
+            adjustmentForm: { product_id: '', qty: 0, unit_cost: '' },
             
             productForm: this.getEmptyProductForm(),
             currentProduct: null,
             saleTaxes: [],
             defaultTaxId: "", 
+            allVendors: [],
+            createdProductPrompt: null,
             confirmModal: { isOpen: false, title: '', message: '', onConfirm: null },
             isLoading: false,
             // --- NEW: Backend Pagination & Loading ---
@@ -72,8 +74,11 @@ export class WarehouseInventory extends Component {
             if (hasFinancialAccess()) {
                 await this.loadSaleTaxes();
             }
-            await this.loadDropdownData();
-            await this.loadArchivedData();
+            await Promise.all([
+                this.loadDropdownData(),
+                this.loadVendors(),
+                this.loadArchivedData(),
+            ]);
             await this.fetchActiveList();
         });
         onWillUpdateProps((nextProps) => {
@@ -116,6 +121,18 @@ export class WarehouseInventory extends Component {
         );
     }
 
+    async loadVendors() {
+        try {
+            this.state.allVendors = await this.orm.searchRead(
+                "res.partner",
+                [['supplier_rank', '>', 0], ['is_shahtaj_shop', '=', false]],
+                ["id", "name"]
+            );
+        } catch (e) {
+            console.error("Failed to load vendors for product dropdown:", e);
+        }
+    }
+
     async loadArchivedData() {
         const [products, taxes] = await Promise.all([
             this.orm.searchRead("product.template", [['sale_ok', '=', true], ['active', '=', false]], ["id", "name", "uom_name", "shahtaj_sale_uom"]),
@@ -134,6 +151,7 @@ export class WarehouseInventory extends Component {
         if (!['inventory', 'management', 'taxes'].includes(tab)) return;
 
         this.state.isLoadingList = true;
+        notifyPortalBusy(true);
         try {
             const pag = this.state.pagination[tab];
             const filters = this.state.filters[tab];
@@ -145,7 +163,7 @@ export class WarehouseInventory extends Component {
 
             if (tab === 'inventory' || tab === 'management') {
                 model = 'product.template';
-                fields = ["id", "name", "categ_id", "qty_available", "uom_name", "type", "is_storable", "list_price", "standard_price", "barcode", "weight", "volume", "invoice_policy", "image_1920", "shahtaj_qty_bookable", "virtual_available", "shahtaj_sale_uom", "shahtaj_kg_per_unit", "taxes_id", "active"];
+                fields = ["id", "name", "categ_id", "qty_available", "uom_name", "type", "is_storable", "list_price", "standard_price", "shahtaj_vendor_id", "shahtaj_vendor_name", "barcode", "weight", "volume", "invoice_policy", "image_1920", "shahtaj_qty_bookable", "virtual_available", "shahtaj_sale_uom", "shahtaj_kg_per_unit", "taxes_id", "active"];
                 domain = [['sale_ok', '=', true], ['default_code', '!=', 'SHAHTAJ-LEGACY'], ['active', '=', true]];
                 
                 if (filters.search) domain.push(['name', 'ilike', filters.search]);
@@ -184,6 +202,7 @@ export class WarehouseInventory extends Component {
             this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isLoadingList = false;
+            notifyPortalBusy(false);
         }
     }
     
@@ -243,14 +262,18 @@ export class WarehouseInventory extends Component {
     }
     getEmptyProductForm() {
         return {
-            name: '', track_inventory: true, on_hand: 0,
-            list_price: 0.0, standard_price: 0.0,
-            invoice_policy: 'delivery', type: 'consu',
-            shahtaj_sale_uom: 'piece', shahtaj_kg_per_unit: 1.0,
+            name: '',
+            vendor_id: '',
+            track_inventory: true,
+            invoice_policy: 'order',
+            type: 'consu',
+            shahtaj_sale_uom: 'piece',
+            shahtaj_kg_per_unit: 1.0,
             // Start with no tax — user must opt in (do not auto-apply company default).
             tax_id: "",
-            barcode: '', weight: 0.0, volume: 0.0,
-            income_account: 'static_inc', expense_account: 'static_exp',
+            barcode: '',
+            weight: 0.0,
+            volume: 0.0,
             image_1920: false
         };
     }
@@ -316,6 +339,7 @@ export class WarehouseInventory extends Component {
             if (hasFinancialAccess()) await this.loadSaleTaxes();
             await Promise.all([
                 this.loadDropdownData(),
+                this.loadVendors(),
                 this.loadArchivedData(),
                 this.fetchActiveList()
             ]);
@@ -406,46 +430,86 @@ export class WarehouseInventory extends Component {
 
         this.state.isLoading = true;
         try {
-            const initialOnHand = parseFloat(this.state.productForm.on_hand || 0);
             const vals = {
                 name: this.state.productForm.name,
                 type: this.state.productForm.type,
-                list_price: parseFloat(this.state.productForm.list_price || 0),
-                standard_price: parseFloat(this.state.productForm.standard_price || 0),
-                invoice_policy: this.state.productForm.invoice_policy,
+                list_price: 0.0,
+                standard_price: 0.0,
+                invoice_policy: 'order',
                 barcode: this.state.productForm.barcode,
                 weight: parseFloat(this.state.productForm.weight || 0),
                 volume: parseFloat(this.state.productForm.volume || 0),
-                is_storable: this.state.productForm.track_inventory,
+                is_storable: !!this.state.productForm.track_inventory,
                 shahtaj_sale_uom: this.state.productForm.shahtaj_sale_uom,
                 shahtaj_kg_per_unit: parseFloat(this.state.productForm.shahtaj_kg_per_unit || 1),
                 taxes_id: this.state.productForm.tax_id ? [[6, 0, [parseInt(this.state.productForm.tax_id, 10)]]] : [[5, 0, 0]],
             };
 
+            if (this.state.productForm.vendor_id) {
+                vals.shahtaj_vendor_id = parseInt(this.state.productForm.vendor_id, 10);
+            }
+
             if (this.state.productForm.image_1920) {
                 vals.image_1920 = this.state.productForm.image_1920;
             }
 
-            const createContext = { shahtaj_simple_product: true };
-            if (this.state.productForm.track_inventory && initialOnHand > 0) {
-                createContext.shahtaj_initial_on_hand = initialOnHand;
+            const res = await this.orm.create("product.template", [vals], { context: { shahtaj_simple_product: true } });
+            const createdId = Array.isArray(res) ? res[0] : res;
+            const createdName = this.state.productForm.name;
+            const createdVendorId = this.state.productForm.vendor_id;
+            let createdVariantId = createdId;
+            try {
+                const variants = await this.orm.searchRead(
+                    "product.product",
+                    [["product_tmpl_id", "=", createdId]],
+                    ["id"],
+                    { limit: 1 }
+                );
+                if (variants.length) {
+                    createdVariantId = variants[0].id;
+                }
+            } catch (_error) {
+                createdVariantId = createdId;
             }
 
-            await this.orm.create("product.template", [vals], { context: createContext });
-            // UPDATED: Use the new fetchers instead of loadInventory()
             await this.loadDropdownData();
             await this.fetchActiveList();
             await this.refreshData();
             this.state.showProductAddForm = false;
             this.state.productForm = this.getEmptyProductForm();
-            this.notification.add("Product created successfully.", { type: "success" });
+            
+            // Set newly created product info for quick PO creation prompt
+            this.state.createdProductPrompt = {
+                id: createdVariantId,
+                templateId: createdId,
+                name: createdName,
+                vendor_id: createdVendorId,
+            };
+            this.notification.add(`Product "${createdName}" registered successfully.`, { type: "success" });
         } catch (error) {
-            this.notification.add("Failed to create product: " + (error.data?.message || error.message), { type: "danger" });
+            this.notification.add("Failed to register product: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isLoading = false;
         }
     }
 
+    createPoForCreatedProduct() {
+        const prod = this.state.createdProductPrompt;
+        this.state.createdProductPrompt = null;
+        if (!prod) return;
+        const vendorId = prod.vendor_id ? parseInt(prod.vendor_id, 10) : null;
+        window.dispatchEvent(new CustomEvent('shahtaj-open-create-po', {
+            detail: {
+                vendorId: vendorId || null,
+                productId: prod.id,
+                productTmplId: prod.templateId || prod.id,
+                productName: prod.name,
+            }
+        }));
+        window.dispatchEvent(new CustomEvent('shahtaj-dashboard-switch', {
+            detail: { tab: 'financials', subTab: 'purchase_orders' }
+        }));
+    }
 
     get selectedProductStock() {
         if (!this.state.adjustmentForm.product_id) return 0;
@@ -457,17 +521,21 @@ export class WarehouseInventory extends Component {
     async saveAdjustment() {
         const pid = parseInt(this.state.adjustmentForm.product_id);
         const qty = parseFloat(this.state.adjustmentForm.qty);
+        const unitCost = this.state.adjustmentForm.unit_cost && parseFloat(this.state.adjustmentForm.unit_cost) > 0
+            ? parseFloat(this.state.adjustmentForm.unit_cost)
+            : null;
         
         if (pid && qty > 0) {
-            await this.orm.call("product.template", "action_shahtaj_add_on_hand_qty", [[pid], qty]);
-            // ADDED: Refresh dropdown and table
+            await this.orm.call("product.template", "action_shahtaj_add_on_hand_qty", [[pid], qty, unitCost]);
+            // Refresh dropdown and table
             await this.loadDropdownData();
             await this.fetchActiveList();
+            await this.refreshData();
         }
         this.notification.add(`Successfully added ${qty} units to the product stock.`, { type: "success" });
         
         this.state.showAdjustmentForm = false;
-        this.state.adjustmentForm = { product_id: '', qty: 0 };
+        this.state.adjustmentForm = { product_id: '', qty: 0, unit_cost: '' };
     }
 
     viewProductDetails(product) {
@@ -475,11 +543,19 @@ export class WarehouseInventory extends Component {
         if (product.taxes_id && product.taxes_id.length > 0) {
             currentTaxId = product.taxes_id[0].toString();
         }
+        let currentVendorId = "";
+        if (Array.isArray(product.shahtaj_vendor_id) && product.shahtaj_vendor_id.length > 0) {
+            currentVendorId = product.shahtaj_vendor_id[0].toString();
+        } else if (typeof product.shahtaj_vendor_id === 'number') {
+            currentVendorId = product.shahtaj_vendor_id.toString();
+        } else if (typeof product.shahtaj_vendor_id === 'string' && product.shahtaj_vendor_id) {
+            currentVendorId = product.shahtaj_vendor_id;
+        }
         
         this.state.currentProduct = {
             ...product,
             tax_id: currentTaxId,
-            on_hand_qty: product.qty_available || 0,
+            vendor_id: currentVendorId,
         };
         this.state.showProductDetails = true;
         this.state.showProductAddForm = false;
@@ -494,15 +570,15 @@ export class WarehouseInventory extends Component {
 
         this.state.isLoading = true;
         try {
-            const targetOnHand = parseFloat(this.state.currentProduct.on_hand_qty || 0);
+            // Note: standard_price (Cost Price) is intentionally excluded from manual edits
+            // as it is computed automatically via Weighted Average Cost (AVCO) from POs / receipts.
             const vals = {
                 name: this.state.currentProduct.name,
                 list_price: parseFloat(this.state.currentProduct.list_price || 0),
-                standard_price: parseFloat(this.state.currentProduct.standard_price || 0),
-                barcode: this.state.currentProduct.barcode,
+                barcode: this.state.currentProduct.barcode || false,
                 weight: parseFloat(this.state.currentProduct.weight || 0),
                 volume: parseFloat(this.state.currentProduct.volume || 0),
-                invoice_policy: this.state.currentProduct.invoice_policy,
+                invoice_policy: 'order',
                 type: this.state.currentProduct.type,
                 is_storable: !!this.state.currentProduct.is_storable,
                 shahtaj_sale_uom: this.state.currentProduct.shahtaj_sale_uom,
@@ -510,17 +586,17 @@ export class WarehouseInventory extends Component {
                 taxes_id: this.state.currentProduct.tax_id ? [[6, 0, [parseInt(this.state.currentProduct.tax_id, 10)]]] : [[5, 0, 0]],
             };
 
+            if (this.state.currentProduct.vendor_id && parseInt(this.state.currentProduct.vendor_id, 10)) {
+                vals.shahtaj_vendor_id = parseInt(this.state.currentProduct.vendor_id, 10);
+            } else {
+                vals.shahtaj_vendor_id = false;
+            }
+
             if (this.state.currentProduct.image_1920) {
                 vals.image_1920 = this.state.currentProduct.image_1920;
             }
 
             await this.orm.write("product.template", [this.state.currentProduct.id], vals);
-            if (this.state.currentProduct.is_storable) {
-                const currentOnHand = parseFloat(this.state.currentProduct.qty_available || 0);
-                if (targetOnHand !== currentOnHand) {
-                    await this.orm.call("product.template", "action_shahtaj_set_on_hand_qty", [[this.state.currentProduct.id], targetOnHand]);
-                }
-            }
             await this.refreshData();
             this.state.showProductDetails = false;
             this.state.currentProduct = null;

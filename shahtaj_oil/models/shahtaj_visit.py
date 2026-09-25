@@ -621,6 +621,19 @@ class ShahtajVisit(models.Model):
             )
             raise UserError(msg)
 
+        # Place Order reuses the successful check-in row. A second OK log would
+        # show up as a duplicate shop check-in (Check-in + Place Order).
+        if (
+            log_purpose == 'place_order'
+            and visit
+            and Attempt.search_count([
+                ('visit_id', '=', visit.id),
+                ('purpose', '=', 'check_in'),
+                ('result', '=', 'ok'),
+            ])
+        ):
+            return distance
+
         Attempt.log_attempt(
             result='ok',
             distance_m=distance,
@@ -889,6 +902,8 @@ class ShahtajVisit(models.Model):
         ])
         if gps_rows:
             gps_rows.write({'sale_order_id': order.id})
+        # Check-in created the GPS row. Placing the order updates that row's purpose.
+        self.env['shahtaj.gps.attempt'].promote_checkin_to_place_order(self, order)
         self._finish_visit('order')
         reasons_label = order.shahtaj_approval_reasons_display or _('none')
         log_msg = _(

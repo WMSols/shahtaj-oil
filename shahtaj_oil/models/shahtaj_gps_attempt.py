@@ -39,6 +39,7 @@ class ShahtajGpsAttempt(models.Model):
             ('check_in', 'Check-in'),
             ('place_order', 'Place Order'),
             ('deliver', 'Deliver to Shop'),
+            ('walk_in', 'Walk-in Delivery'),
         ],
         string='Purpose',
         required=True,
@@ -247,12 +248,79 @@ class ShahtajGpsAttempt(models.Model):
         self.invalidate_recordset(['create_date'])
 
     @api.model
+    def promote_checkin_to_place_order(self, visit, sale_order=None):
+        """One successful GPS row per booker visit.
+
+        Check-in creates the row with purpose ``check_in``. Placing the order
+        updates that same row to ``place_order`` and drops any extra OK
+        place-order row for the visit. Blocked attempts are left as-is.
+        """
+        visit = visit.sudo() if visit else visit
+        if not visit or visit.visit_kind == 'delivery_man':
+            return self.browse()
+        order = sale_order or visit.sale_order_id
+        checkins = self.sudo().search([
+            ('visit_id', '=', visit.id),
+            ('purpose', '=', 'check_in'),
+            ('result', '=', 'ok'),
+        ], order='id desc')
+        place_rows = self.sudo().search([
+            ('visit_id', '=', visit.id),
+            ('purpose', '=', 'place_order'),
+            ('result', '=', 'ok'),
+        ], order='id desc')
+        if not checkins and not place_rows:
+            return self.browse()
+        target = checkins[:1] or place_rows[:1]
+        latest_place = place_rows[:1]
+        vals = {'purpose': 'place_order'}
+        if order:
+            vals['sale_order_id'] = order.id
+        if visit.place_order_latitude or visit.place_order_longitude:
+            vals.update({
+                'attempt_latitude': visit.place_order_latitude or 0.0,
+                'attempt_longitude': visit.place_order_longitude or 0.0,
+                'distance_m': visit.place_order_distance_m or 0.0,
+            })
+        elif latest_place and latest_place != target:
+            vals.update({
+                'attempt_latitude': latest_place.attempt_latitude,
+                'attempt_longitude': latest_place.attempt_longitude,
+                'distance_m': latest_place.distance_m,
+                'message': latest_place.message,
+            })
+        target.write(vals)
+        (checkins - target).unlink()
+        (place_rows - target).unlink()
+        return target
+
+    @api.model
+    def collapse_placed_order_checkins(self):
+        """Merge existing Check-in + Place Order pairs into one Place Order row."""
+        visits = self.sudo().search([
+            ('result', '=', 'ok'),
+            ('purpose', 'in', ('check_in', 'place_order')),
+            ('visit_id', '!=', False),
+            ('visit_id.visit_kind', '!=', 'delivery_man'),
+        ]).mapped('visit_id')
+        for visit in visits:
+            has_place = self.sudo().search_count([
+                ('visit_id', '=', visit.id),
+                ('purpose', '=', 'place_order'),
+                ('result', '=', 'ok'),
+            ])
+            if visit.sale_order_id or has_place:
+                self.promote_checkin_to_place_order(visit, visit.sale_order_id)
+        return True
+
+    @api.model
     def backfill_from_existing_visits(self):
         """Create GPS log rows for visits that predate shahtaj.gps.attempt.
 
         Shop Check-ins only reads this model, so older successful check-ins
-        (and place-orders) would otherwise disappear after the GPS update.
-        Idempotent: skips visit+purpose pairs that already have a log row.
+        would otherwise disappear after the GPS update.
+        A booker visit that placed an order gets one Place Order row.
+        Idempotent: an existing row for that visit is reused, not duplicated.
         """
         Visit = self.env['shahtaj.visit'].sudo()
         limits = {}
@@ -312,6 +380,28 @@ class ShahtajGpsAttempt(models.Model):
             'dm_delivery_id': visit.dm_delivery_id.id if visit.dm_delivery_id else False,
             'company_id': company_id,
         }
+        booker_order = visit.visit_kind != 'delivery_man' and bool(
+            visit.sale_order_id
+            or visit.place_order_latitude
+            or visit.place_order_longitude
+            or visit.id in logged_place
+        )
+        if booker_order and (visit.id in logged_checkin or visit.id in logged_place):
+            self.promote_checkin_to_place_order(visit, visit.sale_order_id)
+            return created
+        if booker_order:
+            rec = self.sudo().create({
+                **base_vals,
+                'purpose': 'place_order',
+                'result': 'ok',
+                'attempt_latitude': visit.place_order_latitude or visit.check_in_latitude or 0.0,
+                'attempt_longitude': visit.place_order_longitude or visit.check_in_longitude or 0.0,
+                'distance_m': visit.place_order_distance_m or visit.check_in_distance_m or 0.0,
+                'message': 'Historical place-order (logged before GPS attempt tracking).',
+            })
+            rec._stamp_create_date(visit.ended_at or visit.started_at)
+            created |= rec
+            return created
         if visit.id not in logged_checkin:
             rec = self.sudo().create({
                 **base_vals,
@@ -323,21 +413,6 @@ class ShahtajGpsAttempt(models.Model):
                 'message': 'Historical check-in (logged before GPS attempt tracking).',
             })
             rec._stamp_create_date(visit.started_at)
-            created |= rec
-        if (
-            visit.id not in logged_place
-            and (visit.place_order_latitude or visit.place_order_longitude)
-        ):
-            rec = self.sudo().create({
-                **base_vals,
-                'purpose': 'place_order',
-                'result': 'ok',
-                'attempt_latitude': visit.place_order_latitude or 0.0,
-                'attempt_longitude': visit.place_order_longitude or 0.0,
-                'distance_m': visit.place_order_distance_m or 0.0,
-                'message': 'Historical place-order GPS (logged before GPS attempt tracking).',
-            })
-            rec._stamp_create_date(visit.ended_at or visit.started_at)
             created |= rec
         return created
 
