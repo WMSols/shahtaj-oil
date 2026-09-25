@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
+import { Component, useState, onWillStart, onWillUpdateProps, onWillUnmount } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { hasFinancialAccess, notifyPortalBusy } from "../../shahtaj_access";
 import { ConfirmModal } from "../confirm_modal";
@@ -133,6 +133,7 @@ export class PoManagement extends Component {
             }
             await this.loadLookups();
             await this.fetchActiveList();
+            await this._consumePendingPoPrefill();
         });
     }
 
@@ -208,7 +209,7 @@ export class PoManagement extends Component {
         this.fetchActiveList();
     }
     async fetchActiveList() {
-        if (!['invoices', 'expenses', 'credit'].includes(this.state.activeSubTab)) return;
+        if (!['invoices', 'expenses', 'credit', 'po_management'].includes(this.state.activeSubTab)) return;
         
         const tabMap = {
             'all_orders': { stateKey: 'allOrders', model: 'sale.order', fields: ["name", "partner_id", "date_order", "amount_total", "amount_untaxed", "state", "user_id", "payment_term_id", "pricelist_id", "shahtaj_visit_id", "invoice_status"] },
@@ -216,6 +217,10 @@ export class PoManagement extends Component {
             'customer_invoices': { stateKey: 'invoices', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"] },
             'credit_notes': { stateKey: 'creditNotes', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"] },
             'payments': { stateKey: 'payments', model: 'account.payment', fields: ["name", "partner_id", "date", "amount", "journal_id", "memo", "state", "shahtaj_payment_channel", "shahtaj_payer_bank_name", "shahtaj_payer_account_number", "shahtaj_instrument_reference", "shahtaj_payment_notes"] },
+            'purchase_orders': { stateKey: 'purchaseOrders', model: 'purchase.order', fields: ["name", "partner_id", "date_order", "date_planned", "amount_untaxed", "amount_tax", "amount_total", "state", "invoice_status", "currency_id"] },
+            'receipts': { stateKey: 'receipts', model: 'stock.picking', fields: this._receiptFields() },
+            'vendor_bills': { stateKey: 'vendorBills', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "invoice_origin", "move_type", "journal_id"] },
+            'vendors': { stateKey: 'vendors', model: 'res.partner', fields: ["name", "phone", "email", "street", "city", "supplier_rank", "active"] },
             'credit': { stateKey: 'credits', model: 'res.partner', fields: ["name", "owner_name", "shahtaj_shop_category", "credit_limit", "outstanding_balance"] },
             'expenses': { stateKey: 'expenses', model: 'shahtaj.expense', fields: ['name', 'date', 'category_id', 'description', 'amount', 'journal_id', 'partner_id', 'state', 'move_name'] },
             'categories': { stateKey: 'expenseCategories', model: 'shahtaj.expense.category', fields: ['name', 'sequence', 'active', 'note'] }
@@ -223,10 +228,11 @@ export class PoManagement extends Component {
 
         const config = this.state.activeSubTab === 'credit' 
             ? tabMap['credit'] 
-            : (this.state.activeSubTab === 'expenses' ? tabMap[this.state.expenseSubTab] : tabMap[this.state.invoiceSubTab]);
+            : (this.state.activeSubTab === 'expenses' ? tabMap[this.state.expenseSubTab] : (this.state.activeSubTab === 'po_management' ? tabMap[this.state.poSubTab] : tabMap[this.state.invoiceSubTab]));
         if (!config) return;
 
         this.state.isLoadingList = true;
+        notifyPortalBusy(true);
         try {
             const { stateKey, model, fields } = config;
             const pag = this.state.pagination[stateKey];
@@ -241,20 +247,40 @@ export class PoManagement extends Component {
             if (stateKey === 'invoices') domain.push(["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true]);
             if (stateKey === 'creditNotes') domain.push(["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]);
             if (stateKey === 'payments') domain.push(["partner_id.is_shahtaj_shop", "=", true]);
-            if (stateKey === 'credits') domain.push(["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]);
+            if (stateKey === 'purchaseOrders') domain.push(["partner_id.supplier_rank", ">", 0]);
+            if (stateKey === 'receipts') domain.push(...this._receiptsListDomain());
+            if (stateKey === 'vendorBills') domain.push(["move_type", "in", ["in_invoice", "in_refund"]]);
+            if (stateKey === 'vendors') {
+                domain.push(["supplier_rank", ">", 0], ["is_shahtaj_shop", "=", false]);
+                if (this.state.vendorViewMode === 'archived') {
+                    domain.push(["active", "=", false]);
+                } else {
+                    domain.push(["active", "=", true]);
+                }
+            }
+            if (stateKey === 'credits') {
+                domain.push(["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]);
+                if (this.state.creditSubView === 'risk') {
+                    domain.push(["shahtaj_shop_category", "=", "credit"]);
+                }
+                if (this.state.creditSubView === 'balances' && this.state.filters.credits.hasCreditLimit) {
+                    domain.push(["credit_limit", ">", 0]);
+                }
+            }
 
             if (filters.search) {
                 if (stateKey === 'credits') {
                     domain.push('|', ['name', 'ilike', filters.search], ['owner_name', 'ilike', filters.search]);
+                } else if (stateKey === 'vendors') {
+                    domain.push('|', '|', ['name', 'ilike', filters.search], ['phone', 'ilike', filters.search], ['email', 'ilike', filters.search]);
+                } else if (stateKey === 'receipts') {
+                    domain.push('|', '|', ['name', 'ilike', filters.search], ['origin', 'ilike', filters.search], ['partner_id.name', 'ilike', filters.search]);
                 } else {
                     domain.push('|', ['name', 'ilike', filters.search], ['partner_id.name', 'ilike', filters.search]);
                 }
             }
 
             if (filters.status && filters.status !== 'all') {
-                if (stateKey === 'credits') {
-                    if (filters.status === 'Cash') domain.push(['shahtaj_shop_category', '=', 'cash']);
-                }
                 if (stateKey === 'invoices' || stateKey === 'creditNotes') {
                     if (filters.status === 'Posted') domain.push(['state', '=', 'posted'], ['payment_state', 'in', ['not_paid']]);
                     if (filters.status === 'Paid' || filters.status === 'Paid/Reconciled') domain.push(['payment_state', 'in', ['paid', 'in_payment', 'reversed']]);
@@ -265,6 +291,24 @@ export class PoManagement extends Component {
                 if (stateKey === 'allOrders') {
                     if (filters.status === 'Confirmed') domain.push(['state', 'not in', ['draft', 'cancel']]);
                     if (filters.status === 'Draft') domain.push(['state', '=', 'draft']);
+                    if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
+                }
+                if (stateKey === 'purchaseOrders') {
+                    if (filters.status === 'Draft') domain.push(['state', 'in', ['draft', 'sent']]);
+                    if (filters.status === 'Confirmed') domain.push(['state', '=', 'purchase']);
+                    if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
+                    if (filters.status === 'To Bill') domain.push(['invoice_status', '=', 'to invoice']);
+                }
+                if (stateKey === 'receipts') {
+                    if (filters.status === 'Ready') domain.push(['state', 'in', ['assigned', 'confirmed', 'waiting']]);
+                    if (filters.status === 'Product Received') domain.push(['state', '=', 'done'], ['picking_type_code', '=', 'incoming']);
+                    if (filters.status === 'Returned') domain.push(['state', '=', 'done'], ['picking_type_code', '=', 'outgoing']);
+                    if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
+                }
+                if (stateKey === 'vendorBills') {
+                    if (filters.status === 'Draft') domain.push(['state', '=', 'draft']);
+                    if (filters.status === 'Posted') domain.push(['state', '=', 'posted'], ['payment_state', 'not in', ['paid', 'in_payment', 'reversed']]);
+                    if (filters.status === 'Paid') domain.push(['payment_state', 'in', ['paid', 'in_payment', 'reversed']]);
                     if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
                 }
             }
@@ -357,6 +401,25 @@ export class PoManagement extends Component {
                     notes: pay.shahtaj_payment_notes || "N/A",
                 }));
             }
+            else if (stateKey === 'purchaseOrders') {
+                this.state.purchaseOrders = records.map((po) => this._mapPurchaseOrder(po));
+            }
+            else if (stateKey === 'receipts') {
+                this.state.receipts = records.map((pick) => this._mapReceipt(pick));
+            }
+            else if (stateKey === 'vendorBills') {
+                this.state.vendorBills = records.map((bill) => this._mapVendorBill(bill));
+            }
+            else if (stateKey === 'vendors') {
+                this.state.vendors = records.map((vendor) => ({
+                    id: vendor.id,
+                    name: vendor.name,
+                    phone: vendor.phone || 'N/A',
+                    email: vendor.email || 'N/A',
+                    address: [vendor.street, vendor.city].filter(Boolean).join(', ') || 'No address provided',
+                    active: vendor.active !== false,
+                }));
+            }
             else if (stateKey === 'balances') {
                 this.state.balances = records.map((shop) => ({
                     id: shop.id, shopId: shop.id, shop: shop.name, owner: shop.owner_name || "N/A",
@@ -383,6 +446,7 @@ export class PoManagement extends Component {
             this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isLoadingList = false;
+            notifyPortalBusy(false);
         }
     }
     requestTabSwitch(tabName, subTabName) {
@@ -426,15 +490,29 @@ export class PoManagement extends Component {
         this.state.selectedPayment = null;
         this.state.selectedShop = null;
         this.state.selectedExpense = null;
+        this.state.selectedPurchaseOrder = null;
+        this.state.selectedPurchaseOrderLines = [];
+        this.state.selectedReceipt = null;
+        this.state.selectedReceiptLines = [];
+        this.state.selectedVendorBill = null;
+        this.state.selectedVendorBillLines = [];
+        this.state.selectedVendor = null;
+        this.state.showVendorForm = false;
+        this.state.showPurchaseOrderForm = false;
+        this.state.isEditingPO = false;
+        this.state.isEditingVendorBill = false;
         this.closePaymentModal();
         this.closeRefundModal();
+        this.closeReturnModal();
         if (this.closeExpenseMoveModal) {
             this.closeExpenseMoveModal();
         }
     }
     openPaymentModal() {
         const today = new Date().toISOString().split('T')[0];
-        const doc = this.state.selectedInvoice;
+        const doc = this.state.activeSubTab === 'po_management'
+            ? this.state.selectedVendorBill
+            : this.state.selectedInvoice;
         if (!doc) {
             return;
         }
@@ -476,7 +554,11 @@ export class PoManagement extends Component {
             
             await this.refreshFinancialLists(); 
             this.closePaymentModal();
-            await this._refreshSelectedInvoiceState(form.invoice_id);
+            if (this.state.activeSubTab === 'po_management') {
+                await this._reloadVendorBill(form.invoice_id);
+            } else {
+                await this._refreshSelectedInvoiceState(form.invoice_id);
+            }
             
         } catch (error) {
             this.notification.add(`Payment failed:\n\n${error.data?.message || error.message}`, { type: "danger" });

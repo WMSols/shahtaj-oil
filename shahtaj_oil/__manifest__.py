@@ -7,13 +7,13 @@
     'summary': 'Unified Command Center for Shahtaj Oil distributions, field booking, and SPA frontend',
     'author': 'WMsols',
     'depends': [
-        'base',
-        'web',
-        'contacts',
-        'sale',
-        'sale_stock',
-        'mail',
-        'account',
+        'base', 
+        'web', 
+        'contacts', 
+        'sale', 
+        'sale_stock', 
+        'mail', 
+        'account', 
         'stock',
         'purchase',
         'purchase_stock',
@@ -114,7 +114,7 @@
         'data/shahtaj_user_access_sync.xml',
 
         # ── 10. MENUS (ALWAYS LAST; includes distributor portal client action) ──
-        'views/menus.xml',
+        'views/menus.xml', # All combined Menus
         'views/shahtaj_api_test_menu.xml',
     ],
     'assets': {

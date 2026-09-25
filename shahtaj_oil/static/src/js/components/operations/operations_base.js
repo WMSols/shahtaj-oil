@@ -95,7 +95,6 @@ export class OperationsBase extends Component {
             saleOrderForm: this._emptySaleOrderForm(),
             ordersSubTab: 'live', // 'live' | 'verification'
             shopSnapshotOpen: false,
-            ordersSubTab: 'live',
             verificationCount: 0,
             isApprovingOrder: false,
             isProcessingOverride: false,
@@ -115,16 +114,6 @@ export class OperationsBase extends Component {
                 note: '',
                 actionType: 'approve',
             },
-            
-            itemsPerPage: 5,
-            
-            
-            selectedDelivery: null,
-
-            isCreatingInvoice: false,
-            isEditingDelivery: false,
-            allProducts: [], // To list all products in a dropdown
-            saleTaxes: [],   // To list all taxes in a dropdown
             // --- NEW: Custom Delivery Modal States ---
             showDeliveryModal: false,
             deliveryWizardId: null,
@@ -140,7 +129,7 @@ export class OperationsBase extends Component {
             searchTimeout: null,
             
             tableDeliveries: [], tableCheckins: [], tableOrders: [], tableVerification: [], tableSchedules: [], tableTargets: [],
-            lookupBookers: [], lookupTargetTypes: [],
+            lookupBookers: [], lookupFieldUsers: [], lookupTargetTypes: [],
             
             pagination: {
                 deliveries: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
@@ -165,7 +154,7 @@ export class OperationsBase extends Component {
                                 checkins: { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
                 orders: { search: '', status: '', booker: 'all' },
                 verification: { search: '', booker: 'all', reason: 'all' },
-                schedules: { booker: 'all', day: 'all' },
+                schedules: { booker: 'all', date: '' },
                 targets: { booker: 'all', type: 'all' },
             },
         });
@@ -206,9 +195,13 @@ export class OperationsBase extends Component {
         this.debouncedFetchActiveList = this.debounceSearch(() => this.fetchActiveList(), 400);
 
         onWillStart(async () => {
-            await this.loadDropdownData();
-            if (hasFinancialAccess()) await this.loadTaxAndProductData();
-            await this.fetchActiveList();
+            // Catalogs are large on production; do not block Live Orders on them.
+            await Promise.all([
+                this.loadDropdownData(),
+                this.fetchActiveList(),
+            ]);
+            this.loadSaleOrderCatalog();
+            if (hasFinancialAccess()) this.loadTaxAndProductData();
         });
 
         useEffect(() => {
@@ -293,60 +286,7 @@ export class OperationsBase extends Component {
         }, () => [this.checkinMapRef.el, this.state.selectedCheckin]);
     }
 
-    _gpsPurposeLabel(purpose) {
-        return ({ check_in: 'Check-in', place_order: 'Place Order', deliver: 'Deliver to Shop' })[purpose] || purpose || '—';
-    }
-
-    _gpsResultLabel(result) {
-        return ({
-            ok: 'GPS OK',
-            blocked_too_far: 'Blocked — Too Far',
-            blocked_too_close: 'Blocked — Too Close',
-            blocked_missing_shop_gps: 'Blocked — Shop GPS Missing',
-            blocked_missing_user_gps: 'Blocked — User GPS Missing',
-            blocked_invalid_coords: 'Blocked — Invalid Coordinates',
-        })[result] || result || 'Unknown';
-    }
-
-    _gpsStatusBadgeClass(result) {
-        if (result === 'ok') return 'bg-success text-white shadow-sm';
-        if (result === 'blocked_too_far' || result === 'blocked_too_close') return 'bg-danger text-white shadow-sm';
-        return 'bg-warning text-dark shadow-sm';
-    }
-
-    _gpsRoleLabel(role) {
-        return ({ order_booker: 'Order Booker', delivery_man: 'Delivery Man', other: 'Other' })[role] || role || '—';
-    }
-
-    _m2oId(value) {
-        if (!value) return false;
-        return Array.isArray(value) ? value[0] : value;
-    }
-
-    _formatRs(value) {
-        return `Rs. ${(parseFloat(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    }
-
-    _verificationLabel(state) {
-        return ({
-            none: 'Standard',
-            to_approve: 'Verification Required',
-            approved: 'Verified',
-            pending: 'Pending',
-            rejected: 'Rejected',
-        })[state] || 'Standard';
-    }
-
-    _mapSaleOrderRow(o, lines) {
-        const myLines = (lines || []).filter(l => l.order_id && l.order_id[0] === o.id);
-        const totalOrd = myLines.reduce((sum, l) => sum + l.product_uom_qty, 0);
-        const totalDel = myLines.reduce((sum, l) => sum + l.qty_delivered, 0);
-        let status = 'Draft';
-        if (o.shahtaj_approval_state === 'to_approve') status = 'Needs Verification';
-        else if (o.shahtaj_approval_state === 'rejected') status = 'Rejected';
-        else if (o.state === 'sale') status = o.invoice_status === 'invoiced' ? 'Invoiced' : 'To Invoice';
-        else if (o.state === 'done') status = 'Delivered';
-        else if (o.state === 'cancel') status = 'Cancelled';
+    _emptySaleOrderLine() {
         return {
             id: `new_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
             product_id: '',
@@ -358,99 +298,12 @@ export class OperationsBase extends Component {
         };
     }
 
-    _applyShopSnapshot(snap, target = null) {
-        const record = target || this.state.selectedCheckin;
-        if (!record || !snap) return;
-        record.shopCategory = snap.shopCategory || '';
-        record.creditLimit = snap.creditLimit || 0;
-        record.outstanding = snap.outstanding || 0;
-        record.pendingExposure = snap.pendingExposure || 0;
-        record.uninvoicedExposure = snap.uninvoicedExposure || 0;
-        record.effectiveOutstanding = snap.effectiveOutstanding || snap.outstanding || 0;
-        record.creditRemaining = snap.creditRemaining || 0;
-        record.creditWouldExceed = !!snap.creditWouldExceed;
-        record.creditShortfall = snap.creditShortfall || 0;
-        record.lifetimeSales = snap.lifetimeSales || 0;
-        record.confirmedOrderCount = snap.confirmedOrderCount || 0;
-        record.pastDiscountTotal = snap.pastDiscountTotal || 0;
-        record.pastDiscountCount = snap.pastDiscountCount || 0;
-        record.lastDiscountDate = snap.lastDiscountDate || '';
-        record.lastDiscountAmount = snap.lastDiscountAmount || 0;
-        record.paymentTerms = snap.paymentTerms || 'Immediate';
-        record.approvalState = snap.approvalState || 'none';
-        record.verificationLabel = this._verificationLabel(record.approvalState);
-    }
-
-    async _enrichCheckinRows(records) {
-        const visitIds = [...new Set(records.map((a) => this._m2oId(a.visit_id)).filter(Boolean))];
-        const taskIds = [...new Set(records.map((a) => this._m2oId(a.visit_task_id)).filter(Boolean))];
-        const visitsById = {};
-        const tasksById = {};
-        try {
-            if (visitIds.length) {
-                const visits = await this.orm.read(
-                    'shahtaj.visit',
-                    visitIds,
-                    ['notes', 'sale_order_id', 'outcome', 'state'],
-                );
-                visits.forEach((v) => { visitsById[v.id] = v; });
-            }
-            if (taskIds.length) {
-                const tasks = await this.orm.read('shahtaj.visit.task', taskIds, ['notes']);
-                tasks.forEach((t) => { tasksById[t.id] = t; });
-            }
-        } catch (_error) {
-            // List still renders GPS rows if visit/task notes cannot be read.
-        }
-        return { visitsById, tasksById };
-    }
-
-    async _loadCheckinShopSnapshot(checkin) {
-        if (!checkin || !checkin.shopId) return;
-        try {
-            const partners = await this.orm.read(
-                'res.partner',
-                [checkin.shopId],
-                ['shahtaj_shop_category', 'credit_limit', 'outstanding_balance', 'property_payment_term_id', 'shop_approval_state'],
-            );
-            if (!partners.length) return;
-            const p = partners[0];
-            let lifetimeSales = 0;
-            let confirmedOrderCount = 0;
-            try {
-                const orders = await this.orm.searchRead(
-                    'sale.order',
-                    [['partner_id', '=', checkin.shopId], ['state', 'in', ['sale', 'done']]],
-                    ['amount_total'],
-                    { limit: 500 },
-                );
-                confirmedOrderCount = orders.length;
-                lifetimeSales = orders.reduce((sum, o) => sum + (o.amount_total || 0), 0);
-            } catch (_err) {
-                // Credit snapshot still useful without sales history.
-            }
-            const creditLimit = p.credit_limit || 0;
-            const outstanding = p.outstanding_balance || 0;
-            this._applyShopSnapshot({
-                shopCategory: p.shahtaj_shop_category || 'credit',
-                creditLimit,
-                outstanding,
-                effectiveOutstanding: outstanding,
-                creditRemaining: Math.max(creditLimit - outstanding, 0),
-                creditWouldExceed: p.shahtaj_shop_category === 'credit' && creditLimit > 0 && outstanding > creditLimit,
-                creditShortfall: Math.max(outstanding - creditLimit, 0),
-                lifetimeSales,
-                confirmedOrderCount,
-                paymentTerms: p.property_payment_term_id ? p.property_payment_term_id[1] : 'Immediate',
-                approvalState: p.shop_approval_state === 'approved' ? 'approved' : (p.shop_approval_state || 'none'),
-            }, this.state.selectedCheckin);
-        } catch (error) {
-            this.notification.add("Could not load shop snapshot: " + (error.data?.message || error.message), { type: "warning" });
-        }
-    }
-
-    toggleShopSnapshot() {
-        this.state.shopSnapshotOpen = !this.state.shopSnapshotOpen;
+    _emptySaleOrderForm() {
+        return {
+            partner_id: '',
+            date_order: this.todayStr,
+            lines: [this._emptySaleOrderLine()],
+        };
     }
     // --- UNIVERSAL PAGINATION HANDLERS ---
     onSearchInput(ev, tabName) {
@@ -605,15 +458,25 @@ export class OperationsBase extends Component {
     }
 
     /**
-     * Odoo weekday key for today in Pakistan: '0' Monday … '6' Sunday.
+     * Odoo weekday key for a Pakistan calendar date: '0' Monday … '6' Sunday.
      */
-    _pktTodayWeekday() {
-        const weekday = new Date().toLocaleDateString('en-US', {
+    _pktWeekdayForDate(dateStr) {
+        const date = dateStr
+            ? new Date(`${dateStr}T12:00:00+05:00`)
+            : new Date();
+        const weekday = date.toLocaleDateString('en-US', {
             timeZone: 'Asia/Karachi',
             weekday: 'short',
         }).slice(0, 3);
         const map = { Mon: '0', Tue: '1', Wed: '2', Thu: '3', Fri: '4', Sat: '5', Sun: '6' };
         return map[weekday] || '0';
+    }
+
+    /**
+     * Odoo weekday key for today in Pakistan: '0' Monday … '6' Sunday.
+     */
+    _pktTodayWeekday() {
+        return this._pktWeekdayForDate(this.todayStr);
     }
 
     /**
@@ -1103,6 +966,7 @@ export class OperationsBase extends Component {
         }
         
         this.state.isLoadingList = true;
+        notifyPortalBusy(true);
         try {
             const pag = this.state.pagination[tab];
             const filters = this.state.filters[tab] || {};
@@ -1114,20 +978,29 @@ export class OperationsBase extends Component {
             let domain = []; let model = ''; let fields = []; let targetState = '';
 
             // 1. DOMAIN MAPPINGS
-            if (tab === 'deliveries' || tab === 'orders' || tab === 'verification') {
+            if (tab === 'deliveries' || tab === 'dispatch' || tab === 'orders' || tab === 'verification') {
                 model = 'sale.order';
-                targetState = tab === 'deliveries' ? 'tableDeliveries' : (tab === 'verification' ? 'tableVerification' : 'tableOrders');
-                fields = ["name", "partner_id", "user_id", "date_order", "amount_total","amount_tax", "state", "order_line", "invoice_status"];
-                if (tab !== 'deliveries') {
+                targetState = tab === 'deliveries' ? 'tableDeliveries' : (tab === 'dispatch' ? 'tableDispatch' : (tab === 'verification' ? 'tableVerification' : 'tableOrders'));
+                fields = ["name", "partner_id", "user_id", "date_order", "amount_total", "amount_tax", "amount_untaxed", "state", "order_line", "invoice_status", "invoice_ids"];
+                if (tab === 'dispatch') {
+                    fields.push("shahtaj_delivery_status", "shahtaj_qty_to_deliver", "shahtaj_dm_delivery_count");
+                }
+                if (tab !== 'deliveries' && tab !== 'dispatch') {
+                    // Stored fields only. Credit/history snapshot fields are computed
+                    // and stall this list on a production database — load them in viewOrder.
                     fields.push(
                         "shahtaj_approval_state", "shahtaj_approval_reason_discount", "shahtaj_approval_reason_credit",
                         "shahtaj_approval_reasons_display", "shahtaj_catalog_amount_total", "shahtaj_total_discount_amount",
                         "shahtaj_discount_reasons",
                     );
                 }
-                domain.push(['shahtaj_visit_id', '!=', false]);
+                domain.push('|', ['shahtaj_visit_id', '!=', false], ['partner_id.is_shahtaj_shop', '=', true]);
                 
                 if (tab === 'deliveries') domain.push(['state', 'in', ['sale', 'done']]);
+                if (tab === 'dispatch') {
+                    domain.push(['state', 'in', ['sale', 'done']]);
+                    domain.push(['shahtaj_delivery_status', 'in', ['pending', 'partial']]);
+                }
                 if (tab === 'verification') {
                     domain.push(['shahtaj_approval_state', '=', 'to_approve']);
                     domain.push(['state', 'in', ['draft', 'sent']]);
@@ -1150,6 +1023,7 @@ export class OperationsBase extends Component {
                     else if (filters.status === 'Delivered') domain.push(['state', '=', 'done']);
                     else if (filters.status === 'To Invoice') domain.push(['state', '=', 'sale'], ['invoice_status', '!=', 'invoiced']);
                     else if (filters.status === 'Invoiced') domain.push(['invoice_status', '=', 'invoiced']);
+                    else if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
                 }
             } 
             else if (tab === 'dm_jobs') {
@@ -1217,7 +1091,7 @@ export class OperationsBase extends Component {
                     'shop_id', 'shop_latitude', 'shop_longitude',
                     'attempt_latitude', 'attempt_longitude',
                     'distance_m', 'min_distance_m', 'max_distance_m',
-                    'visit_task_id', 'visit_id', 'sale_order_id',
+                    'visit_task_id', 'visit_id', 'dm_delivery_id', 'sale_order_id',
                 ];
                 if (filters.search) {
                     domain.push('|', '|',
@@ -1233,6 +1107,7 @@ export class OperationsBase extends Component {
                     domain.push(['create_date', '<=', bounds.end]);
                 }
                 if (filters.purpose && filters.purpose !== 'all') domain.push(['purpose', '=', filters.purpose]);
+                if (filters.role && filters.role !== 'all') domain.push(['role', '=', filters.role]);
                 if (filters.status === 'ok') domain.push(['result', '=', 'ok']);
                 else if (filters.status === 'blocked') domain.push(['result', '!=', 'ok']);
                 else if (filters.status === 'blocked_too_far') domain.push(['result', '=', 'blocked_too_far']);
@@ -1243,9 +1118,9 @@ export class OperationsBase extends Component {
             }
             else if (tab === 'schedules') {
                 model = 'shahtaj.weekly.schedule'; targetState = 'tableSchedules';
-                fields = ['id', 'name', 'day_of_week', 'route_id', 'zone_id', 'active', 'shop_count', 'week_tasks_planned', 'week_tasks_completed', 'week_tasks_skipped', 'week_tasks_progress', 'week_occurrence_date', 'order_booker_id'];
+                fields = ['id', 'name', 'day_of_week', 'route_id', 'zone_id', 'active', 'shop_count', 'order_booker_id'];
                 if (filters.booker !== 'all') domain.push(['order_booker_id', '=', parseInt(filters.booker)]);
-                if (filters.day !== 'all') domain.push(['day_of_week', '=', filters.day]);
+                if (filters.date) domain.push(['day_of_week', '=', this._pktWeekdayForDate(filters.date)]);
             }
             else if (tab === 'targets') {
                 model = 'shahtaj.visit.target'; targetState = 'tableTargets';
@@ -1306,7 +1181,7 @@ export class OperationsBase extends Component {
             this.state.pagination[tab].total = total;
 
             // 3. MAP RESULTS
-            if (tab === 'deliveries' || tab === 'orders' || tab === 'verification') {
+            if (tab === 'deliveries' || tab === 'dispatch' || tab === 'orders' || tab === 'verification') {
                 const orderIds = records.map(o => o.id);
                 const [lines, postedOrderIds] = await Promise.all([
                     orderIds.length ? this.orm.searchRead("sale.order.line", [["order_id", "in", orderIds]], ["order_id", "product_uom_qty", "qty_delivered"]) : Promise.resolve([]),
@@ -1369,7 +1244,7 @@ export class OperationsBase extends Component {
                     const job = jobsById[this._m2oId(a.dm_delivery_id)] || null;
                     const task = tasksById[this._m2oId(a.visit_task_id)] || null;
                     const saleOrder = a.sale_order_id || (visit && visit.sale_order_id) || false;
-                    const hasOrder = Boolean(this._m2oId(saleOrder));
+                    const outcome = this._gpsCheckinOutcome(a, Boolean(this._m2oId(saleOrder)));
                     const notes = ((visit && visit.notes) || (task && task.notes) || '').trim();
                     const timing = this._checkinTiming(visit, job);
                     return {
@@ -1396,12 +1271,14 @@ export class OperationsBase extends Component {
                         shop_longitude: a.shop_longitude || 0,
                         attempt_latitude: a.attempt_latitude || 0,
                         attempt_longitude: a.attempt_longitude || 0,
-                        taskRef: a.visit_task_id ? a.visit_task_id[1] : (saleOrder ? saleOrder[1] : '—'),
+                        taskRef: a.visit_task_id ? a.visit_task_id[1] : (a.dm_delivery_id ? a.dm_delivery_id[1] : (saleOrder ? saleOrder[1] : '—')),
                         visit_id: a.visit_id || false,
                         visit_task_id: a.visit_task_id || false,
+                        dm_delivery_id: a.dm_delivery_id || false,
                         sale_order_id: saleOrder,
-                        hasOrder,
-                        orderLabel: hasOrder ? 'Order Placed' : 'No Order',
+                        isDeliveryCheckin: outcome.isDeliveryCheckin,
+                        hasOrder: outcome.hasOrder,
+                        orderLabel: outcome.orderLabel,
                         notes,
                         endTime: timing.endTime,
                         duration: timing.duration,
@@ -1410,13 +1287,25 @@ export class OperationsBase extends Component {
                 });
             }
             else if (tab === 'schedules') {
+                const dateStr = filters.date || '';
+                const stats = await this._loadScheduleProgressForDate(records, dateStr);
                 const dayMap = { '0': 'Monday', '1': 'Tuesday', '2': 'Wednesday', '3': 'Thursday', '4': 'Friday', '5': 'Saturday', '6': 'Sunday' };
-                this.state.tableSchedules = records.map(r => ({
-                    id: r.id, name: r.name, bookerId: r.order_booker_id ? r.order_booker_id[0] : null, bookerName: r.order_booker_id ? r.order_booker_id[1] : 'Unknown',
-                    day_raw: r.day_of_week, day: dayMap[r.day_of_week] || r.day_of_week, route: r.route_id ? r.route_id[1] : 'Unassigned', zone: r.zone_id ? r.zone_id[1] : 'Unassigned',
-                    shops: r.shop_count, active: r.active, planned: r.week_tasks_planned, done: r.week_tasks_completed, skipped: r.week_tasks_skipped || 0,
-                    progress: r.week_tasks_progress || 0, occurrenceDate: r.week_occurrence_date || ''
-                })).sort((a, b) => this._compareSchedulesByToday(a, b, this._pktTodayWeekday()));
+                const rows = records.map(r => {
+                    const bookerId = r.order_booker_id ? r.order_booker_id[0] : null;
+                    const routeId = r.route_id ? r.route_id[0] : null;
+                    const rowStats = stats[`${bookerId || 0}:${routeId || 0}`] || { planned: 0, done: 0, skipped: 0 };
+                    const progress = rowStats.planned ? (rowStats.done / rowStats.planned * 100) : 0;
+                    return {
+                        id: r.id, name: r.name, bookerId, bookerName: r.order_booker_id ? r.order_booker_id[1] : 'Unknown',
+                        day_raw: r.day_of_week, day: dayMap[r.day_of_week] || r.day_of_week, route: r.route_id ? r.route_id[1] : 'Unassigned', zone: r.zone_id ? r.zone_id[1] : 'Unassigned',
+                        shops: r.shop_count, active: r.active, planned: rowStats.planned, done: rowStats.done, skipped: rowStats.skipped,
+                        progress, occurrenceDate: dateStr,
+                    };
+                });
+                if (!dateStr) {
+                    rows.sort((a, b) => this._compareSchedulesByToday(a, b, this._pktTodayWeekday()));
+                }
+                this.state.tableSchedules = rows;
             }
             else if (tab === 'targets') {
                 this.state.tableTargets = records.map(r => ({
@@ -1432,11 +1321,11 @@ export class OperationsBase extends Component {
                 } else {
                     try {
                         this.state.verificationCount = await this.orm.searchCount('sale.order', [
-                            ['shahtaj_visit_id', '!=', false],
+                            '|', ['shahtaj_visit_id', '!=', false], ['partner_id.is_shahtaj_shop', '=', true],
                             ['shahtaj_approval_state', '=', 'to_approve'],
                             ['state', 'in', ['draft', 'sent']],
                         ]);
-                    } catch (_error) {
+                    } catch (error) {
                         this.state.verificationCount = 0;
                     }
                 }
@@ -1445,6 +1334,7 @@ export class OperationsBase extends Component {
             this.notification.add("Failed to fetch data: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isLoadingList = false;
+            notifyPortalBusy(false);
         }
     }
     async refreshData() {
@@ -1554,14 +1444,31 @@ export class OperationsBase extends Component {
             return;
         }
         if (!this.state.selectedDelivery || this.state.isCreatingInvoice) return;
-        
-        // Temporarily hijack the selectedOrder state so we can reuse your existing createInvoice function
-        this.state.selectedOrder = this.state.selectedDelivery;
-        await this.createInvoice();
-        
-        // Refresh the delivery view to hide the invoice button
-        await this.viewDelivery(this.state.selectedDelivery);
-        this.state.selectedOrder = null; // Clean up
+        this.state.isCreatingInvoice = true;
+        try {
+            await this.invoiceSaleOrder(this.state.selectedDelivery.odoo_id);
+            this.notification.add("Invoice created and posted. You can assign a delivery man.", { type: "success" });
+            await this.viewDelivery(this.state.selectedDelivery);
+            await this.fetchActiveList();
+        } catch (error) {
+            this.notification.add(error.data?.message || "Failed to create invoice.", { type: "danger" });
+        } finally {
+            this.state.isCreatingInvoice = false;
+        }
+    }
+
+    async createInvoiceFromDispatch(row) {
+        if (!this.canCreateInvoice(row) || this.state.isCreatingInvoice) return;
+        this.state.isCreatingInvoice = true;
+        try {
+            await this.invoiceSaleOrder(row.odoo_id);
+            this.notification.add("Invoice created and posted. You can assign a delivery man.", { type: "success" });
+            await this.fetchActiveList();
+        } catch (error) {
+            this.notification.add(error.data?.message || "Failed to create invoice.", { type: "danger" });
+        } finally {
+            this.state.isCreatingInvoice = false;
+        }
     }
 
    async loadTaxAndProductData() {
@@ -1717,6 +1624,12 @@ export class OperationsBase extends Component {
     }
     // --- CUSTOM DELIVERY MODAL LOGIC ---
     async openDeliveryCustom(orderId) {
+        const rows = [...this.state.tableDispatch, ...this.state.tableDeliveries, ...this.state.tableOrders];
+        const row = rows.find((r) => r.odoo_id === orderId) || this.state.selectedDelivery || this.state.selectedOrder;
+        if (row && (row.status === "Cancelled" || row.orderState === "cancel")) {
+            this.notification.add("Cancelled orders cannot be delivered.", { type: "warning" });
+            return;
+        }
         try {
             const wizardIds = await this.orm.create("shahtaj.mark.delivery.wizard", [{}], {
                 context: { active_id: orderId }
@@ -2515,22 +2428,8 @@ export class OperationsBase extends Component {
             // Reset filters and pagination for the tab being entered so the UI
             // and the backend query are always in sync after a tab switch.
             this._resetTabFilters(tabName);
-            if (tabName === 'orders') {
-                this.state.ordersSubTab = 'live';
-                this.state.showRejectModal = false;
-                this.state.showCreditOverride = false;
-            }
         }
 
-        this.fetchActiveList();
-    }
-    setOrdersSubTab(tabName) {
-        this.state.ordersSubTab = tabName;
-        this.state.selectedOrder = null;
-        this.state.showRejectModal = false;
-        this.state.showCreditOverride = false;
-        this.state.isProcessingOverride = false;
-        this._resetTabFilters(tabName === 'verification' ? 'verification' : 'orders');
         this.fetchActiveList();
     }
     setPerfSubTab(tabName) {
@@ -2552,7 +2451,7 @@ export class OperationsBase extends Component {
                         checkins:   { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
             orders:     { search: '', status: '', booker: 'all' },
             verification: { search: '', booker: 'all', reason: 'all' },
-            schedules:  { booker: 'all', day: 'all' },
+            schedules:  { booker: 'all', date: '' },
             targets:    { booker: 'all', type: 'all' },
         };
         if (defaultFilters[tabName]) {
@@ -2614,7 +2513,9 @@ export class OperationsBase extends Component {
     // --- ORDER ACTIONS (EXISTING) ---
     async viewOrder(order) { 
         // 1. Assign to state FIRST to wrap it in Owl's reactive proxy
-        this.state.selectedOrder = order; 
+        this.state.selectedOrder = order;
+        this.state.shopSnapshotOpen = false;
+        await this._refreshPostedInvoiceFlag(this.state.selectedOrder, order.odoo_id);
         
         // FIX: Initialize the contact fields so the "Loading..." check triggers the DB fetch
         if (!this.state.selectedOrder.phone) {
@@ -2627,7 +2528,7 @@ export class OperationsBase extends Component {
             const lines = await this.orm.searchRead(
                 "sale.order.line",
                 [["id", "in", this.state.selectedOrder.line_ids]],
-                ["name", "product_uom_qty", "product_uom_id", "price_unit", "price_subtotal", "tax_ids", "shahtaj_catalog_price", "shahtaj_has_discount", "shahtaj_discount_reason"] 
+                ["name", "product_uom_qty", "product_uom_id", "price_unit", "price_subtotal", "tax_ids", "shahtaj_catalog_price", "shahtaj_has_discount", "shahtaj_unit_discount", "shahtaj_total_discount", "shahtaj_discount_reason"] 
             );
             
             // 2. Assign strictly to the reactive proxy so the UI repaints instantly
@@ -2644,6 +2545,8 @@ export class OperationsBase extends Component {
                     price: l.price_unit.toLocaleString(undefined, {minimumFractionDigits: 2}),
                     catalogPrice: (l.shahtaj_catalog_price || l.price_unit).toLocaleString(undefined, {minimumFractionDigits: 2}),
                     hasDiscount: !!l.shahtaj_has_discount,
+                    unitDiscount: (l.shahtaj_unit_discount || 0).toLocaleString(undefined, {minimumFractionDigits: 2}),
+                    totalDiscount: (l.shahtaj_total_discount || 0).toLocaleString(undefined, {minimumFractionDigits: 2}),
                     discountReason: l.shahtaj_discount_reason || '',
                     taxes: taxNames || 'None',
                     subtotal: l.price_subtotal.toLocaleString(undefined, {minimumFractionDigits: 2})
@@ -2665,34 +2568,34 @@ export class OperationsBase extends Component {
                 this.state.selectedOrder.address = [p.street, p.city].filter(Boolean).join(', ') || 'No address provided';
             }
         }
-        if (this.state.selectedOrder.odoo_id && this.state.selectedOrder.approvalState === 'to_approve') {
+
+        if (this.state.selectedOrder.odoo_id) {
             try {
-                const snaps = await this.orm.read('sale.order', [this.state.selectedOrder.odoo_id], [
-                    'shahtaj_shop_credit_limit', 'shahtaj_shop_outstanding', 'shahtaj_shop_credit_remaining',
-                    'shahtaj_shop_credit_shortfall', 'shahtaj_shop_effective_outstanding', 'shahtaj_shop_category',
-                    'shahtaj_catalog_amount_total', 'shahtaj_total_discount_amount', 'shahtaj_discount_reasons',
-                    'shahtaj_approval_reason_discount', 'shahtaj_approval_reason_credit',
-                ]);
-                if (snaps.length) {
-                    const s = snaps[0];
-                    this.state.selectedOrder.creditLimit = s.shahtaj_shop_credit_limit || 0;
-                    this.state.selectedOrder.outstanding = s.shahtaj_shop_outstanding || 0;
-                    this.state.selectedOrder.creditRemaining = s.shahtaj_shop_credit_remaining || 0;
-                    this.state.selectedOrder.creditShortfall = s.shahtaj_shop_credit_shortfall || 0;
-                    this.state.selectedOrder.effectiveOutstanding = s.shahtaj_shop_effective_outstanding || 0;
-                    this.state.selectedOrder.shopCategory = s.shahtaj_shop_category || '';
-                    this.state.selectedOrder.catalogTotal = this._formatRs(s.shahtaj_catalog_amount_total);
-                    this.state.selectedOrder.discountAmount = this._formatRs(s.shahtaj_total_discount_amount);
-                    this.state.selectedOrder.rawDiscountAmount = s.shahtaj_total_discount_amount || 0;
-                    this.state.selectedOrder.discountReasons = s.shahtaj_discount_reasons || '';
-                    this.state.selectedOrder.needsDiscount = !!s.shahtaj_approval_reason_discount;
-                    this.state.selectedOrder.needsCredit = !!s.shahtaj_approval_reason_credit;
-                    this.state.selectedOrder.rawAmount = this.state.selectedOrder.rawAmount || 0;
+                const snaps = await this.orm.read(
+                    "sale.order",
+                    [this.state.selectedOrder.odoo_id],
+                    [
+                        "shahtaj_shop_category", "shahtaj_shop_credit_limit", "shahtaj_shop_outstanding",
+                        "shahtaj_shop_pending_exposure", "shahtaj_shop_uninvoiced_exposure",
+                        "shahtaj_shop_effective_outstanding", "shahtaj_shop_credit_remaining",
+                        "shahtaj_shop_credit_would_exceed", "shahtaj_shop_credit_shortfall",
+                        "shahtaj_shop_lifetime_sales", "shahtaj_shop_confirmed_order_count",
+                        "shahtaj_shop_past_discount_total", "shahtaj_shop_past_discount_count",
+                        "shahtaj_shop_last_discount_date", "shahtaj_shop_last_discount_amount",
+                        "payment_term_id", "shahtaj_approval_state",
+                    ]
+                );
+                if (snaps && snaps.length) {
+                    this._applyShopSnapshot(snaps[0]);
                 }
-            } catch (_error) {
-                // Review screen still usable without the credit snapshot.
+            } catch (error) {
+                this.notification.add("Could not load shop snapshot: " + (error.data?.message || error.message), { type: "warning" });
             }
         }
+    }
+
+    toggleShopSnapshot() {
+        this.state.shopSnapshotOpen = !this.state.shopSnapshotOpen;
     }
     
     closeOrder() {
@@ -2828,152 +2731,36 @@ export class OperationsBase extends Component {
                 if (onConfirmCallback) await onConfirmCallback();
             },
         };
-        let visitId = this._m2oId(log.visit_id);
-        const taskId = this._m2oId(log.visit_task_id);
-        try {
-            if (!visitId && taskId) {
-                const found = await this.orm.searchRead(
-                    'shahtaj.visit',
-                    [['visit_task_id', '=', taskId]],
-                    ['started_at', 'ended_at', 'outcome', 'state', 'sale_order_id', 'notes'],
-                    { limit: 1, order: 'id desc' },
-                );
-                if (found.length) visitId = found[0].id;
-            }
-            if (visitId) {
-                const visits = await this.orm.read(
-                    'shahtaj.visit',
-                    [visitId],
-                    ['started_at', 'ended_at', 'outcome', 'state', 'sale_order_id', 'notes'],
-                );
-                if (visits.length && this.state.selectedCheckin && this.state.selectedCheckin.id === log.id) {
-                    const v = visits[0];
-                    let visitOutcome = v.outcome || '';
-                    if (v.state === 'in_progress') visitOutcome = 'In Progress';
-                    else if (v.state === 'completed' && v.outcome === 'incomplete') visitOutcome = 'Incomplete / Auto-Skipped';
-                    else if (v.state === 'completed') visitOutcome = v.outcome === 'order' ? 'Order Placed' : 'No Order';
-                    else if (v.state === 'cancelled') visitOutcome = 'Cancelled';
-
-                    let durationStr = '';
-                    if (v.started_at && v.ended_at) {
-                        durationStr = `${Math.round((new Date(v.ended_at.replace(' ', 'T') + 'Z') - new Date(v.started_at.replace(' ', 'T') + 'Z')) / 60000)} mins`;
-                    }
-
-                    const visitNotes = (v.notes || '').trim();
-                    if (visitNotes) this.state.selectedCheckin.notes = visitNotes;
-                    this.state.selectedCheckin.sale_order_id = v.sale_order_id || this.state.selectedCheckin.sale_order_id || false;
-                    this.state.selectedCheckin.hasOrder = Boolean(this._m2oId(this.state.selectedCheckin.sale_order_id));
-                    this.state.selectedCheckin.orderLabel = this.state.selectedCheckin.hasOrder ? 'Order Placed' : 'No Order';
-                    this.state.selectedCheckin.endTime = this.formatUtcToPkt(v.ended_at) || '';
-                    this.state.selectedCheckin.visitOutcome = visitOutcome;
-                    if (durationStr) {
-                        this.state.selectedCheckin.duration = durationStr;
-                    }
-                }
-            }
-            if (!(this.state.selectedCheckin.notes || '').trim() && taskId) {
-                const tasks = await this.orm.read('shahtaj.visit.task', [taskId], ['notes']);
-                if (tasks.length && (tasks[0].notes || '').trim()) {
-                    this.state.selectedCheckin.notes = tasks[0].notes.trim();
-                }
-            }
-        } catch (error) {
-            // GPS detail still useful without visit enrichment.
-        }
-        await this._loadCheckinShopSnapshot(this.state.selectedCheckin);
-    }
-    closeCheckin() {
-        this.state.selectedCheckin = null;
-        this.state.shopSnapshotOpen = false;
     }
 
-    async viewOrderFromCheckin(log) {
-        if (!log.sale_order_id) return;
-        
-        try {
-            const orders = await this.orm.searchRead(
-                "sale.order",
-                [["id", "=", log.sale_order_id[0]]],
-                ["name", "partner_id", "user_id", "date_order", "amount_total","amount_tax", "state", "order_line", "invoice_status"]
-            );
-
-            if (orders.length > 0) {
-                const o = orders[0];
-                const lines = o.order_line.length ? await this.orm.searchRead("sale.order.line", [["order_id", "=", o.id]], ["product_uom_qty", "qty_delivered"]) : [];
-                const totalOrd = lines.reduce((sum, l) => sum + l.product_uom_qty, 0);
-                const totalDel = lines.reduce((sum, l) => sum + l.qty_delivered, 0);
-                
-                let status = 'Draft';
-                if (o.state === 'sale') status = o.invoice_status === 'invoiced' ? 'Invoiced' : 'To Invoice';
-                else if (o.state === 'done') status = 'Delivered';
-
-                const targetOrder = {
-                    odoo_id: o.id, id: o.name, shop: o.partner_id ? o.partner_id[1] : 'Unknown', partner_id: o.partner_id,
-                    booker: o.user_id ? o.user_id[1] : 'Unknown', date: o.date_order ? o.date_order.split(" ")[0] : 'Unknown', items: o.order_line.length,
-                    total: `Rs. ${o.amount_total.toLocaleString(undefined, {minimumFractionDigits: 2})}`,
-                    tax: `Rs. ${(o.amount_tax || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`,
-                    status: status, invoice_status: o.invoice_status,
-                    is_fully_delivered: totalOrd > 0 && totalDel >= totalOrd, line_ids: o.order_line, lines: [] 
-                };
-
-                // 1. Activate the protection flag so data isn't wiped by the incoming sub-tab change
-                this._preserveDetailsOnSwitch = true;
-
-                // 2. Dispatch event to update parent sidebar smoothly
-                window.dispatchEvent(new CustomEvent('shahtaj-dashboard-switch', {
-                    detail: { tab: 'operations', subTab: 'orders' }
-                }));
-
-                // 3. Open the specific order details directly
-                await this.viewOrder(targetOrder);
-            }
-        } catch (error) {
-            this.notification.add("Failed to load order: " + (error.data?.message || error.message), { type: "danger" });
-        }
+    closeConfirm() {
+        this.state.confirmModal.isOpen = false;
     }
 
-   async createInvoice() {
-        if (!hasFinancialAccess()) {
-            return;
-        }
-        if (!this.state.selectedOrder || this.state.isCreatingInvoice) return;
-        this.state.isCreatingInvoice = true;
-        
-        try {
-            // Use Odoo's native invoice generation wizard
-            const context = { active_model: 'sale.order', active_ids: [this.state.selectedOrder.odoo_id] };
-            const wizardIds = await this.orm.create("sale.advance.payment.inv", [{ advance_payment_method: 'delivered' }], { context });
-            await this.orm.call("sale.advance.payment.inv", "create_invoices", [wizardIds], { context });
-            
-            this.notification.add(`Draft invoice generated successfully.`, {
-                title: "Success",
-                type: "success",
-            });
+    requestCancelOrder(row) {
+        if (!this.canCancelOrder(row) || this.state.isCancellingOrder) return;
+        this.showConfirm(
+            "Cancel Order",
+            `Cancel ${row.id}? Cancelled orders cannot be invoiced or delivered.`,
+            () => this.cancelLiveOrder(row),
+        );
+    }
 
-            // Update local state to reflect the new status
-            this.state.selectedOrder.invoice_status = 'invoiced';
-            this.state.selectedOrder.status = 'Invoiced'; 
-            
-            // Refresh the background data
+    async cancelLiveOrder(row) {
+        if (!this.canCancelOrder(row) || this.state.isCancellingOrder) return;
+        this.state.isCancellingOrder = true;
+        try {
+            await this.orm.call("sale.order", "action_shahtaj_cancel_order", [[row.odoo_id]]);
+            this.notification.add("Order cancelled. It cannot be invoiced or delivered.", { type: "success" });
+            if (this.state.selectedOrder && this.state.selectedOrder.odoo_id === row.odoo_id) {
+                this.state.selectedOrder = null;
+            }
             await this.fetchActiveList();
-
         } catch (error) {
-            this.notification.add(error.data?.message || "Failed to create invoice.", {
-                title: "Action Failed",
-                type: "danger",
-            });
+            this.notification.add(error.data?.message || "Failed to cancel order.", { type: "danger" });
         } finally {
-            this.state.isCreatingInvoice = false;
+            this.state.isCancellingOrder = false;
         }
-    }
-    openDeliveryWizard(orderId) {
-        this.action.doAction("shahtaj_oil.action_shahtaj_mark_delivery_wizard", {
-            additionalContext: { active_id: orderId },
-            onClose: async () => {
-                // Refresh the lists when the wizard closes
-                await this.fetchActiveList();
-            }
-        });
     }
 
     openRejectModal() {
