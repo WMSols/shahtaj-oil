@@ -39,3 +39,15 @@ body.o_shahtaj_custom_portal .o_user_menu {
 body.o_shahtaj_custom_portal .o_user_menu .oe_topbar_name {
     display: none !important;
 }
+
+.shahtaj-assign-close {
+    color: #334155;
+    background: #f1f5f9;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.shahtaj-assign-close:hover,
+.shahtaj-assign-close:focus-visible {
+    background: #e11d48 !important;
+    color: #fff !important;
+}

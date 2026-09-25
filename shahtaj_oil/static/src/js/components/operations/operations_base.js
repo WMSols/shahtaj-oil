@@ -1816,6 +1816,77 @@ export class OperationsBase extends Component {
         return { rows, message, messageClass, messageStrong };
     }
 
+    _stockProgressLabel(state) {
+        return ({
+            not_ready: "Waiting Invoice",
+            ready: "Ready to Pick",
+            picked: "Loaded on Van",
+            partial: "Part Delivered",
+            delivered: "Delivered",
+            returned: "Returned to WH",
+        })[state] || "—";
+    }
+
+    _stopProgressLabel(state) {
+        return ({
+            pending: "Not Started",
+            in_transit: "Heading to Shop",
+            not_attended: "Shop Closed",
+            failed: "Could Not Deliver",
+            done: "Stop Done",
+        })[state] || "—";
+    }
+
+    get assignDeliveryProgress() {
+        const saved = (this.state.assignModal.jobs || []).filter((job) => job.existingJobId);
+        if (!saved.length) {
+            return { empty: true, jobs: [], products: [] };
+        }
+        const jobs = saved.map((job) => {
+            const lines = job.lines || [];
+            return {
+                id: job.id,
+                dm: job.deliveryManName || "—",
+                assigned: this._formatAssignQty(lines.reduce((sum, line) => sum + (Number(line.qtyAssigned) || 0), 0)),
+                picked: this._formatAssignQty(lines.reduce((sum, line) => sum + (Number(line.qtyPicked) || 0), 0)),
+                delivered: this._formatAssignQty(lines.reduce((sum, line) => sum + (Number(line.qtyDelivered) || 0), 0)),
+                stock: this._stockProgressLabel(job.stockState),
+                stop: this._stopProgressLabel(job.fieldState),
+            };
+        });
+        const products = (saved[0].lines || []).map((line) => {
+            let assigned = 0;
+            let picked = 0;
+            let delivered = 0;
+            const perDm = [];
+            for (const job of saved) {
+                const match = (job.lines || []).find((row) => row.saleOrderLineId === line.saleOrderLineId);
+                if (!match) continue;
+                const qtyAssigned = Number(match.qtyAssigned) || 0;
+                const qtyPicked = Number(match.qtyPicked) || 0;
+                const qtyDelivered = Number(match.qtyDelivered) || 0;
+                assigned += qtyAssigned;
+                picked += qtyPicked;
+                delivered += qtyDelivered;
+                if (qtyAssigned || qtyPicked || qtyDelivered) {
+                    perDm.push(
+                        `${job.deliveryManName || "—"}: A ${this._formatAssignQty(qtyAssigned)} / P ${this._formatAssignQty(qtyPicked)} / D ${this._formatAssignQty(qtyDelivered)}`,
+                    );
+                }
+            }
+            return {
+                id: line.saleOrderLineId,
+                product: line.product,
+                ordered: this._formatAssignQty(line.qtyOrdered),
+                assigned: this._formatAssignQty(assigned),
+                picked: this._formatAssignQty(picked),
+                delivered: this._formatAssignQty(delivered),
+                perDm: perDm.join("; ") || "—",
+            };
+        });
+        return { empty: false, jobs, products };
+    }
+
     optionId(id) {
         return id === false || id === null || id === undefined || id === "" ? "" : String(id);
     }
@@ -1888,12 +1959,12 @@ export class OperationsBase extends Component {
             ? await this.orm.read(
                 "shahtaj.dm.assign.wizard.line",
                 allLineIds,
-                ["id", "sale_order_line_id", "product_id", "qty_ordered", "qty_assigned"],
+                ["id", "sale_order_line_id", "product_id", "qty_ordered", "qty_assigned", "qty_picked", "qty_delivered"],
             )
             : [];
         const existingIds = jobs.map((j) => j.existing_job_id && j.existing_job_id[0]).filter(Boolean);
         const existingRecs = existingIds.length
-            ? await this.orm.read("shahtaj.dm.delivery", existingIds, ["id", "state", "delivery_man_id"])
+            ? await this.orm.read("shahtaj.dm.delivery", existingIds, ["id", "state", "field_state", "delivery_man_id"])
             : [];
         const existingById = Object.fromEntries(existingRecs.map((e) => [e.id, e]));
         const linesById = Object.fromEntries(lineRecs.map((l) => [l.id, l]));
@@ -1907,9 +1978,12 @@ export class OperationsBase extends Component {
             const lockedStates = ["picked", "partial", "delivered", "returned"];
             return {
                 id: j.id,
+                existingJobId: existingId || false,
                 deliveryManId: dm ? String(Array.isArray(dm) ? dm[0] : dm) : "",
                 deliveryManName: Array.isArray(dm) ? (dm[1] || "") : "",
                 scheduledDate: j.scheduled_date || this.todayStr,
+                stockState: existing ? existing.state : "",
+                fieldState: existing ? existing.field_state : "",
                 canRemove: !existing || !lockedStates.includes(existing.state),
                 lines: (j.line_ids || []).map((lid) => {
                     const l = linesById[lid] || {};
@@ -1919,6 +1993,8 @@ export class OperationsBase extends Component {
                         product: l.product_id ? l.product_id[1] : "Product",
                         qtyOrdered: l.qty_ordered || 0,
                         qtyAssigned: l.qty_assigned || 0,
+                        qtyPicked: l.qty_picked || 0,
+                        qtyDelivered: l.qty_delivered || 0,
                     };
                 }),
             };
