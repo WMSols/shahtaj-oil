@@ -152,7 +152,7 @@ export class OperationsBase extends Component {
                 collections: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
                 settlements: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
                                 checkins: { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
-                orders: { search: '', status: '', booker: 'all' },
+                orders: { search: '', status: '', booker: 'all', walkIn: false },
                 verification: { search: '', booker: 'all', reason: 'all' },
                 schedules: { booker: 'all', date: '' },
                 targets: { booker: 'all', type: 'all' },
@@ -317,6 +317,11 @@ export class OperationsBase extends Component {
         this.fetchActiveList(); 
     }
 
+    onOrdersWalkInToggle(ev) {
+        this.state.filters.orders.walkIn = ev.target.checked;
+        this.onFilterChange('orders');
+    }
+
     changePage(tabName, direction) {
         const pag = this.state.pagination[tabName];
         const newPage = pag.page + direction;
@@ -376,7 +381,7 @@ export class OperationsBase extends Component {
     }
 
     _gpsPurposeLabel(purpose) {
-        return ({ check_in: 'Check-in', place_order: 'Place Order', deliver: 'Deliver to Shop' })[purpose] || purpose || '—';
+        return ({ check_in: 'Check-in', place_order: 'Place Order', deliver: 'Deliver to Shop', walk_in: 'Walk In' })[purpose] || purpose || '—';
     }
 
     _gpsResultLabel(result) {
@@ -944,6 +949,7 @@ export class OperationsBase extends Component {
             effectiveOutstanding: o.shahtaj_shop_effective_outstanding || 0,
             pastDiscountCount: o.shahtaj_shop_past_discount_count || 0,
             status: status,
+            isWalkIn: !!o.shahtaj_is_walk_in,
             invoice_status: o.invoice_status,
             orderState: o.state,
             hasPostedInvoice: false,
@@ -981,7 +987,7 @@ export class OperationsBase extends Component {
             if (tab === 'deliveries' || tab === 'dispatch' || tab === 'orders' || tab === 'verification') {
                 model = 'sale.order';
                 targetState = tab === 'deliveries' ? 'tableDeliveries' : (tab === 'dispatch' ? 'tableDispatch' : (tab === 'verification' ? 'tableVerification' : 'tableOrders'));
-                fields = ["name", "partner_id", "user_id", "date_order", "amount_total", "amount_tax", "amount_untaxed", "state", "order_line", "invoice_status", "invoice_ids"];
+                fields = ["name", "partner_id", "user_id", "date_order", "amount_total", "amount_tax", "amount_untaxed", "state", "order_line", "invoice_status", "invoice_ids", "shahtaj_is_walk_in"];
                 if (tab === 'dispatch') {
                     fields.push("shahtaj_delivery_status", "shahtaj_qty_to_deliver", "shahtaj_dm_delivery_count");
                 }
@@ -994,7 +1000,17 @@ export class OperationsBase extends Component {
                         "shahtaj_discount_reasons",
                     );
                 }
-                domain.push('|', ['shahtaj_visit_id', '!=', false], ['partner_id.is_shahtaj_shop', '=', true]);
+                if (tab === 'orders' && filters.walkIn) {
+                    domain.push(['shahtaj_is_walk_in', '=', true]);
+                } else if (tab === 'orders') {
+                    domain.push('|', '|',
+                        ['shahtaj_visit_id', '!=', false],
+                        ['partner_id.is_shahtaj_shop', '=', true],
+                        ['shahtaj_is_walk_in', '=', true],
+                    );
+                } else {
+                    domain.push('|', ['shahtaj_visit_id', '!=', false], ['partner_id.is_shahtaj_shop', '=', true]);
+                }
                 
                 if (tab === 'deliveries') domain.push(['state', 'in', ['sale', 'done']]);
                 if (tab === 'dispatch') {
@@ -2525,7 +2541,7 @@ export class OperationsBase extends Component {
             collections:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
             settlements:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
                         checkins:   { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
-            orders:     { search: '', status: '', booker: 'all' },
+            orders:     { search: '', status: '', booker: 'all', walkIn: false },
             verification: { search: '', booker: 'all', reason: 'all' },
             schedules:  { booker: 'all', date: '' },
             targets:    { booker: 'all', type: 'all' },

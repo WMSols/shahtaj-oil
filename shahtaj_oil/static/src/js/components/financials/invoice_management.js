@@ -62,7 +62,7 @@ export class InvoiceManagement extends Component {
             filters: {
                 allOrders: { search: "", status: "all", shop: "all", dateFrom: "", dateTo: "" },
                 orders: { search: "", shop: "all", dateFrom: "", dateTo: "" },
-                invoices: { search: "", status: "all", shop: "all", dateFrom: "", dateTo: "" },
+                invoices: { search: "", status: "all", shop: "all", dateFrom: "", dateTo: "", walkIn: false },
                 creditNotes: { search: "", status: "all", shop: "all", dateFrom: "", dateTo: "" },
                 payments: { search: "", shop: "all", dateFrom: "", dateTo: "" },
             },
@@ -166,6 +166,11 @@ export class InvoiceManagement extends Component {
         this.fetchActiveList(); // Dropdowns don't need debouncing, fetch immediately
     }
 
+    onInvoicesWalkInToggle(ev) {
+        this.state.filters.invoices.walkIn = ev.target.checked;
+        this.onFilterChange('invoices');
+    }
+
     async ensureInvoiceShopLookup() {
         if (this.state.invoiceShops.length) {
             return;
@@ -253,7 +258,7 @@ export class InvoiceManagement extends Component {
         const tabMap = {
             'all_orders': { stateKey: 'allOrders', model: 'sale.order', fields: ["name", "partner_id", "date_order", "amount_total", "amount_untaxed", "state", "user_id", "payment_term_id", "pricelist_id", "shahtaj_visit_id", "invoice_status"] },
             'orders': { stateKey: 'orders', model: 'sale.order', fields: ["name", "partner_id", "date_order", "amount_total", "amount_untaxed", "state", "user_id", "payment_term_id", "pricelist_id", "shahtaj_visit_id", "invoice_status"] },
-            'customer_invoices': { stateKey: 'invoices', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"] },
+            'customer_invoices': { stateKey: 'invoices', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id", "shahtaj_is_walk_in"] },
             'credit_notes': { stateKey: 'creditNotes', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"] },
             'payments': { stateKey: 'payments', model: 'account.payment', fields: ["name", "partner_id", "date", "amount", "journal_id", "memo", "state", "shahtaj_payment_channel", "shahtaj_payer_bank_name", "shahtaj_payer_account_number", "shahtaj_instrument_reference", "shahtaj_payment_notes"] },
             'purchase_orders': { stateKey: 'purchaseOrders', model: 'purchase.order', fields: ["name", "partner_id", "date_order", "date_planned", "amount_untaxed", "amount_tax", "amount_total", "state", "invoice_status", "currency_id"] },
@@ -283,7 +288,14 @@ export class InvoiceManagement extends Component {
             
             if (stateKey === 'allOrders') domain.push(["shahtaj_visit_id", "!=", false]);
             if (stateKey === 'orders') domain.push(["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]);
-            if (stateKey === 'invoices') domain.push(["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true]);
+            if (stateKey === 'invoices') {
+                domain.push(["move_type", "in", ["out_invoice"]]);
+                if (filters.walkIn) {
+                    domain.push(["shahtaj_is_walk_in", "=", true]);
+                } else {
+                    domain.push("|", ["partner_id.is_shahtaj_shop", "=", true], ["shahtaj_is_walk_in", "=", true]);
+                }
+            }
             if (stateKey === 'creditNotes') domain.push(["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]);
             if (stateKey === 'payments') domain.push(["partner_id.is_shahtaj_shop", "=", true]);
             if (stateKey === 'purchaseOrders') domain.push(["partner_id.supplier_rank", ">", 0]);
@@ -410,6 +422,7 @@ export class InvoiceManagement extends Component {
                         date: inv.invoice_date || "Not set", amount: (inv.amount_total || 0).toLocaleString(),
                         residual: (inv.amount_residual || 0).toLocaleString(), rawResidual: inv.amount_residual !== undefined ? inv.amount_residual : inv.amount_total,
                         status, journal_id: inv.journal_id ? inv.journal_id[0] : false,
+                        isWalkIn: !!inv.shahtaj_is_walk_in,
                     };
                 });
             }
@@ -520,7 +533,7 @@ export class InvoiceManagement extends Component {
             const records = await this.orm.searchRead(
                 "account.move", 
                 [["id", "=", invoiceId]], 
-                ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"]
+                ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id", "shahtaj_is_walk_in"]
             );
             
             if (records.length > 0) {
@@ -546,6 +559,7 @@ export class InvoiceManagement extends Component {
                     rawResidual: inv.amount_residual !== undefined ? inv.amount_residual : inv.amount_total,
                     status: status, 
                     journal_id: inv.journal_id ? inv.journal_id[0] : false,
+                    isWalkIn: !!inv.shahtaj_is_walk_in,
                 };
                 
                 // Automatically pipe it into viewInvoice to fetch the lines and restore the UI

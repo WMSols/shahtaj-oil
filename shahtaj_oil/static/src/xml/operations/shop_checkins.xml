@@ -60,6 +60,7 @@
                         <option value="check_in">Check-in</option>
                         <option value="place_order">Place Order</option>
                         <option value="deliver">Deliver to Shop</option>
+                        <option value="walk_in">Walk In</option>
                     </select>
                     <select class="form-select form-select-sm" style="max-width: 180px;"
                             t-model="this.state.filters.checkins.role"

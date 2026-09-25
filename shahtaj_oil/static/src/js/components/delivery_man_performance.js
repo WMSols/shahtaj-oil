@@ -4,6 +4,8 @@ import { Component, useState, onWillStart } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { notifyPortalBusy } from "../shahtaj_access";
 
+const DONE_STATES = ["delivered", "returned"];
+
 export class DeliveryManPerformance extends Component {
     setup() {
         this.orm = useService("orm");
@@ -12,21 +14,18 @@ export class DeliveryManPerformance extends Component {
         this.todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
         const ITEMS_PER_PAGE = 50;
         this.state = useState({
-            dateFrom: "",
-            dateTo: "",
+            date: this.todayStr,
             isLoading: false,
             rows: [],
             selectedDm: null,
-            todayTasks: [],
-            weekTasks: [],
-            taskTab: "today",
+            jobs: [],
             pagination: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
             deliveryMen: [],
             filters: { search: "", dm: "all" },
             searchTimeout: null,
         });
 
-        this.debouncedFetch = (...args) => {
+        this.debouncedFetch = () => {
             clearTimeout(this.state.searchTimeout);
             this.state.searchTimeout = setTimeout(() => this.fetchProgress(), 400);
         };
@@ -36,27 +35,8 @@ export class DeliveryManPerformance extends Component {
         });
     }
 
-    _weekBounds() {
-        const d = new Date(`${this.todayStr}T00:00:00`);
-        const day = d.getDay();
-        const mondayOffset = day === 0 ? -6 : 1 - day;
-        const monday = new Date(d);
-        monday.setDate(d.getDate() + mondayOffset);
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-        const fmt = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
-        return [fmt(monday), fmt(sunday)];
-    }
-
     dateDomain(field = "scheduled_date") {
-        const domain = [];
-        if (this.state.dateFrom) domain.push([field, ">=", this.state.dateFrom]);
-        if (this.state.dateTo) domain.push([field, "<=", this.state.dateTo]);
-        return domain;
-    }
-
-    get hasDateFilter() {
-        return !!(this.state.dateFrom || this.state.dateTo);
+        return [[field, "=", this.state.date || this.todayStr]];
     }
 
     _userDomain() {
@@ -84,14 +64,41 @@ export class DeliveryManPerformance extends Component {
         }
     }
 
-    _countMap(groups) {
+    _countByDm(groups) {
         const map = {};
-        for (const g of groups || []) {
-            const id = Array.isArray(g.delivery_man_id) ? g.delivery_man_id[0] : g.delivery_man_id;
+        for (const group of groups || []) {
+            const id = Array.isArray(group.delivery_man_id) ? group.delivery_man_id[0] : group.delivery_man_id;
             if (!id) continue;
-            map[id] = g.delivery_man_id_count || g.__count || 0;
+            map[id] = (map[id] || 0) + (group.__count || group.delivery_man_id_count || 0);
         }
         return map;
+    }
+
+    async _jobStats(userIds) {
+        const stats = {};
+        if (!userIds.length) return stats;
+        const domain = [
+            ["delivery_man_id", "in", userIds],
+            ...this.dateDomain("scheduled_date"),
+        ];
+        const groupBy = ["delivery_man_id"];
+        const [assignedGroups, doneGroups] = await Promise.all([
+            this.orm.call("shahtaj.dm.delivery", "read_group", [domain, ["delivery_man_id"], groupBy]),
+            this.orm.call("shahtaj.dm.delivery", "read_group", [
+                domain.concat([["state", "in", DONE_STATES]]),
+                ["delivery_man_id"],
+                groupBy,
+            ]),
+        ]);
+        const assigned = this._countByDm(assignedGroups);
+        const done = this._countByDm(doneGroups);
+        for (const id of userIds) {
+            stats[id] = {
+                assigned: assigned[id] || 0,
+                done: done[id] || 0,
+            };
+        }
+        return stats;
     }
 
     async fetchProgress() {
@@ -102,8 +109,6 @@ export class DeliveryManPerformance extends Component {
             const domain = this._userDomain();
             const fields = [
                 "id", "name", "shahtaj_employee_code", "shahtaj_online_status",
-                "shahtaj_task_today_total", "shahtaj_task_today_done",
-                "shahtaj_week_task_total", "shahtaj_week_task_done", "shahtaj_week_task_progress",
             ];
             const [total, users] = await Promise.all([
                 this.orm.searchCount("res.users", domain),
@@ -114,43 +119,24 @@ export class DeliveryManPerformance extends Component {
                 }),
             ]);
             this.state.pagination.total = total;
-
-            let rangeTotal = {};
-            let rangeDone = {};
-            if (this.hasDateFilter && users.length) {
-                const ids = users.map((u) => u.id);
-                const base = [
-                    ["delivery_man_id", "in", ids],
-                    ["task_kind", "=", "delivery_man"],
-                    ["state", "!=", "cancelled"],
-                    ...this.dateDomain("scheduled_date"),
-                ];
-                const [allGroups, doneGroups] = await Promise.all([
-                    this.orm.call("shahtaj.visit.task", "read_group", [base, ["delivery_man_id"], ["delivery_man_id"]]),
-                    this.orm.call("shahtaj.visit.task", "read_group", [base.concat([["state", "=", "completed"]]), ["delivery_man_id"], ["delivery_man_id"]]),
-                ]);
-                rangeTotal = this._countMap(allGroups);
-                rangeDone = this._countMap(doneGroups);
-            }
-
-            this.state.rows = users.map((u) => {
-                const weekTotal = this.hasDateFilter ? (rangeTotal[u.id] || 0) : (u.shahtaj_week_task_total || 0);
-                const weekDone = this.hasDateFilter ? (rangeDone[u.id] || 0) : (u.shahtaj_week_task_done || 0);
-                const weekPct = weekTotal ? (weekDone / weekTotal) * 100 : (u.shahtaj_week_task_progress || 0);
+            const stats = await this._jobStats(users.map((user) => user.id));
+            this.state.rows = users.map((user) => {
+                const bucket = stats[user.id] || { assigned: 0, done: 0 };
+                const pending = Math.max(bucket.assigned - bucket.done, 0);
+                const progress = bucket.assigned ? (bucket.done / bucket.assigned) * 100 : 0;
                 return {
-                    id: u.id,
-                    name: u.name,
-                    code: u.shahtaj_employee_code || "",
-                    status: u.shahtaj_online_status || "offline",
-                    todayTotal: u.shahtaj_task_today_total || 0,
-                    todayDelivered: u.shahtaj_task_today_done || 0,
-                    weekTotal,
-                    weekDone,
-                    weekPct,
+                    id: user.id,
+                    name: user.name,
+                    code: user.shahtaj_employee_code || "",
+                    status: user.shahtaj_online_status || "offline",
+                    assigned: bucket.assigned,
+                    done: bucket.done,
+                    pending,
+                    progress,
                 };
             });
         } catch (error) {
-            this.notification.add("Failed to load visit progress: " + (error.data?.message || error.message), { type: "danger" });
+            this.notification.add("Failed to load delivery progress: " + (error.data?.message || error.message), { type: "danger" });
             this.state.rows = [];
         } finally {
             this.state.isLoading = false;
@@ -160,58 +146,39 @@ export class DeliveryManPerformance extends Component {
 
     async openDm(row) {
         this.state.selectedDm = row;
-        this.state.taskTab = "today";
-        await this.fetchDmTasks();
+        await this.fetchDmJobs();
     }
 
     closeDm() {
         this.state.selectedDm = null;
-        this.state.todayTasks = [];
-        this.state.weekTasks = [];
+        this.state.jobs = [];
     }
 
-    _mapTask(t) {
-        return {
-            id: t.id,
-            date: t.scheduled_date || "—",
-            shop: t.shop_id ? t.shop_id[1] : "—",
-            route: t.route_id ? t.route_id[1] : "—",
-            state: t.state,
-        };
-    }
-
-    async fetchDmTasks() {
+    async fetchDmJobs() {
         if (!this.state.selectedDm) return;
         this.state.isLoading = true;
         try {
-            const dmId = this.state.selectedDm.id;
-            const base = [
-                ["delivery_man_id", "=", dmId],
-                ["task_kind", "=", "delivery_man"],
-                ["state", "!=", "cancelled"],
-            ];
-            let todayDomain;
-            let weekDomain;
-            if (this.hasDateFilter) {
-                const ranged = [...base, ...this.dateDomain("scheduled_date")];
-                todayDomain = [...ranged, ["scheduled_date", "=", this.todayStr]];
-                weekDomain = ranged;
-            } else {
-                const [weekStart, weekEnd] = this._weekBounds();
-                todayDomain = [...base, ["scheduled_date", "=", this.todayStr]];
-                weekDomain = [...base, ["scheduled_date", ">=", weekStart], ["scheduled_date", "<=", weekEnd]];
-            }
-            const fields = ["id", "scheduled_date", "shop_id", "route_id", "state"];
-            const [todayTasks, weekTasks] = await Promise.all([
-                this.orm.searchRead("shahtaj.visit.task", todayDomain, fields, { order: "scheduled_date desc, id desc", limit: 200 }),
-                this.orm.searchRead("shahtaj.visit.task", weekDomain, fields, { order: "scheduled_date desc, id desc", limit: 200 }),
-            ]);
-            this.state.todayTasks = todayTasks.map((t) => this._mapTask(t));
-            this.state.weekTasks = weekTasks.map((t) => this._mapTask(t));
+            const jobs = await this.orm.searchRead(
+                "shahtaj.dm.delivery",
+                [
+                    ["delivery_man_id", "=", this.state.selectedDm.id],
+                    ...this.dateDomain("scheduled_date"),
+                ],
+                ["id", "sale_order_id", "partner_id", "scheduled_date", "state", "field_state", "is_walk_in"],
+                { order: "scheduled_date desc, id desc", limit: 200 },
+            );
+            this.state.jobs = jobs.map((job) => ({
+                id: job.id,
+                order: job.sale_order_id ? job.sale_order_id[1] : "—",
+                shop: job.partner_id ? job.partner_id[1] : "—",
+                date: job.scheduled_date || "—",
+                state: job.state || "",
+                fieldState: job.field_state || "",
+                isWalkIn: !!job.is_walk_in,
+            }));
         } catch (error) {
-            this.notification.add("Failed to load tasks: " + (error.data?.message || error.message), { type: "danger" });
-            this.state.todayTasks = [];
-            this.state.weekTasks = [];
+            this.notification.add("Failed to load deliveries: " + (error.data?.message || error.message), { type: "danger" });
+            this.state.jobs = [];
         } finally {
             this.state.isLoading = false;
         }
@@ -238,8 +205,9 @@ export class DeliveryManPerformance extends Component {
     }
 
     refreshActive() {
+        if (!this.state.date) this.state.date = this.todayStr;
         this.state.pagination.page = 1;
-        if (this.state.selectedDm) return this.fetchDmTasks();
+        if (this.state.selectedDm) return this.fetchDmJobs();
         return this.fetchProgress();
     }
 
@@ -257,15 +225,45 @@ export class DeliveryManPerformance extends Component {
         return map[status] || status || "—";
     }
 
-    taskStateLabel(state) {
-        const map = { pending: "Pending", in_progress: "In progress", completed: "Completed", skipped: "Skipped", cancelled: "Cancelled" };
-        return map[state] || state || "—";
+    statusClass(status) {
+        if (status === "online") return "bg-success text-white";
+        if (status === "away") return "bg-warning text-dark";
+        return "bg-secondary text-white";
     }
 
-    taskStateClass(state) {
-        if (state === "completed") return "bg-success text-white";
-        if (state === "in_progress") return "bg-info text-white";
-        if (state === "pending") return "bg-warning text-dark";
+    stockLabel(state) {
+        return ({
+            not_ready: "Waiting Invoice",
+            ready: "Ready to Pick",
+            picked: "Loaded on Van",
+            partial: "Part Delivered",
+            delivered: "Delivered",
+            returned: "Returned to WH",
+        })[state] || state || "—";
+    }
+
+    stockClass(state) {
+        if (state === "delivered") return "bg-success text-white";
+        if (state === "returned") return "bg-danger text-white";
+        if (state === "picked" || state === "partial") return "bg-warning text-dark";
+        if (state === "ready") return "bg-info text-white";
+        return "bg-light text-dark";
+    }
+
+    stopLabel(state) {
+        return ({
+            pending: "Not Started",
+            in_transit: "Heading to Shop",
+            not_attended: "Shop Closed",
+            failed: "Could Not Deliver",
+            done: "Stop Done",
+        })[state] || state || "—";
+    }
+
+    stopClass(state) {
+        if (state === "done") return "bg-success text-white";
+        if (state === "in_transit") return "bg-info text-white";
+        if (state === "not_attended" || state === "failed") return "bg-warning text-dark";
         return "bg-light text-dark";
     }
 }
