@@ -94,6 +94,7 @@ export class FieldReports extends Component {
             selected: null,
             thread: [],
             draft: "",
+            closingRemark: "",
             screenshotName: "",
             filters: { search: "", state: "all", role: "all" },
             form: this._emptyForm(),
@@ -117,8 +118,6 @@ export class FieldReports extends Component {
             description: "",
             tagIds: [],
             screenshot: "",
-            latitude: "",
-            longitude: "",
         };
     }
 
@@ -181,11 +180,6 @@ export class FieldReports extends Component {
             hour: "numeric",
             minute: "2-digit",
         });
-    }
-
-    formatCoord(value) {
-        const number = Number(value || 0);
-        return number.toFixed(7);
     }
 
     screenshotSrc(value) {
@@ -297,6 +291,7 @@ export class FieldReports extends Component {
         this.state.selected = null;
         this.state.thread = [];
         this.state.draft = "";
+        this.state.closingRemark = "";
         this.loadReports();
     }
 
@@ -340,12 +335,6 @@ export class FieldReports extends Component {
         if (form.screenshot) {
             vals.screenshot = form.screenshot;
         }
-        if (form.latitude !== "" && form.latitude !== null) {
-            vals.latitude = Number(form.latitude);
-        }
-        if (form.longitude !== "" && form.longitude !== null) {
-            vals.longitude = Number(form.longitude);
-        }
         this.state.isSaving = true;
         try {
             const ids = await this.orm.create("shahtaj.field.report", [vals]);
@@ -367,13 +356,14 @@ export class FieldReports extends Component {
                 [id],
                 [
                     "name", "subject", "description", "state", "tag_ids", "user_id",
-                    "reporter_role", "create_date", "device_info", "latitude", "longitude",
-                    "screenshot", "closed_at", "closed_by_id",
+                    "reporter_role", "create_date", "device_info",
+                    "screenshot", "closed_at", "closed_by_id", "closing_remark",
                 ]
             );
             this.state.selected = report;
             this.state.mode = "detail";
             this.state.draft = "";
+            this.state.closingRemark = report.closing_remark || "";
             await this.loadThread();
         } catch (error) {
             this.notification.add(error.data?.message || error.message || "Could not open the report.", { type: "danger" });
@@ -438,13 +428,34 @@ export class FieldReports extends Component {
         });
     }
 
+    isClosed(report) {
+        const state = report && report.state;
+        return state === "done" || state === "cancelled";
+    }
+
     async runAction(method) {
         const report = this.state.selected;
         if (!report || this.state.isSaving) {
             return;
         }
+        const closing = method === "action_mark_done" || method === "action_mark_cancelled";
+        const remark = (this.state.closingRemark || "").trim();
+        if (closing && !remark) {
+            this.notification.add(
+                method === "action_mark_done"
+                    ? "Enter a Closing Remark on the report form, then click Mark Done."
+                    : "Enter a Closing Remark on the report form, then click Cancel.",
+                { type: "warning" }
+            );
+            return;
+        }
         this.state.isSaving = true;
         try {
+            if (closing) {
+                await this.orm.write("shahtaj.field.report", [report.id], {
+                    closing_remark: remark,
+                });
+            }
             await this.orm.call("shahtaj.field.report", method, [[report.id]]);
             await this.openReport(report.id);
         } catch (error) {
