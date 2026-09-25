@@ -80,7 +80,6 @@ export class TerritoryBase extends Component {
             tableAreas: [],
             tableRoutes: [],
             tableShops: [],
-            totalAssignedShops: 0,
             selectedRouteDetails: null,
             routeChecklistSearchQuery: '',
             tableRouteChecklist: [],
@@ -253,30 +252,13 @@ export class TerritoryBase extends Component {
                 }
             }
 
-            const requests = [
+            const [total, records] = await Promise.all([
                 this.orm.searchCount(model, domain),
-                this.orm.searchRead(model, domain, fields, { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc" }),
-            ];
-            if (tab === 'routes') {
-                const assignedDomain = [
-                    ['is_shahtaj_shop', '=', true],
-                    ['active', '=', true],
-                    ['shop_approval_state', '=', 'approved'],
-                    ['route_ids', '!=', false],
-                ];
-                if (this.state.routeFilterZone !== 'all') {
-                    assignedDomain.push(['route_ids.zone_id', '=', parseInt(this.state.routeFilterZone)]);
-                }
-                requests.push(this.orm.searchCount('res.partner', assignedDomain));
-            }
-
-            const [total, records, assignedShops] = await Promise.all(requests);
+                this.orm.searchRead(model, domain, fields, { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc" })
+            ]);
 
             this.state.pagination[tab].total = total;
             this.state[targetState] = records;
-            if (tab === 'routes') {
-                this.state.totalAssignedShops = assignedShops || 0;
-            }
 
         } catch (error) {
             this.notification.add("Failed to fetch data: " + (error.data?.message || error.message), { type: "danger" });

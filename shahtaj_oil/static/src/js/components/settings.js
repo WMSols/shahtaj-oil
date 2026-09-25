@@ -2,7 +2,6 @@
 
 import { Component, useState, onWillStart } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { notifyPortalBusy } from "../shahtaj_access";
 
 export class PortalSettings extends Component {
     setup() {
@@ -44,7 +43,6 @@ export class PortalSettings extends Component {
 
     async loadSettings() {
         this.state.isLoading = true;
-        notifyPortalBusy(true);
         try {
             const [limits, profile, appInfo] = await Promise.all([
                 this.orm.call("res.company", "shahtaj_get_shop_distance_limits", []),
@@ -66,7 +64,6 @@ export class PortalSettings extends Component {
             );
         } finally {
             this.state.isLoading = false;
-            notifyPortalBusy(false);
         }
     }
 

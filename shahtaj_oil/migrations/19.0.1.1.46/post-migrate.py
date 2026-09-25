@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Switch Shahtaj sale products to invoice on ordered quantities."""
+"""Backfill GPS attempts and switch Shahtaj sale products to invoice on ordered qty."""
+from odoo import SUPERUSER_ID, api
 
 
 def migrate(cr, version):
@@ -10,3 +11,5 @@ def migrate(cr, version):
            AND type = 'consu'
            AND invoice_policy IS DISTINCT FROM 'order'
     """)
+    env = api.Environment(cr, SUPERUSER_ID, {})
+    env['shahtaj.gps.attempt'].backfill_from_existing_visits()

@@ -2,7 +2,7 @@
 
 import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
+import { hasFinancialAccess } from "../shahtaj_access";
 
 export class BankTransactions extends Component {
     static props = {
@@ -111,7 +111,6 @@ export class BankTransactions extends Component {
     // --- THE MASTER DATA ENGINE ---
     async fetchActiveList() {
         this.state.isLoading.data = true;
-        notifyPortalBusy(true);
         try {
             const tab = this.state.activeTab;
             const pag = this.state.pagination[tab];
@@ -249,7 +248,6 @@ export class BankTransactions extends Component {
             this.notification.add("Failed to load data: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isLoading.data = false;
-            notifyPortalBusy(false);
         }
     }
 
