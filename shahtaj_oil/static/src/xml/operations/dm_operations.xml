@@ -264,10 +264,10 @@
                             <option value="not_attended">Shop closed</option>
                             <option value="failed">Failed</option>
                         </select>
-                        <select class="form-select form-select-sm" style="max-width: 140px;" t-model="this.state.filters.dm_jobs.assignment_mode" t-on-change="() => this.onFilterChange('dm_jobs')">
-                            <option value="all">All assign</option>
-                            <option value="manual">Manual</option>
-                            <option value="auto">Auto</option>
+                        <select class="form-select form-select-sm" style="max-width: 190px;" t-model="this.state.filters.dm_jobs.schedule" t-on-change="() => this.onFilterChange('dm_jobs')">
+                            <option value="all">All schedule</option>
+                            <option value="overdue">Overdue / Not Done</option>
+                            <option value="unscheduled">Unscheduled</option>
                         </select>
                     </div>
                     <div class="position-relative">

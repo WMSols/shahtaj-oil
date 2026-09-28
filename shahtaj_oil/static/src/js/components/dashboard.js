@@ -26,6 +26,8 @@ export class ShahtajDashboard extends Component {
         this.cashChartRef = useRef("cashChart");
         this.cashChart = null;
         this._cashChartToken = 0;
+        this._opsLoadToken = 0;
+        this._cashLoadToken = 0;
         const today = new Date();
         this.todayStr = this._formatDate(today);
 
@@ -41,6 +43,8 @@ export class ShahtajDashboard extends Component {
             isSwitchingTab: false,
             isSidebarLocked: false,
             isLoadingKpis: false,
+            isLoadingOps: false,
+            isLoadingCash: false,
             cashRangeDays: 30,
             shopRegDate: this.todayStr,
             opsDate: this.todayStr,
@@ -384,6 +388,8 @@ export class ShahtajDashboard extends Component {
             return;
         }
         this.state.opsDate = dateStr;
+        const token = ++this._opsLoadToken;
+        this.state.isLoadingOps = true;
         const opsBounds = this._pktDateToUtcBounds(dateStr);
         try {
             const [todayCheckins, todayOrders, todayDeliveries, dmJobsToday, todayInTransit] = await Promise.all([
@@ -397,6 +403,9 @@ export class ShahtajDashboard extends Component {
                 this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["state", "!=", "not_ready"]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["field_state", "=", "in_transit"]]),
             ]);
+            if (token !== this._opsLoadToken) {
+                return;
+            }
             Object.assign(this.state.kpis, {
                 todayCheckins,
                 todayOrders,
@@ -406,6 +415,10 @@ export class ShahtajDashboard extends Component {
             });
         } catch (error) {
             console.error("Failed to fetch field activity counts", error);
+        } finally {
+            if (token === this._opsLoadToken) {
+                this.state.isLoadingOps = false;
+            }
         }
     }
 
@@ -430,7 +443,21 @@ export class ShahtajDashboard extends Component {
             return;
         }
         this.state.cashRangeDays = days;
-        await this.fetchMasterKPIs();
+        const token = ++this._cashLoadToken;
+        this.state.isLoadingCash = true;
+        try {
+            const financial = await this.fetchFinancialOverview();
+            if (token !== this._cashLoadToken) {
+                return;
+            }
+            Object.assign(this.state.kpis, financial);
+        } catch (error) {
+            console.error("Failed to fetch financial overview", error);
+        } finally {
+            if (token === this._cashLoadToken) {
+                this.state.isLoadingCash = false;
+            }
+        }
     }
 
     async ensureChartJs() {

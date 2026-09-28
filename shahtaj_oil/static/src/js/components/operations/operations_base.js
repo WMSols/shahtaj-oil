@@ -147,11 +147,11 @@ export class OperationsBase extends Component {
             filters: {
                 deliveries: { search: '', status: '' },
                 dispatch: { search: '' },
-                dm_jobs: { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', assignment_mode: 'all' },
+                dm_jobs: { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', schedule: 'all' },
                 sessions: { dm: 'all', dateFrom: '', dateTo: '' },
                 collections: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
                 settlements: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
-                                checkins: { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
+                                checkins: { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all', outcome: 'all' },
                 orders: { search: '', status: '', booker: 'all', walkIn: false },
                 verification: { search: '', booker: 'all', reason: 'all' },
                 schedules: { booker: 'all', date: '' },
@@ -462,6 +462,60 @@ export class OperationsBase extends Component {
         };
     }
 
+    _checkinOutcomeDomain(outcome) {
+        if (outcome === 'in_progress') return [['visit_id.state', '=', 'in_progress']];
+        if (outcome === 'order') return [['visit_id.outcome', '=', 'order']];
+        if (outcome === 'no_order') return [['visit_id.outcome', '=', 'no_order']];
+        if (outcome === 'incomplete') return [['visit_id.outcome', '=', 'incomplete']];
+        if (outcome === 'undone') return [['visit_id.outcome', '=', 'undone']];
+        if (outcome === 'cancelled') {
+            return [
+                ['visit_id.state', '=', 'cancelled'],
+                ['visit_id.outcome', '!=', 'undone'],
+            ];
+        }
+        return [];
+    }
+
+    _checkinVisitBadge(visit, outcome) {
+        if (visit && visit.state === 'cancelled' && visit.outcome !== 'undone') {
+            return { label: 'Cancelled', className: 'bg-secondary text-white' };
+        }
+        if (visit && visit.outcome === 'incomplete') {
+            return { label: 'Incomplete', className: 'bg-danger text-white' };
+        }
+        if (visit && visit.outcome === 'undone') {
+            return { label: 'Undone', className: 'bg-danger text-white' };
+        }
+        if (visit && visit.outcome === 'no_order') {
+            const shopClosed = /shop\s*closed/i.test(visit.notes || '');
+            return {
+                label: shopClosed ? 'Shop Closed' : 'No Order',
+                className: 'bg-warning text-dark',
+            };
+        }
+        if (visit && visit.outcome === 'order') {
+            return {
+                label: outcome.isDeliveryCheckin ? outcome.orderLabel : 'Order Placed',
+                className: 'bg-success text-white',
+            };
+        }
+        if (visit && (visit.state === 'in_progress' || visit.outcome === 'none')) {
+            return { label: 'In Progress', className: 'bg-primary text-white' };
+        }
+        if (outcome.hasOrder) {
+            return { label: outcome.orderLabel, className: 'bg-success text-white' };
+        }
+        return { label: outcome.orderLabel, className: 'bg-light text-dark border' };
+    }
+
+    _checkinVisitOutcomeClass(label) {
+        if (label === 'Order Placed' || label === 'Delivered') return 'text-success';
+        if (label === 'In Progress') return 'text-primary';
+        if (label === 'Incomplete' || label === 'Incomplete / Auto-Skipped' || label === 'Undone' || label === 'Cancelled') return 'text-danger';
+        return 'text-warning';
+    }
+
     /**
      * Odoo weekday key for a Pakistan calendar date: '0' Monday … '6' Sunday.
      */
@@ -676,6 +730,21 @@ export class OperationsBase extends Component {
         if (filters && filters.dateFrom) domain.push([field, ">=", filters.dateFrom]);
         if (filters && filters.dateTo) domain.push([field, "<=", filters.dateTo]);
         return domain;
+    }
+
+    _dmJobsScheduleDomain(schedule) {
+        const openStates = ['not_ready', 'ready', 'picked', 'partial'];
+        if (schedule === 'overdue') {
+            // Same rule as is_overdue: open jobs with no day, or a day before today.
+            return [['is_overdue', '=', true]];
+        }
+        if (schedule === 'unscheduled') {
+            return [
+                ['state', 'in', openStates],
+                ['scheduled_date', '=', false],
+            ];
+        }
+        return [];
     }
 
     _mapDmDeliveryRow(j) {
@@ -1062,7 +1131,7 @@ export class OperationsBase extends Component {
                 domain.push(...this._dateRangeDomain(filters, 'scheduled_date'));
                 if (filters.state && filters.state !== 'all') domain.push(['state', '=', filters.state]);
                 if (filters.field_state && filters.field_state !== 'all') domain.push(['field_state', '=', filters.field_state]);
-                if (filters.assignment_mode && filters.assignment_mode !== 'all') domain.push(['assignment_mode', '=', filters.assignment_mode]);
+                domain.push(...this._dmJobsScheduleDomain(filters.schedule));
             }
             else if (tab === 'sessions') {
                 model = 'shahtaj.dm.day.session';
@@ -1131,6 +1200,7 @@ export class OperationsBase extends Component {
                 else if (filters.status === 'blocked_missing') {
                     domain.push(['result', 'in', ['blocked_missing_shop_gps', 'blocked_missing_user_gps', 'blocked_invalid_coords']]);
                 }
+                domain.push(...this._checkinOutcomeDomain(filters.outcome));
             }
             else if (tab === 'schedules') {
                 model = 'shahtaj.weekly.schedule'; targetState = 'tableSchedules';
@@ -1261,6 +1331,7 @@ export class OperationsBase extends Component {
                     const task = tasksById[this._m2oId(a.visit_task_id)] || null;
                     const saleOrder = a.sale_order_id || (visit && visit.sale_order_id) || false;
                     const outcome = this._gpsCheckinOutcome(a, Boolean(this._m2oId(saleOrder)));
+                    const visitBadge = this._checkinVisitBadge(visit, outcome);
                     const notes = ((visit && visit.notes) || (task && task.notes) || '').trim();
                     const timing = this._checkinTiming(visit, job);
                     return {
@@ -1294,7 +1365,9 @@ export class OperationsBase extends Component {
                         sale_order_id: saleOrder,
                         isDeliveryCheckin: outcome.isDeliveryCheckin,
                         hasOrder: outcome.hasOrder,
-                        orderLabel: outcome.orderLabel,
+                        orderLabel: visitBadge.label,
+                        outcomeBadgeClass: visitBadge.className,
+                        visitOutcomeKey: visit ? visit.outcome : '',
                         notes,
                         endTime: timing.endTime,
                         duration: timing.duration,
@@ -1313,7 +1386,7 @@ export class OperationsBase extends Component {
                     const progress = rowStats.planned ? (rowStats.done / rowStats.planned * 100) : 0;
                     return {
                         id: r.id, name: r.name, bookerId, bookerName: r.order_booker_id ? r.order_booker_id[1] : 'Unknown',
-                        day_raw: r.day_of_week, day: dayMap[r.day_of_week] || r.day_of_week, route: r.route_id ? r.route_id[1] : 'Unassigned', zone: r.zone_id ? r.zone_id[1] : 'Unassigned',
+                        day_raw: r.day_of_week, day: dayMap[r.day_of_week] || r.day_of_week, route: r.route_id ? r.route_id[1] : 'Unassigned', routeId: r.route_id ? r.route_id[0] : null, zone: r.zone_id ? r.zone_id[1] : 'Unassigned',
                         shops: r.shop_count, active: r.active, planned: rowStats.planned, done: rowStats.done, skipped: rowStats.skipped,
                         progress, occurrenceDate: dateStr,
                     };
@@ -2536,11 +2609,11 @@ export class OperationsBase extends Component {
         const defaultFilters = {
             deliveries: { search: '', status: '' },
             dispatch:   { search: '' },
-            dm_jobs:    { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', assignment_mode: 'all' },
+            dm_jobs:    { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', schedule: 'all' },
             sessions:   { dm: 'all', dateFrom: '', dateTo: '' },
             collections:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
             settlements:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
-                        checkins:   { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all' },
+                        checkins:   { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all', outcome: 'all' },
             orders:     { search: '', status: '', booker: 'all', walkIn: false },
             verification: { search: '', booker: 'all', reason: 'all' },
             schedules:  { booker: 'all', date: '' },
@@ -2568,7 +2641,7 @@ export class OperationsBase extends Component {
                 ? 'dispatch'
                 : (this.props.requestedDeliveriesSubTab || 'dispatch');
             this.state.filters.dispatch = { search: '' };
-            this.state.filters.dm_jobs = { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', assignment_mode: 'all' };
+            this.state.filters.dm_jobs = { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', schedule: 'all' };
             this.state.filters.sessions = { dm: 'all', dateFrom: '', dateTo: '' };
             this.state.filters.collections = { search: '', dm: 'all', dateFrom: '', dateTo: '' };
             this.state.filters.settlements = { search: '', dm: 'all', dateFrom: '', dateTo: '' };
@@ -3020,13 +3093,12 @@ export class OperationsBase extends Component {
                 const v = visit;
                 let visitOutcome = v.outcome || '';
                 const isDelivery = this._gpsIsDeliveryCheckin(log);
-                if (v.state === 'in_progress') visitOutcome = 'In Progress';
-                else if (v.state === 'completed' && v.outcome === 'incomplete') visitOutcome = 'Incomplete / Auto-Skipped';
-                else if (v.state === 'completed') {
-                    if (isDelivery) visitOutcome = v.outcome === 'order' ? 'Delivered' : 'No Delivery';
-                    else visitOutcome = v.outcome === 'order' ? 'Order Placed' : 'No Order';
-                }
+                if (v.state === 'in_progress' || v.outcome === 'none') visitOutcome = 'In Progress';
+                else if (v.outcome === 'incomplete') visitOutcome = 'Incomplete';
+                else if (v.outcome === 'undone') visitOutcome = 'Undone';
                 else if (v.state === 'cancelled') visitOutcome = 'Cancelled';
+                else if (v.outcome === 'order') visitOutcome = isDelivery ? 'Delivered' : 'Order Placed';
+                else if (v.outcome === 'no_order') visitOutcome = isDelivery ? 'No Delivery' : 'No Order';
 
                 const visitNotes = (v.notes || '').trim();
                 if (visitNotes) this.state.selectedCheckin.notes = visitNotes;

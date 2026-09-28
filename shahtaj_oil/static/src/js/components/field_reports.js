@@ -101,8 +101,13 @@ export class FieldReports extends Component {
             tagForm: this._emptyTagForm(),
             editingTagId: null,
             isLoading: false,
+            isRefreshing: false,
+            isOpening: false,
             isSaving: false,
+            activeAction: null,
             isSending: false,
+            isLoadingMedia: false,
+            mediaSrc: "",
             page: 1,
             pageSize: 50,
             total: 0,
@@ -194,13 +199,21 @@ export class FieldReports extends Component {
     }
 
     async refreshReports() {
-        await this.loadTags();
-        if (this.state.mode === "detail" && this.state.selected) {
-            await this.openReport(this.state.selected.id);
+        if (this.state.isRefreshing) {
             return;
         }
-        if (this.state.mode === "list") {
-            await this.loadReports();
+        this.state.isRefreshing = true;
+        try {
+            await this.loadTags();
+            if (this.state.mode === "detail" && this.state.selected) {
+                await this.openReport(this.state.selected.id);
+                return;
+            }
+            if (this.state.mode === "list") {
+                await this.loadReports();
+            }
+        } finally {
+            this.state.isRefreshing = false;
         }
     }
 
@@ -292,6 +305,7 @@ export class FieldReports extends Component {
         this.state.thread = [];
         this.state.draft = "";
         this.state.closingRemark = "";
+        this.state.mediaSrc = "";
         this.loadReports();
     }
 
@@ -349,7 +363,7 @@ export class FieldReports extends Component {
     }
 
     async openReport(id) {
-        this.state.isLoading = true;
+        this.state.isOpening = true;
         try {
             const [report] = await this.orm.read(
                 "shahtaj.field.report",
@@ -357,18 +371,40 @@ export class FieldReports extends Component {
                 [
                     "name", "subject", "description", "state", "tag_ids", "user_id",
                     "reporter_role", "create_date", "device_info",
-                    "screenshot", "closed_at", "closed_by_id", "closing_remark",
+                    "has_screenshot", "closed_at", "closed_by_id", "closing_remark",
                 ]
             );
             this.state.selected = report;
             this.state.mode = "detail";
             this.state.draft = "";
+            this.state.mediaSrc = "";
             this.state.closingRemark = report.closing_remark || "";
             await this.loadThread();
         } catch (error) {
             this.notification.add(error.data?.message || error.message || "Could not open the report.", { type: "danger" });
         } finally {
-            this.state.isLoading = false;
+            this.state.isOpening = false;
+        }
+    }
+
+    async viewMedia() {
+        const report = this.state.selected;
+        if (!report || this.state.isLoadingMedia || this.state.mediaSrc) {
+            return;
+        }
+        this.state.isLoadingMedia = true;
+        try {
+            const [row] = await this.orm.read("shahtaj.field.report", [report.id], ["screenshot"]);
+            const src = row && row.screenshot ? this.screenshotSrc(row.screenshot) : "";
+            if (!src) {
+                this.notification.add("This report has no media.", { type: "warning" });
+                return;
+            }
+            this.state.mediaSrc = src;
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message || "Could not load the media.", { type: "danger" });
+        } finally {
+            this.state.isLoadingMedia = false;
         }
     }
 
@@ -450,6 +486,7 @@ export class FieldReports extends Component {
             return;
         }
         this.state.isSaving = true;
+        this.state.activeAction = method;
         try {
             if (closing) {
                 await this.orm.write("shahtaj.field.report", [report.id], {
@@ -462,6 +499,7 @@ export class FieldReports extends Component {
             this.notification.add(error.data?.message || error.message || "Could not update the status.", { type: "danger" });
         } finally {
             this.state.isSaving = false;
+            this.state.activeAction = null;
         }
     }
 

@@ -69,6 +69,18 @@
                         <option value="order_booker">Order Bookers</option>
                         <option value="delivery_man">Delivery Men</option>
                     </select>
+                    <select class="form-select form-select-sm" style="max-width: 200px;"
+                            t-model="this.state.filters.checkins.outcome"
+                            t-on-change="() => this.onFilterChange('checkins')"
+                            title="Filter by the linked shop visit outcome">
+                        <option value="all">All Visit Outcomes</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="order">Order Placed</option>
+                        <option value="no_order">No Order</option>
+                        <option value="incomplete">Incomplete</option>
+                        <option value="undone">Undone</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
                     <select class="form-select form-select-sm" style="max-width: 240px;" 
                             t-model="this.state.filters.checkins.status" 
                             t-on-change="() => this.onFilterChange('checkins')">
@@ -118,8 +130,8 @@
                                             <t t-esc="log.duration"/>
                                         </div>
                                     </div>
-                                    <div t-if="log.isOk" class="me-3 text-end" style="min-width: 7.5rem;">
-                                        <span t-attf-class="badge p-2 fs-6 d-inline-block #{log.hasOrder ? 'bg-success text-white' : 'bg-light text-dark border'}">
+                                    <div t-if="log.isOk and log.purpose !== 'walk_in'" class="me-3 text-end" style="min-width: 7.5rem;">
+                                        <span t-attf-class="badge p-2 fs-6 d-inline-block #{log.outcomeBadgeClass || (log.hasOrder ? 'bg-success text-white' : 'bg-light text-dark border')}">
                                             <t t-esc="log.orderLabel"/>
                                         </span>
                                     </div>
@@ -234,9 +246,9 @@
                             <t t-esc="Math.round(this.state.selectedCheckin.max_distance_m || 0)"/> m
                         </span>
                     </div>
-                    <div class="d-flex justify-content-between mb-2 pb-2 border-bottom" t-if="this.state.selectedCheckin.isOk and this.state.selectedCheckin.visitOutcome">
+                    <div class="d-flex justify-content-between mb-2 pb-2 border-bottom" t-if="this.state.selectedCheckin.isOk and this.state.selectedCheckin.purpose !== 'walk_in' and this.state.selectedCheckin.visitOutcome">
                         <span class="text-muted small">Visit Outcome:</span>
-                        <span t-attf-class="fw-bold #{this.state.selectedCheckin.visitOutcome === 'Order Placed' or this.state.selectedCheckin.visitOutcome === 'Delivered' ? 'text-success' : 'text-warning'}">
+                        <span t-attf-class="fw-bold #{this._checkinVisitOutcomeClass(this.state.selectedCheckin.visitOutcome)}">
                             <t t-esc="this.state.selectedCheckin.visitOutcome"/>
                         </span>
                     </div>
@@ -247,7 +259,7 @@
                         </p>
                     </div>
 
-                    <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top" t-if="this.state.selectedCheckin.isOk">
+                    <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top" t-if="this.state.selectedCheckin.isOk and this.state.selectedCheckin.purpose !== 'walk_in'">
                         <span class="text-muted small"><t t-esc="this.state.selectedCheckin.isDeliveryCheckin ? 'Delivery:' : 'Order:'"/></span>
                         <t t-if="this.state.selectedCheckin.sale_order_id">
                             <button class="btn btn-sm btn-primary shadow-sm fw-bold" t-on-click="() => this.viewOrderFromCheckin(this.state.selectedCheckin)" title="Open the sales order linked to this visit">

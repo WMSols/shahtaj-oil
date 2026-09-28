@@ -10,6 +10,7 @@ export class TerritoryBase extends Component {
     static props = {
         requestedSubTab: { type: String, optional: true },
         refreshNonce: { type: Number, optional: true },
+        onRefreshSettled: { type: Function, optional: true },
         previousSubTab: { type: String, optional: true },
         onBack: { type: Function, optional: true },
     };
@@ -130,7 +131,11 @@ export class TerritoryBase extends Component {
                 this.setSubTab(nextProps.requestedSubTab);
             }
             if (nextProps.refreshNonce !== undefined && nextProps.refreshNonce !== this.props.refreshNonce) {
-                this.reloadFromRefresh();
+                this.reloadFromRefresh().finally(() => {
+                    if (this.props.onRefreshSettled) {
+                        this.props.onRefreshSettled();
+                    }
+                });
             }
         });
 

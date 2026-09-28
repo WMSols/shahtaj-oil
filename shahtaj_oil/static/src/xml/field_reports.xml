@@ -33,8 +33,8 @@
                         <option value="delivery_man">Delivery Man</option>
                         <option value="other">Other</option>
                     </select>
-                    <button class="btn btn-sm btn-outline-dark fw-bold shadow-sm d-inline-flex align-items-center" t-on-click="refreshReports" t-att-disabled="this.state.isLoading or this.state.isSaving" title="Refresh reports">
-                        <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.isLoading}"></i> Refresh
+                    <button class="btn btn-sm btn-outline-dark fw-bold shadow-sm d-inline-flex align-items-center" t-on-click="refreshReports" t-att-disabled="this.state.isRefreshing" title="Refresh reports">
+                        <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.isRefreshing}"></i> Refresh
                     </button>
                     <button t-if="this.state.mode === 'list'" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" t-on-click="openCreate">
                         <i class="fa fa-plus me-1"></i> New
@@ -48,7 +48,7 @@
             <div class="flex-grow-1 overflow-auto">
                 <t t-if="this.state.pill === 'reports' and this.state.mode === 'list'">
                     <div class="position-relative">
-                        <t t-if="this.state.isLoading">
+                        <t t-if="this.state.isLoading or this.state.isOpening">
                             <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;"><div class="spinner-border text-primary" role="status"></div></div>
                         </t>
                         <div class="table-responsive">
@@ -134,10 +134,18 @@
                         <div class="flex-grow-1 p-4 border-end" style="min-width: 0;">
                             <button class="btn btn-sm btn-light bg-white border fw-bold px-3 shadow-sm mb-3" t-on-click="backToList"><i class="fa fa-arrow-left me-1"></i> Back</button>
                             <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-                                <button t-if="this.state.selected.state === 'new'" class="btn btn-outline-warning  fw-bold" t-on-click="() => this.runAction('action_mark_in_progress')" t-att-disabled="this.state.isSaving">In Progress</button>
-                                <button t-if="this.state.selected.state !== 'done' and this.state.selected.state !== 'cancelled'" class="btn btn-primary" t-on-click="() => this.runAction('action_mark_done')" t-att-disabled="this.state.isSaving">Mark Done</button>
-                                <button t-if="this.state.selected.state === 'done' or this.state.selected.state === 'cancelled'" class="btn btn-secondary" t-on-click="() => this.runAction('action_reopen')" t-att-disabled="this.state.isSaving">Reopen</button>
-                                <button t-if="this.state.selected.state !== 'done' and this.state.selected.state !== 'cancelled'" class="btn btn-outline-danger fw-bold" t-on-click="() => this.runAction('action_mark_cancelled')" t-att-disabled="this.state.isSaving">Cancel</button>
+                                <button t-if="this.state.selected.state === 'new'" class="btn btn-outline-warning  fw-bold" t-on-click="() => this.runAction('action_mark_in_progress')" t-att-disabled="this.state.isSaving">
+                                    <i t-if="this.state.activeAction === 'action_mark_in_progress'" class="fa fa-refresh fa-spin me-1"/> In Progress
+                                </button>
+                                <button t-if="this.state.selected.state !== 'done' and this.state.selected.state !== 'cancelled'" class="btn btn-primary" t-on-click="() => this.runAction('action_mark_done')" t-att-disabled="this.state.isSaving">
+                                    <i t-if="this.state.activeAction === 'action_mark_done'" class="fa fa-refresh fa-spin me-1"/> Mark Done
+                                </button>
+                                <button t-if="this.state.selected.state === 'done' or this.state.selected.state === 'cancelled'" class="btn btn-secondary" t-on-click="() => this.runAction('action_reopen')" t-att-disabled="this.state.isSaving">
+                                    <i t-if="this.state.activeAction === 'action_reopen'" class="fa fa-refresh fa-spin me-1"/> Reopen
+                                </button>
+                                <button t-if="this.state.selected.state !== 'done' and this.state.selected.state !== 'cancelled'" class="btn btn-outline-danger fw-bold" t-on-click="() => this.runAction('action_mark_cancelled')" t-att-disabled="this.state.isSaving">
+                                    <i t-if="this.state.activeAction === 'action_mark_cancelled'" class="fa fa-refresh fa-spin me-1"/> Cancel
+                                </button>
                                 <div class="ms-auto d-flex align-items-center gap-1">
                                     <t t-foreach="this.statusSteps" t-as="step" t-key="step.key">
                                         <span t-if="step_index" class="text-muted">›</span>
@@ -180,9 +188,13 @@
                                           t-att-disabled="this.state.isSaving"/>
                                 <div t-else="" class="text-dark" style="white-space: pre-wrap;" t-esc="this.state.selected.closing_remark || ''"/>
                             </div>
-                            <div class="mt-4" t-if="this.state.selected.screenshot">
+                            <div class="mt-4" t-if="this.state.selected.has_screenshot">
                                 <div class="text-uppercase small fw-bold text-muted border-bottom pb-2 mb-3">Screenshot / Capture</div>
-                                <img t-att-src="this.screenshotSrc(this.state.selected.screenshot)" class="rounded border" style="max-width: 420px; max-height: 240px; object-fit: contain;" alt="Report screenshot"/>
+                                <button t-if="!this.state.mediaSrc" type="button" class="btn btn-sm btn-outline-dark fw-bold" t-on-click="viewMedia" t-att-disabled="this.state.isLoadingMedia">
+                                    <i t-if="this.state.isLoadingMedia" class="fa fa-refresh fa-spin me-1"/>
+                                    <i t-else="" class="fa fa-image me-1"/> View Media
+                                </button>
+                                <img t-else="" t-att-src="this.state.mediaSrc" class="rounded border" style="max-width: 420px; max-height: 240px; object-fit: contain;" alt="Report screenshot"/>
                             </div>
                         </div>
                         <div class="d-flex flex-column bg-light" style="width: 100%; max-width: 420px; min-height: 420px;">

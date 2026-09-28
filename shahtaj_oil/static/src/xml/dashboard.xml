@@ -234,6 +234,22 @@
                 z-index: 1;
                 margin-top: 8px;
             }
+            .so-ov-loading {
+                position: absolute;
+                inset: 0;
+                z-index: 4;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+                background: rgba(255, 255, 255, 0.78);
+                backdrop-filter: blur(2px);
+                cursor: wait;
+            }
+            .so-ov-finance .so-ov-loading {
+                background: rgba(239, 246, 255, 0.78);
+            }
             .so-ov-bills-metric .so-ov-metric-value {
                 font-size: 1.5rem;
             }
@@ -658,7 +674,7 @@
                                 </div>
 
                                 <div class="col-12 col-xl-5">
-                                    <div class="so-ov-card p-4">
+                                    <div class="so-ov-card p-4 position-relative">
                                         <div class="d-flex align-items-start justify-content-between gap-3 mb-4 flex-wrap">
                                             <div class="d-flex align-items-center gap-3">
                                                 <div class="so-ov-icon so-ov-icon--teal">
@@ -674,6 +690,7 @@
                                             <div class="d-flex align-items-center gap-2">
                                                 <input type="date" class="form-control form-control-sm" style="max-width: 150px;"
                                                        t-att-value="this.state.opsDate"
+                                                       t-att-disabled="this.state.isLoadingOps"
                                                        t-on-click.stop=""
                                                        t-on-change="onOpsDateChange"/>
                                                 <span t-if="this.isOpsDateToday" class="badge rounded-pill d-inline-flex align-items-center gap-2 px-3 py-2" style="background: #ecfdf5; color: #047857;">
@@ -721,6 +738,10 @@
                                                     </div>
                                                 </div>
                                             </div>
+                                        </div>
+                                        <div t-if="this.state.isLoadingOps" class="so-ov-loading">
+                                            <span class="spinner-border text-primary" role="status"></span>
+                                            <span class="small fw-bold text-muted">Loading activity...</span>
                                         </div>
                                     </div>
                                 </div>
@@ -882,8 +903,8 @@
                                                     </div>
                                                 </div>
                                                 <div class="so-ov-range">
-                                                    <button t-att-class="this.state.cashRangeDays === 7 ? 'active' : ''" t-on-click="() => this.setCashRangeDays(7)">7 days</button>
-                                                    <button t-att-class="this.state.cashRangeDays === 30 ? 'active' : ''" t-on-click="() => this.setCashRangeDays(30)">30 days</button>
+                                                    <button t-att-class="this.state.cashRangeDays === 7 ? 'active' : ''" t-att-disabled="this.state.isLoadingCash" t-on-click="() => this.setCashRangeDays(7)">7 days</button>
+                                                    <button t-att-class="this.state.cashRangeDays === 30 ? 'active' : ''" t-att-disabled="this.state.isLoadingCash" t-on-click="() => this.setCashRangeDays(30)">30 days</button>
                                                 </div>
                                             </div>
                                             <div class="row g-2 position-relative mb-3" style="z-index: 1;">
@@ -914,6 +935,10 @@
                                             </div>
                                             <div class="so-ov-chart">
                                                 <canvas t-ref="cashChart"/>
+                                            </div>
+                                            <div t-if="this.state.isLoadingCash" class="so-ov-loading">
+                                                <span class="spinner-border text-primary" role="status"></span>
+                                                <span class="small fw-bold" style="color: #1e3a8a;">Loading financials...</span>
                                             </div>
                                         </div>
                                     </div>
