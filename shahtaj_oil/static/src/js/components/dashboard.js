@@ -252,7 +252,7 @@ export class ShahtajDashboard extends Component {
                     ["create_date", "<=", opsBounds.end],
                 ]),
                 this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]),
-                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["state", "=", "sale"], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]),
+                this.orm.searchCount("sale.order", this._toDispatchDomain(this.state.opsDate)),
                 this.orm.searchCount("product.template", productBaseDomain),
                 this.orm.searchCount("product.template", [...productBaseDomain, ["qty_available", "<=", 0]]),
                 this.orm.searchCount("shahtaj.weekly.schedule", [["active", "=", true]]),
@@ -421,7 +421,7 @@ export class ShahtajDashboard extends Component {
                     ["create_date", "<=", opsBounds.end],
                 ]),
                 this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]),
-                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["state", "=", "sale"], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]),
+                this.orm.searchCount("sale.order", this._toDispatchDomain(dateStr)),
                 this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["state", "!=", "not_ready"]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["field_state", "=", "in_transit"]]),
             ]);
@@ -670,6 +670,20 @@ export class ShahtajDashboard extends Component {
         return this.state.opsDate || this.todayStr;
     }
 
+    _toDispatchDomain(dateStr) {
+        const bounds = this._pktDateToUtcBounds(dateStr || this._opsDay());
+        return [
+            "|",
+            ["shahtaj_visit_id", "!=", false],
+            ["partner_id.is_shahtaj_shop", "=", true],
+            ["state", "in", ["sale", "done"]],
+            ["shahtaj_delivery_status", "in", ["pending", "partial"]],
+            ["shahtaj_qty_to_deliver", ">", 0],
+            ["date_order", ">=", bounds.start],
+            ["date_order", "<=", bounds.end],
+        ];
+    }
+
     openStaff(role = 'order_booker', status = 'all') {
         this.state.staffRole = role;
         this.switchTab('staff', '', { filters: { staffStatus: status } });
@@ -702,7 +716,7 @@ export class ShahtajDashboard extends Component {
         this.switchTab('operations', 'deliveries', { forceBusy, filters });
     }
 
-    openActiveDeliveries() {
+    openToDispatch() {
         this.openDeliveries('dispatch', { dispatchDate: this._opsDay() });
     }
 

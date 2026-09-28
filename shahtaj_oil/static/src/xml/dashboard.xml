@@ -715,8 +715,8 @@
                                             <div class="so-ov-group-title">DM Operations</div>
                                             <div class="row g-2">
                                                 <div class="col-6 col-sm-4">
-                                                    <div t-attf-class="so-ov-metric #{this.state.kpis.todayDeliveries > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="openActiveDeliveries">
-                                                        <div class="so-ov-metric-label">Active Deliveries</div>
+                                                    <div t-attf-class="so-ov-metric #{this.state.kpis.todayDeliveries > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="openToDispatch">
+                                                        <div class="so-ov-metric-label">To Dispatch</div>
                                                         <div class="so-ov-metric-value" t-esc="this.state.kpis.todayDeliveries"/>
                                                     </div>
                                                 </div>
