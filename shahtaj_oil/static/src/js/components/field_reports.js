@@ -3,6 +3,7 @@
 import { Component, useState, onWillStart, useRef } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { rpc } from "@web/core/network/rpc";
+import { user } from "@web/core/user";
 
 const ODOO_COLORS = [
     "#E2E8F0",
@@ -451,6 +452,7 @@ export class FieldReports extends Component {
                 id: message.id,
                 kind,
                 author: partners[authorId] || "",
+                authorId: authorId || false,
                 date: message.date,
                 body,
                 tracking,
@@ -503,10 +505,20 @@ export class FieldReports extends Component {
         }
     }
 
+    hasOwnComment() {
+        const partnerId = Number(user.partnerId);
+        if (!partnerId) {
+            return false;
+        }
+        return this.state.thread.some(
+            (item) => item.kind === "message" && Number(item.authorId) === partnerId
+        );
+    }
+
     async sendMessage() {
         const report = this.state.selected;
         const body = (this.state.draft || "").trim();
-        if (!report || !body || this.state.isSending) {
+        if (!report || !body || this.state.isSending || this.hasOwnComment()) {
             return;
         }
         this.state.isSending = true;
@@ -519,7 +531,7 @@ export class FieldReports extends Component {
             this.state.draft = "";
             await this.loadThread();
         } catch (error) {
-            this.notification.add(error.data?.message || error.message || "Could not send the message.", { type: "danger" });
+            this.notification.add(error.data?.message || error.message || "Could not add the comment.", { type: "danger" });
         } finally {
             this.state.isSending = false;
         }

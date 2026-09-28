@@ -20,7 +20,6 @@ export class WarehouseInventory extends Component {
             previousSubTab: 'inventory',
             
             showWarehouseForm: false,
-            showAdjustmentForm: false,
             showProductAddForm: false,
             showProductDetails: false,
             
@@ -29,7 +28,6 @@ export class WarehouseInventory extends Component {
             editingTaxId: null,
             taxForm: { name: '', amount: 0.0, active: true },
             warehouseForm: { name: '', type: '', location: '', manager: '' },
-            adjustmentForm: { product_id: '', qty: 0, unit_cost: '' },
             
             productForm: this.getEmptyProductForm(),
             currentProduct: null,
@@ -46,7 +44,6 @@ export class WarehouseInventory extends Component {
             tableInventory: [],
             tableStock: [],
             tableTaxes: [],
-            allActiveProducts: [], // Used strictly for the "Update Stock" dropdown
             archivedProductsList: [],
             archivedTaxesList: [],
             pagination: {
@@ -75,7 +72,6 @@ export class WarehouseInventory extends Component {
                 await this.loadSaleTaxes();
             }
             await Promise.all([
-                this.loadDropdownData(),
                 this.loadVendors(),
                 this.loadArchivedData(),
             ]);
@@ -112,15 +108,6 @@ export class WarehouseInventory extends Component {
     }
 
     // --- DATA FETCHERS ---
-    async loadDropdownData() {
-        // Lightweight lookup specifically for the "Add Stock" modal dropdown
-        this.state.allActiveProducts = await this.orm.searchRead(
-            "product.template", 
-            [['sale_ok', '=', true], ['active', '=', true], ['default_code', '!=', 'SHAHTAJ-LEGACY']], 
-            ["id", "name", "qty_available"]
-        );
-    }
-
     async loadVendors() {
         try {
             this.state.allVendors = await this.orm.searchRead(
@@ -144,7 +131,6 @@ export class WarehouseInventory extends Component {
 
     get archivedProducts() { return this.state.archivedProductsList; }
     get archivedTaxes() { return this.state.archivedTaxesList; }
-    get activeInventory() { return this.state.allActiveProducts; }
 
     async fetchActiveList() {
         const tab = this.state.activeSubTab;
@@ -251,7 +237,6 @@ export class WarehouseInventory extends Component {
         try {
             await this.orm.write(model, [id], { active: makeActive });
             await Promise.all([
-                this.loadDropdownData(),
                 this.loadArchivedData(),
                 this.fetchActiveList()
             ]);
@@ -338,7 +323,6 @@ export class WarehouseInventory extends Component {
         try {
             if (hasFinancialAccess()) await this.loadSaleTaxes();
             await Promise.all([
-                this.loadDropdownData(),
                 this.loadVendors(),
                 this.loadArchivedData(),
                 this.fetchActiveList()
@@ -350,7 +334,6 @@ export class WarehouseInventory extends Component {
 
     resetForms() {
         this.state.showWarehouseForm = false;
-        this.state.showAdjustmentForm = false;
         this.state.showProductAddForm = false;
         this.state.showProductDetails = false;
         this.state.showTaxForm = false;
@@ -472,7 +455,6 @@ export class WarehouseInventory extends Component {
                 createdVariantId = createdId;
             }
 
-            await this.loadDropdownData();
             await this.fetchActiveList();
             await this.refreshData();
             this.state.showProductAddForm = false;
@@ -509,33 +491,6 @@ export class WarehouseInventory extends Component {
         window.dispatchEvent(new CustomEvent('shahtaj-dashboard-switch', {
             detail: { tab: 'financials', subTab: 'purchase_orders' }
         }));
-    }
-
-    get selectedProductStock() {
-        if (!this.state.adjustmentForm.product_id) return 0;
-        // FIXED: Point this to the new lightweight dropdown array
-        const prod = this.state.allActiveProducts.find(p => p.id == this.state.adjustmentForm.product_id);
-        return prod ? prod.qty_available : 0;
-    }
-    // Stock Update Logic
-    async saveAdjustment() {
-        const pid = parseInt(this.state.adjustmentForm.product_id);
-        const qty = parseFloat(this.state.adjustmentForm.qty);
-        const unitCost = this.state.adjustmentForm.unit_cost && parseFloat(this.state.adjustmentForm.unit_cost) > 0
-            ? parseFloat(this.state.adjustmentForm.unit_cost)
-            : null;
-        
-        if (pid && qty > 0) {
-            await this.orm.call("product.template", "action_shahtaj_add_on_hand_qty", [[pid], qty, unitCost]);
-            // Refresh dropdown and table
-            await this.loadDropdownData();
-            await this.fetchActiveList();
-            await this.refreshData();
-        }
-        this.notification.add(`Successfully added ${qty} units to the product stock.`, { type: "success" });
-        
-        this.state.showAdjustmentForm = false;
-        this.state.adjustmentForm = { product_id: '', qty: 0, unit_cost: '' };
     }
 
     viewProductDetails(product) {

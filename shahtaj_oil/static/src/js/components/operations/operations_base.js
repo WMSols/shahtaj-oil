@@ -535,7 +535,28 @@ export class OperationsBase extends Component {
      * Odoo weekday key for today in Pakistan: '0' Monday … '6' Sunday.
      */
     _pktTodayWeekday() {
-        return this._pktWeekdayForDate(this.todayStr);
+        return this._pktWeekdayForDate(this._pktTodayDateStr());
+    }
+
+    /** Today's calendar date in Pakistan, YYYY-MM-DD. */
+    _pktTodayDateStr() {
+        return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' });
+    }
+
+    /**
+     * Date of this weekday in the current Pakistan week (Monday–Sunday).
+     * Matches shahtaj.weekly.schedule.week_occurrence_date.
+     */
+    _weekOccurrenceDate(dayRaw) {
+        const target = parseInt(dayRaw, 10);
+        if (Number.isNaN(target)) {
+            return '';
+        }
+        const today = this._pktTodayDateStr();
+        const todayDow = parseInt(this._pktWeekdayForDate(today), 10);
+        const date = new Date(`${today}T12:00:00+05:00`);
+        date.setTime(date.getTime() + (target - todayDow) * 86400000);
+        return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' });
     }
 
     /**
@@ -652,6 +673,12 @@ export class OperationsBase extends Component {
         ];
         if (dateStr) {
             domain.push(['scheduled_date', '=', dateStr]);
+        } else {
+            const dates = [...new Set(records.map((r) => this._weekOccurrenceDate(r.day_of_week)).filter(Boolean))];
+            if (!dates.length) {
+                return stats;
+            }
+            domain.push(['scheduled_date', 'in', dates]);
         }
         if (bookerIds.length) {
             domain.push(['order_booker_id', 'in', bookerIds]);
@@ -662,11 +689,11 @@ export class OperationsBase extends Component {
         const tasks = await this.orm.searchRead(
             'shahtaj.visit.task',
             domain,
-            ['order_booker_id', 'route_id', 'state'],
+            ['order_booker_id', 'route_id', 'state', 'scheduled_date'],
             { limit: 10000 },
         );
         for (const task of tasks) {
-            const key = `${this._m2oId(task.order_booker_id) || 0}:${this._m2oId(task.route_id) || 0}`;
+            const key = `${this._m2oId(task.order_booker_id) || 0}:${this._m2oId(task.route_id) || 0}:${task.scheduled_date || ''}`;
             if (!stats[key]) {
                 stats[key] = { planned: 0, done: 0, skipped: 0 };
             }
@@ -1382,13 +1409,14 @@ export class OperationsBase extends Component {
                 const rows = records.map(r => {
                     const bookerId = r.order_booker_id ? r.order_booker_id[0] : null;
                     const routeId = r.route_id ? r.route_id[0] : null;
-                    const rowStats = stats[`${bookerId || 0}:${routeId || 0}`] || { planned: 0, done: 0, skipped: 0 };
+                    const occurrenceDate = dateStr || this._weekOccurrenceDate(r.day_of_week);
+                    const rowStats = stats[`${bookerId || 0}:${routeId || 0}:${occurrenceDate}`] || { planned: 0, done: 0, skipped: 0 };
                     const progress = rowStats.planned ? (rowStats.done / rowStats.planned * 100) : 0;
                     return {
                         id: r.id, name: r.name, bookerId, bookerName: r.order_booker_id ? r.order_booker_id[1] : 'Unknown',
                         day_raw: r.day_of_week, day: dayMap[r.day_of_week] || r.day_of_week, route: r.route_id ? r.route_id[1] : 'Unassigned', routeId: r.route_id ? r.route_id[0] : null, zone: r.zone_id ? r.zone_id[1] : 'Unassigned',
                         shops: r.shop_count, active: r.active, planned: rowStats.planned, done: rowStats.done, skipped: rowStats.skipped,
-                        progress, occurrenceDate: dateStr,
+                        progress, occurrenceDate,
                     };
                 });
                 if (!dateStr) {

@@ -198,7 +198,7 @@
                             </div>
                         </div>
                         <div class="d-flex flex-column bg-light" style="width: 100%; max-width: 420px; min-height: 420px;">
-                            <div class="px-3 py-3 border-bottom bg-white fw-bold">Messages</div>
+                            <div class="px-3 py-3 border-bottom bg-white fw-bold">Activity &amp; Comment</div>
                             <div class="flex-grow-1 overflow-auto p-3 d-flex flex-column gap-3" t-ref="thread" style="min-height: 280px;">
                                 <t t-foreach="this.state.thread" t-as="item" t-key="item.id">
                                     <div t-if="item.kind === 'message'" class="d-flex gap-2">
@@ -225,13 +225,13 @@
                                     </div>
                                 </t>
                             </div>
-                            <div class="p-3 border-top bg-white">
+                            <div class="p-3 border-top bg-white" t-if="!this.hasOwnComment()">
                                 <div class="small text-muted mb-2">To: Followers only</div>
                                 <div class="d-flex gap-2">
-                                    <textarea class="form-control" rows="2" placeholder="Send a message to followers..." t-model="this.state.draft" t-on-keydown="onDraftKeydown"/>
-                                    <button class="btn btn-primary align-self-end" t-on-click="sendMessage" t-att-disabled="this.state.isSending or !this.state.draft.trim()">
-                                        <t t-if="this.state.isSending">Sending</t>
-                                        <t t-else="">Send</t>
+                                    <textarea class="form-control" rows="2" placeholder="Add a comment..." t-model="this.state.draft" t-on-keydown="onDraftKeydown"/>
+                                    <button class="btn btn-primary align-self-end text-nowrap flex-shrink-0" t-on-click="sendMessage" t-att-disabled="this.state.isSending or !this.state.draft.trim()">
+                                        <t t-if="this.state.isSending">Adding...</t>
+                                        <t t-else="">Add a comment</t>
                                     </button>
                                 </div>
                             </div>

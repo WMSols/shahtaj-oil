@@ -6,7 +6,7 @@
             <div class="p-4 border-bottom bg-light d-flex justify-content-between align-items-center rounded-top">
                 <div>
                     <h2 class="h4 fw-bold text-dark mb-0">Warehouse &amp; Inventory</h2>
-                    <small class="text-muted">Manage your product catalog, update stock levels, and monitor warehouse operations.</small>
+                    <small class="text-muted">Manage your product catalog and monitor warehouse stock. Quantities are received through purchase orders.</small>
                 </div>
                                <div>
                 <!-- NEW REFRESH BUTTON -->
@@ -305,68 +305,23 @@
             <div class="p-4 bg-white border-bottom d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                 <div>
                     <h2 class="fw-bold mb-0 text-dark">Stock Management Overview</h2>
-                    <small class="text-muted">Monitor available quantities and manually adjust stock if needed.</small>
+                    <small class="text-muted">Monitor available quantities. Stock is received through purchase orders.</small>
                 </div>
 
-                <t t-if="!this.state.showAdjustmentForm">
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="input-group input-group-sm shadow-sm" style="width: 250px;">
-                            <span class="input-group-text bg-white text-muted border-end-0">
-                                <i class="fa fa-search"></i>
-                            </span>
-                            <input t-att-value="this.state.filters.management.search" t-on-input="(ev) => this.onSearchInput(ev, 'management')" type="text" class="form-control border-start-0 ps-0" placeholder="Search product name..." t-model="this.state.stockSearchQuery" />
-                        </div>
-                        <select class="form-select form-select-sm shadow-sm" style="width: 140px;" t-model="this.state.filters.management.status" t-on-change="() => this.onFilterChange('management')" title="Filter to see only available or depleted items">
-                            <option value="all">All Stock Levels</option>
-                            <option value="in_stock">In Stock (&gt; 0)</option>
-                            <option value="out_of_stock">Out of Stock (0)</option>
-                        </select>
-                        <button class="btn btn-sm btn-dark fw-bold shadow-sm ms-2 text-nowrap" t-on-click="() => this.state.showAdjustmentForm = true" title="Manually add new stock to a product">
-                                + Update Stock
-                        </button>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="input-group input-group-sm shadow-sm" style="width: 250px;">
+                        <span class="input-group-text bg-white text-muted border-end-0">
+                            <i class="fa fa-search"></i>
+                        </span>
+                        <input t-att-value="this.state.filters.management.search" t-on-input="(ev) => this.onSearchInput(ev, 'management')" type="text" class="form-control border-start-0 ps-0" placeholder="Search product name..." t-model="this.state.stockSearchQuery" />
                     </div>
-                </t>
-                <t t-else="">
-                    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.state.showAdjustmentForm = false">
-                             Close Stock Update
-                    </button>
-                </t>
+                    <select class="form-select form-select-sm shadow-sm" style="width: 140px;" t-model="this.state.filters.management.status" t-on-change="() => this.onFilterChange('management')" title="Filter to see only available or depleted items">
+                        <option value="all">All Stock Levels</option>
+                        <option value="in_stock">In Stock (&gt; 0)</option>
+                        <option value="out_of_stock">Out of Stock (0)</option>
+                    </select>
+                </div>
             </div>
-
-            <t t-if="this.state.showAdjustmentForm">
-                <div class="p-4 bg-light border-bottom">
-                    <h2 class="fw-bold text-dark mb-3">Add Stock to Product</h2>
-                    <div class="row align-items-end g-3">
-                        <div class="col-md-3">
-                            <label class="small fw-bold">Select Product</label>
-                            <select class="form-select shadow-sm" t-model="this.state.adjustmentForm.product_id">
-                                <option value="">-- Choose an item --</option>
-                                <t t-foreach="this.state.allActiveProducts" t-as="inv" t-key="inv.id">
-                                    <option t-att-value="inv.id">
-                                        <t t-esc="inv.name"/>
-                                    </option>
-                                </t>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="small fw-bold text-muted" title="Amount currently sitting in the warehouse">Current On-Hand</label>
-                            <input type="text" class="form-control bg-white shadow-sm" t-att-value="this.selectedProductStock" disabled="1"/>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="small fw-bold text-success" title="How many new units are you adding?">Quantity to Add</label>
-                            <input type="number" class="form-control border-success shadow-sm" t-model="this.state.adjustmentForm.qty" min="1" placeholder="e.g. 50"/>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="small fw-bold text-muted" title="Purchase cost per unit for this batch (Optional - defaults to current average cost)">Unit Cost (Rs.)</label>
-                            <input type="number" class="form-control shadow-sm" t-model="this.state.adjustmentForm.unit_cost" placeholder="Optional"/>
-                        </div>
-                        <div class="col-md-3 d-flex pb-1">
-                            <button class="btn btn-outline-secondary w-50 me-2 fw-bold" t-on-click="() => { this.state.showAdjustmentForm = false; this.state.adjustmentForm = { product_id: '', qty: 0, unit_cost: '' }; }">Cancel</button>
-                            <button class="btn btn-success w-50 fw-bold text-white shadow-sm" t-on-click="saveAdjustment">Confirm</button>
-                        </div>
-                    </div>
-                </div>
-            </t>
 <div class="position-relative">
                 <t t-if="this.state.isLoadingList">
                     <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center bg-white" style="z-index: 10; opacity: 0.7;">
