@@ -118,12 +118,13 @@
                                         <small class="text-muted">
                                             <t t-esc="log.purposeLabel"/> · <t t-esc="log.roleLabel"/> ·
                                             Shop ID: <t t-esc="log.shopId"/> ·
-                                            <t t-esc="log.booker"/> · <t t-esc="log.time"/>
+                                            <t t-esc="log.booker"/>
+                                            <t t-if="this.checkinShowsGps(log)"> · <t t-esc="log.time"/></t>
                                         </small>
                                     </div>
                                 </div>
                                 <div class="text-end d-flex align-items-center">
-                                    <div class="me-3 text-end">
+                                    <div class="me-3 text-end" t-if="this.checkinShowsGps(log)">
                                         <span t-attf-class="badge so-gps-tag mb-1 d-inline-block #{this._gpsListTagClass(log.result)}"><t t-esc="log.status"/></span>
                                         <div class="text-muted fw-bold small"><t t-esc="log.distLabel"/></div>
                                         <div class="text-muted fw-bold small" title="Total time spent at the shop">
@@ -167,7 +168,7 @@
                 </svg>
                                 Back to List
             </button>
-            <div>
+            <div t-if="this.checkinShowsGps(this.state.selectedCheckin)">
                 <span t-attf-class="badge #{this._gpsStatusBadgeClass(this.state.selectedCheckin.result)} p-2 fs-6 text-uppercase shadow-sm" style="letter-spacing: 1px;">
                     <t t-esc="this.state.selectedCheckin.status"/>
                 </span>
@@ -214,45 +215,50 @@
             </div>
             <div class="col-md-6">
                 <div class="card border-0 shadow-sm p-4 h-100 rounded-3">
-                    <h6 class="text-muted text-uppercase small fw-bold mb-3">Distance &amp; Result</h6>
-                    <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
-                        <span class="text-muted small">Attempted At:</span>
-                        <span class="fw-bold text-dark">
-                            <t t-esc="this.state.selectedCheckin.time"/>
-                        </span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
-                        <span class="text-muted small">Ended At:</span>
-                        <span class="fw-bold text-dark">
-                            <t t-esc="this.state.selectedCheckin.endTime || '—'"/>
-                        </span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
-                        <span class="text-muted small">Time Spent:</span>
-                        <span class="fw-bold text-dark" title="Total time spent at the shop">
-                            <t t-esc="this.state.selectedCheckin.duration || '—'"/>
-                        </span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
-                        <span class="text-muted small">Distance:</span>
-                        <span class="fw-bold text-dark">
-                            <t t-esc="this.state.selectedCheckin.distLabel"/>
-                        </span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
-                        <span class="text-muted small">Allowed Range:</span>
-                        <span class="fw-bold text-dark">
-                            <t t-esc="Math.round(this.state.selectedCheckin.min_distance_m || 0)"/>–
-                            <t t-esc="Math.round(this.state.selectedCheckin.max_distance_m || 0)"/> m
-                        </span>
-                    </div>
+                    <h6 class="text-muted text-uppercase small fw-bold mb-3">
+                        <t t-if="this.checkinShowsGps(this.state.selectedCheckin)">Distance &amp; Result</t>
+                        <t t-else="">Visit</t>
+                    </h6>
+                    <t t-if="this.checkinShowsGps(this.state.selectedCheckin)">
+                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                            <span class="text-muted small">Attempted At:</span>
+                            <span class="fw-bold text-dark">
+                                <t t-esc="this.state.selectedCheckin.time"/>
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                            <span class="text-muted small">Ended At:</span>
+                            <span class="fw-bold text-dark">
+                                <t t-esc="this.state.selectedCheckin.endTime || '—'"/>
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                            <span class="text-muted small">Time Spent:</span>
+                            <span class="fw-bold text-dark" title="Total time spent at the shop">
+                                <t t-esc="this.state.selectedCheckin.duration || '—'"/>
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                            <span class="text-muted small">Distance:</span>
+                            <span class="fw-bold text-dark">
+                                <t t-esc="this.state.selectedCheckin.distLabel"/>
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                            <span class="text-muted small">Allowed Range:</span>
+                            <span class="fw-bold text-dark">
+                                <t t-esc="Math.round(this.state.selectedCheckin.min_distance_m || 0)"/>–
+                                <t t-esc="Math.round(this.state.selectedCheckin.max_distance_m || 0)"/> m
+                            </span>
+                        </div>
+                    </t>
                     <div class="d-flex justify-content-between mb-2 pb-2 border-bottom" t-if="this.state.selectedCheckin.isOk and this.state.selectedCheckin.purpose !== 'walk_in' and this.state.selectedCheckin.visitOutcome">
                         <span class="text-muted small">Visit Outcome:</span>
                         <span t-attf-class="fw-bold #{this._checkinVisitOutcomeClass(this.state.selectedCheckin.visitOutcome)}">
                             <t t-esc="this.state.selectedCheckin.visitOutcome"/>
                         </span>
                     </div>
-                    <div class="mt-2">
+                    <div class="mt-2" t-if="this.checkinShowsGps(this.state.selectedCheckin)">
                         <span class="text-muted small d-block mb-1">System Message:</span>
                         <p t-attf-class="mb-0 small p-2 rounded #{this.state.selectedCheckin.isOk ? 'bg-success text-white' : 'bg-danger text-white'}">
                             <t t-esc="this.state.selectedCheckin.message || '—'"/>
@@ -395,7 +401,7 @@
             </t>
         </div>
 
-        <div class="row mt-3">
+        <div class="row mt-3" t-if="this.checkinShowsGps(this.state.selectedCheckin)">
             <div class="col-12">
                 <div class="card border-0 shadow-sm p-4 rounded-3">
                     <h6 class="fw-bold text-info d-flex align-items-center mb-3">

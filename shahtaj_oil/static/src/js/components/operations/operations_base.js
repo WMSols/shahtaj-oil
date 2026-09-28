@@ -212,7 +212,7 @@ export class OperationsBase extends Component {
 
             const mapEl = this.checkinMapRef.el;
             const log = this.state.selectedCheckin;
-            if (!mapEl || !log) {
+            if (!mapEl || !log || !this.checkinShowsGps(log)) {
                 return () => {};
             }
 
@@ -507,6 +507,21 @@ export class OperationsBase extends Component {
             return { label: outcome.orderLabel, className: 'bg-success text-white' };
         }
         return { label: outcome.orderLabel, className: 'bg-light text-dark border' };
+    }
+
+    /**
+     * Incomplete visits are an order outcome. Hide map, distance, and time-at-shop GPS.
+     */
+    checkinShowsGps(log) {
+        if (!log) {
+            return true;
+        }
+        if (log.visitOutcomeKey === 'incomplete') {
+            return false;
+        }
+        const labels = [log.visitOutcome, log.orderLabel]
+            .map((value) => String(value || '').trim().toLowerCase());
+        return !labels.some((label) => label === 'incomplete' || label.startsWith('incomplete'));
     }
 
     _checkinVisitOutcomeClass(label) {
