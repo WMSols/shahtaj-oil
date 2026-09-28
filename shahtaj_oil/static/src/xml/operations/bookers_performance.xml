@@ -379,7 +379,10 @@
                                 <small class="fw-bold text-success"><t t-esc="tgt.progress.toFixed(0)"/>%</small>
                             </div>
                         </td>
-                        <td class="align-middle text-end pe-4 text-nowrap"><span t-attf-class="badge #{tgt.active ? 'bg-success text-white' : 'bg-secondary text-dark'} px-2 py-1 shadow-sm"><t t-esc="tgt.active ? 'Active' : 'Deactivated'"/></span></td>
+                        <td class="align-middle text-end pe-4 text-nowrap">
+                            <span t-if="tgt.periodComplete" class="badge bg-dark text-white px-2 py-1 shadow-sm me-1">Period Complete</span>
+                            <span t-attf-class="badge #{tgt.showActive ? 'bg-success text-white' : 'bg-secondary text-dark'} px-2 py-1 shadow-sm"><t t-esc="tgt.showActive ? 'Active' : 'Inactive'"/></span>
+                        </td>
                     </tr>
                 </t>
             </tbody>
@@ -412,9 +415,12 @@
     <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-3">
         <h4 class="text-dark fw-bold mb-0">Target: <t t-esc="this.state.selectedTarget.name"/>
         </h4>
-        <span t-attf-class="badge #{this.state.selectedTarget.active ? 'text-success' : 'text-secondary'}  px-3 py-2 shadow-sm fs-6">
-            <t t-esc="this.state.selectedTarget.active ? 'Active Target' : 'Deactivated'"/>
-        </span>
+        <div class="d-flex align-items-center gap-2">
+            <span t-if="this.state.selectedTarget.periodComplete" class="badge bg-dark text-white px-3 py-2 shadow-sm fs-6">Period Complete</span>
+            <span t-attf-class="badge #{this.state.selectedTarget.showActive ? 'text-success' : 'text-secondary'} px-3 py-2 shadow-sm fs-6">
+                <t t-esc="this.state.selectedTarget.showActive ? 'Active Target' : 'Inactive'"/>
+            </span>
+        </div>
     </div>
     <div class="row g-4">
         <div class="col-md-6">

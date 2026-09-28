@@ -21,6 +21,7 @@ export class OperationsBase extends Component {
         requestedCheckinRole: { type: String, optional: true },
         requestedCheckinDate: { type: String, optional: true },
         refreshNonce: { type: Number, optional: true },
+        onRefreshSettled: { type: Function, optional: true },
     };
     setup() {
         this.orm = useService("orm");
@@ -152,7 +153,7 @@ export class OperationsBase extends Component {
                 collections: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
                 settlements: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
                                 checkins: { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all', outcome: 'all' },
-                orders: { search: '', status: '', booker: 'all', walkIn: false },
+                orders: { search: '', status: '', booker: 'all', walkIn: false, dateFrom: '', dateTo: '' },
                 verification: { search: '', booker: 'all', reason: 'all' },
                 schedules: { booker: 'all', date: '' },
                 targets: { booker: 'all', type: 'all' },
@@ -182,7 +183,11 @@ export class OperationsBase extends Component {
                 }
             }
             if (nextProps.refreshNonce !== undefined && nextProps.refreshNonce !== this.props.refreshNonce) {
-                this.reloadFromRefresh();
+                this.reloadFromRefresh().finally(() => {
+                    if (this.props.onRefreshSettled) {
+                        this.props.onRefreshSettled();
+                    }
+                });
             }
         })
 
@@ -556,6 +561,19 @@ export class OperationsBase extends Component {
     /** Today's calendar date in Pakistan, YYYY-MM-DD. */
     _pktTodayDateStr() {
         return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' });
+    }
+
+    /** True once the target end date is before today in Pakistan. */
+    _targetPeriodComplete(endDate) {
+        if (!endDate) {
+            return false;
+        }
+        return String(endDate).slice(0, 10) < this._pktTodayDateStr();
+    }
+
+    /** Active only while the distributor left it on and the period has not ended. */
+    _targetShowActive(active, endDate) {
+        return !!active && !this._targetPeriodComplete(endDate);
     }
 
     /**
@@ -1137,6 +1155,10 @@ export class OperationsBase extends Component {
                 }
                 if (filters.search) domain.push('|', '|', ['name', 'ilike', filters.search], ['partner_id.name', 'ilike', filters.search], ['user_id.name', 'ilike', filters.search]);
                 if ((tab === 'orders' || tab === 'verification') && filters.booker && filters.booker !== 'all') domain.push(['user_id', '=', parseInt(filters.booker)]);
+                if (tab === 'orders') {
+                    if (filters.dateFrom) domain.push(['date_order', '>=', filters.dateFrom]);
+                    if (filters.dateTo) domain.push(['date_order', '<=', `${filters.dateTo} 23:59:59`]);
+                }
                 if (tab === 'verification' && filters.reason && filters.reason !== 'all') {
                     if (filters.reason === 'discount') domain.push(['shahtaj_approval_reason_discount', '=', true]);
                     if (filters.reason === 'credit') domain.push(['shahtaj_approval_reason_credit', '=', true]);
@@ -1444,7 +1466,9 @@ export class OperationsBase extends Component {
                     id: r.id, name: r.name, bookerId: r.order_booker_id ? r.order_booker_id[0] : null, bookerName: r.order_booker_id ? r.order_booker_id[1] : 'Unknown',
                     startDate: r.date_start, endDate: r.date_end, type: r.target_type, displayType: r.target_type ? r.target_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown',
                     targetValue: r.target_value, achievedValue: r.achieved_value, remainingValue: r.remaining_value, progress: r.progress_percent || 0,
-                    product: r.product_id ? r.product_id[1] : null, currency: r.currency_id ? r.currency_id[1] : null, weightUom: r.target_weight_uom || '', active: r.active
+                    product: r.product_id ? r.product_id[1] : null, currency: r.currency_id ? r.currency_id[1] : null, weightUom: r.target_weight_uom || '', active: r.active,
+                    showActive: this._targetShowActive(r.active, r.date_end),
+                    periodComplete: this._targetPeriodComplete(r.date_end),
                 }));
             }
             if (this.state.activeSubTab === 'orders') {
@@ -2657,7 +2681,7 @@ export class OperationsBase extends Component {
             collections:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
             settlements:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
                         checkins:   { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all', outcome: 'all' },
-            orders:     { search: '', status: '', booker: 'all', walkIn: false },
+            orders:     { search: '', status: '', booker: 'all', walkIn: false, dateFrom: '', dateTo: '' },
             verification: { search: '', booker: 'all', reason: 'all' },
             schedules:  { booker: 'all', date: '' },
             targets:    { booker: 'all', type: 'all' },

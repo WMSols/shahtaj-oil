@@ -251,7 +251,7 @@
                                 <thead class="bg-light text-uppercase small fw-bold text-muted">
                                     <tr>
                                         <th class="border-top-0 ps-4">Product Details</th>
-                                        <th class="border-top-0 text-end">Price </th>
+                                        <th class="border-top-0 text-end" title="Cost price / sale price">Price Cost/Sale</th>
                                         <th class="border-top-0 text-end">On-Hand Qty</th>
                                         <th class="border-top-0 text-center pe-4">Actions</th>
                                     </tr>
@@ -273,7 +273,13 @@
                                                     <small class="text-muted">Unit: <t t-esc="item.shahtaj_sale_uom || item.uom_name"/> <t t-if="item.shahtaj_vendor_name"> · Vendor: <span class="fw-bold text-dark"><t t-esc="item.shahtaj_vendor_name"/></span></t> · Tax: <t t-esc="item.tax_label"/></small>
                                                 </div>
                                             </td>
-                                            <td class="text-end"><div class="fw-bold text-success">Rs. <t t-esc="item.list_price"/></div></td>
+                                            <td class="text-end" title="Cost / Sale">
+                                                <div class="fw-bold">
+                                                    <span class="text-muted">Rs. <t t-esc="(item.standard_price || 0).toLocaleString()"/></span>
+                                                    <span class="text-muted mx-1">/</span>
+                                                    <span class="text-success">Rs. <t t-esc="(item.list_price || 0).toLocaleString()"/></span>
+                                                </div>
+                                            </td>
                                             <td class="text-end"><span class="h6 fw-bold text-dark mb-0"><t t-esc="item.qty_available"/></span> <span class="text-muted ms-1 small"><t t-esc="item.uom_name"/></span></td>
                                             <td class="text-center pe-4">
                                                 <button class="btn btn-sm btn-light border fw-bold text-primary" t-on-click="() => this.viewProductDetails(item)">Edit</button>
@@ -336,7 +342,7 @@
                             <th class="border-top-0 py-3 text-end" title="Total physical units located in the warehouse">On-Hand Qty</th>
                             <th class="border-top-0 py-3 text-end" title="Units bookers can still sell: On-Hand minus open visit carts and undelivered confirmed sales orders">Available to Book</th>
                             <!-- <th class="border-top-0 py-3 text-end" title="Predicted future stock based on incoming/outgoing orders">Forecast</th> -->
-                            <th t-if="this.hasFinancialAccess" class="border-top-0 py-3 text-end pe-4">Unit Price</th>
+                            <th t-if="this.hasFinancialAccess" class="border-top-0 py-3 text-end pe-4" title="Cost price / sale price">Price Cost/Sale</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -373,8 +379,10 @@
                                         <t t-esc="item.uom_name"/>
                                     </span>
                                 </td> -->
-                                <td t-if="this.hasFinancialAccess" class="text-end pe-4 text-muted fw-bold">
-                                        Rs. <t t-esc="item.list_price"/>
+                                <td t-if="this.hasFinancialAccess" class="text-end pe-4 fw-bold" title="Cost / Sale">
+                                    <span class="text-muted">Rs. <t t-esc="(item.standard_price || 0).toLocaleString()"/></span>
+                                    <span class="text-muted mx-1">/</span>
+                                    <span class="text-success">Rs. <t t-esc="(item.list_price || 0).toLocaleString()"/></span>
                                 </td>
                             </tr>
                         </t>

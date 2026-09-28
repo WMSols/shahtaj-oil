@@ -133,6 +133,15 @@
                                 <option t-att-value="b.id"><t t-esc="b.name"/></option>
                             </t>
                         </select>
+                        <input type="date" class="form-control form-control-sm" style="max-width: 150px;"
+                               t-model="this.state.filters.orders.dateFrom"
+                               t-on-change="() => this.onFilterChange('orders')"
+                               title="From date"/>
+                        <span class="text-muted small align-self-center">to</span>
+                        <input type="date" class="form-control form-control-sm" style="max-width: 150px;"
+                               t-model="this.state.filters.orders.dateTo"
+                               t-on-change="() => this.onFilterChange('orders')"
+                               title="To date"/>
                         <select class="form-select form-select-sm" style="max-width: 240px;" 
                                 t-model="this.state.filters.orders.status" 
                                 t-on-change="() => this.onFilterChange('orders')">

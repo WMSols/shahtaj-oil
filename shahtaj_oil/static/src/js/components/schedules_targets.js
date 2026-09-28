@@ -292,8 +292,10 @@ export class SchedulesTargets extends Component {
             product: r.product_id ? r.product_id[1] : null,
             currency_id_raw: r.currency_id ? r.currency_id[0] : '',
             currency: r.currency_id ? r.currency_id[1] : null,
-            status: r.active ? 'Active' : 'Deactivated',
+            status: this._targetShowActive(r.active, r.date_end) ? 'Active' : 'Inactive',
             isActive: !!r.active,
+            showActive: this._targetShowActive(r.active, r.date_end),
+            periodComplete: this._targetPeriodComplete(r.date_end),
             lines: [],
             isExpandable: ['collective_qty', 'collective_weight', 'product_bundle'].includes(r.target_type),
             expanded: false,
@@ -689,6 +691,20 @@ export class SchedulesTargets extends Component {
         };
     }
 
+    /** True once the target end date is before today in Pakistan. */
+    _targetPeriodComplete(endDate) {
+        if (!endDate) {
+            return false;
+        }
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' });
+        return String(endDate).slice(0, 10) < today;
+    }
+
+    /** Active only while the distributor left it on and the period has not ended. */
+    _targetShowActive(active, endDate) {
+        return !!active && !this._targetPeriodComplete(endDate);
+    }
+
     editTarget(tgt) {
         this.state.errorMessage = '';
         this.state.targetForm = {
@@ -699,7 +715,7 @@ export class SchedulesTargets extends Component {
             product_id: tgt.product_id_raw,
             currency_id: tgt.currency_id_raw,
             target_weight_uom: tgt.weightUom || 'kg',
-            is_active: tgt.isActive !== false && tgt.status !== 'Deactivated',
+            is_active: !!tgt.isActive,
             lines: (tgt.lines || []).map((line) => ({
                 product_id: line.product_id ? parseInt(line.product_id, 10) : '',
                 product_name: line.product_name || '',
