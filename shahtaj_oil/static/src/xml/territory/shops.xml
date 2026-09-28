@@ -382,6 +382,17 @@
                     <option value="verified">On-site Verified</option>
                     <option value="unverified">Not Verified</option>
                 </select>
+                <div class="d-flex align-items-center gap-1">
+                    <small class="fw-bold text-muted text-nowrap">Registered On</small>
+                    <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
+                           t-model="this.state.shopFilterRegisteredOn"
+                           t-on-change="() => this.onFilterChange('shops')"
+                           title="Shops registered on this date"/>
+                </div>
+                <select class="form-select form-select-sm shadow-sm" style="width: 160px;" t-model="this.state.shopFilterRegistrar" t-on-change="() => this.onFilterChange('shops')" title="Who registered the shop">
+                    <option value="all">All registrars</option>
+                    <option value="order_booker">Order bookers</option>
+                </select>
                 <select class="form-select form-select-sm shadow-sm" style="width: 160px;" t-model="this.state.shopFilterBooker" t-on-change="() => this.onFilterChange('shops')">
                     <option value="all">All Order Bookers</option>
                     <t t-foreach="this.state.bookers" t-as="booker" t-key="booker.id">

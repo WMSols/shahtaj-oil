@@ -20,6 +20,11 @@ export class OperationsBase extends Component {
         requestedCheckinPurpose: { type: String, optional: true },
         requestedCheckinRole: { type: String, optional: true },
         requestedCheckinDate: { type: String, optional: true },
+        requestedOrderDate: { type: String, optional: true },
+        requestedDispatchDate: { type: String, optional: true },
+        requestedDmDate: { type: String, optional: true },
+        requestedDmFieldState: { type: String, optional: true },
+        requestedDmState: { type: String, optional: true },
         refreshNonce: { type: Number, optional: true },
         onRefreshSettled: { type: Function, optional: true },
     };
@@ -147,13 +152,13 @@ export class OperationsBase extends Component {
             },
             filters: {
                 deliveries: { search: '', status: '' },
-                dispatch: { search: '' },
-                dm_jobs: { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', schedule: 'all' },
+                dispatch: this._defaultDispatchFilters(),
+                dm_jobs: this._defaultDmJobsFilters(),
                 sessions: { dm: 'all', dateFrom: '', dateTo: '' },
                 collections: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
                 settlements: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
-                                checkins: { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all', outcome: 'all' },
-                orders: { search: '', status: '', booker: 'all', walkIn: false, dateFrom: '', dateTo: '' },
+                                checkins: this._defaultCheckinFilters(),
+                orders: this._defaultOrdersFilters(),
                 verification: { search: '', booker: 'all', reason: 'all' },
                 schedules: { booker: 'all', date: '' },
                 targets: { booker: 'all', type: 'all' },
@@ -161,26 +166,18 @@ export class OperationsBase extends Component {
         });
          // ADD THIS NEW BLOCK RIGHT AFTER THE STATE CLOSING BRACKET:
         onWillUpdateProps((nextProps) => {
-            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.props.requestedSubTab) {
+            this._navProps = nextProps;
+            const subChanged = nextProps.requestedSubTab && nextProps.requestedSubTab !== this.props.requestedSubTab;
+            const delChanged = nextProps.requestedDeliveriesSubTab && nextProps.requestedDeliveriesSubTab !== this.props.requestedDeliveriesSubTab;
+            if (subChanged) {
                 this.setSubTab(nextProps.requestedSubTab);
-            }
-            if (nextProps.requestedDeliveriesSubTab && nextProps.requestedDeliveriesSubTab !== this.props.requestedDeliveriesSubTab) {
+            } else if (delChanged) {
+                this._applyDispatchNav(nextProps);
+                this._applyDmNav(nextProps);
                 this.setDeliveriesSubTab(nextProps.requestedDeliveriesSubTab);
             }
-            const purpose = nextProps.requestedCheckinPurpose || 'all';
-            const role = nextProps.requestedCheckinRole || 'all';
-            const date = nextProps.requestedCheckinDate || '';
-            const prevPurpose = this.props.requestedCheckinPurpose || 'all';
-            const prevRole = this.props.requestedCheckinRole || 'all';
-            const prevDate = this.props.requestedCheckinDate || '';
-            if (purpose !== prevPurpose || role !== prevRole || date !== prevDate) {
-                this.state.filters.checkins.purpose = purpose;
-                this.state.filters.checkins.role = role;
-                this.state.filters.checkins.date = date;
-                if (this.state.activeSubTab === 'checkins' || nextProps.requestedSubTab === 'checkins') {
-                    this.state.pagination.checkins.page = 1;
-                    this.fetchActiveList();
-                }
+            if (!subChanged) {
+                this._syncOpsNavFilters(nextProps, delChanged);
             }
             if (nextProps.refreshNonce !== undefined && nextProps.refreshNonce !== this.props.refreshNonce) {
                 this.reloadFromRefresh().finally(() => {
@@ -266,7 +263,8 @@ export class OperationsBase extends Component {
                 }
             }
             if (hasAttempt) {
-                const ok = log.isOk;
+                const ok = log.selectedCheckpointId ? !!log.mapAttemptOk : !!log.isOk;
+                const attemptTitle = log.mapAttemptLabel || (ok ? 'GPS OK' : 'Blocked attempt');
                 L.circleMarker([attLat, attLng], {
                     radius: 9,
                     color: ok ? '#198754' : '#dc3545',
@@ -274,7 +272,7 @@ export class OperationsBase extends Component {
                     fillOpacity: 0.95,
                     weight: 2,
                 }).addTo(this.checkinMapInstance).bindPopup(
-                    `<b>${ok ? 'GPS OK' : 'Blocked attempt'}</b><br/>${log.userLabel || log.booker}`
+                    `<b>${attemptTitle}</b><br/>${log.userLabel || log.booker}`
                 );
                 bounds.push([attLat, attLng]);
             }
@@ -288,7 +286,17 @@ export class OperationsBase extends Component {
                     this.checkinMapInstance = null;
                 }
             };
-        }, () => [this.checkinMapRef.el, this.state.selectedCheckin]);
+        }, () => {
+            const log = this.state.selectedCheckin;
+            return [
+                this.checkinMapRef.el,
+                log && log.id,
+                log && log.selectedCheckpointId,
+                log && log.attempt_latitude,
+                log && log.attempt_longitude,
+                log && log.mapAttemptOk,
+            ];
+        });
     }
 
     _emptySaleOrderLine() {
@@ -467,19 +475,326 @@ export class OperationsBase extends Component {
         };
     }
 
-    _checkinOutcomeDomain(outcome) {
-        if (outcome === 'in_progress') return [['visit_id.state', '=', 'in_progress']];
-        if (outcome === 'order') return [['visit_id.outcome', '=', 'order']];
-        if (outcome === 'no_order') return [['visit_id.outcome', '=', 'no_order']];
-        if (outcome === 'incomplete') return [['visit_id.outcome', '=', 'incomplete']];
-        if (outcome === 'undone') return [['visit_id.outcome', '=', 'undone']];
+    _checkinStatusMatches(result, status) {
+        if (!status) return true;
+        if (status === 'ok') return result === 'ok';
+        if (status === 'blocked') return result !== 'ok';
+        if (status === 'blocked_too_far') return result === 'blocked_too_far';
+        if (status === 'blocked_too_close') return result === 'blocked_too_close';
+        if (status === 'blocked_missing') {
+            return result === 'blocked_missing_shop_gps'
+                || result === 'blocked_missing_user_gps'
+                || result === 'blocked_invalid_coords';
+        }
+        return true;
+    }
+
+    _checkinOutcomeMatches(session, outcome) {
+        if (!outcome || outcome === 'all') return true;
+        if (outcome === 'in_progress') return session.visitState === 'in_progress';
+        if (outcome === 'order') return session.visitOutcomeKey === 'order';
+        if (outcome === 'no_order') return session.visitOutcomeKey === 'no_order';
+        if (outcome === 'incomplete') return session.visitOutcomeKey === 'incomplete';
+        if (outcome === 'undone') return session.visitOutcomeKey === 'undone';
         if (outcome === 'cancelled') {
+            return session.visitState === 'cancelled' && session.visitOutcomeKey !== 'undone';
+        }
+        return true;
+    }
+
+    _checkinSessionKey(row) {
+        const taskId = this._m2oId(row.visit_task_id);
+        if (
+            row.role === 'order_booker'
+            && (row.purpose === 'check_in' || row.purpose === 'place_order')
+            && taskId
+        ) {
+            return row.result === 'ok' ? `task:${taskId}:ok` : `task:${taskId}:blocked`;
+        }
+        return `row:${row.id}`;
+    }
+
+    _compareCheckinTimeDesc(a, b) {
+        const aTime = a.createdAt || '';
+        const bTime = b.createdAt || '';
+        if (aTime !== bTime) return aTime < bTime ? 1 : -1;
+        return (b.id || 0) - (a.id || 0);
+    }
+
+    _pickCheckinHeadline(members) {
+        const newest = (rows) => [...rows].sort((a, b) => this._compareCheckinTimeDesc(a, b))[0];
+        const placeOk = members.filter((row) => row.result === 'ok' && row.purpose === 'place_order');
+        if (placeOk.length) return newest(placeOk);
+        const checkOk = members.filter((row) => row.result === 'ok' && row.purpose === 'check_in');
+        if (checkOk.length) return newest(checkOk);
+        return newest(members);
+    }
+
+    _gpsMetersLabel(meters, isOk) {
+        const value = Number(meters) || 0;
+        return value ? `${Math.round(value)} m` : (isOk ? '—' : 'n/a');
+    }
+
+    _gpsCheckpointFromRow(row) {
+        return {
+            id: row.id,
+            time: row.time,
+            distLabel: row.distLabel,
+            purpose: row.purpose,
+            purposeLabel: row.purposeLabel,
+            result: row.result,
+            status: row.status,
+            isOk: row.isOk,
+            label: `${row.purposeLabel} · ${row.status}`,
+            createdAt: row.createdAt || '',
+            attempt_latitude: row.attempt_latitude || 0,
+            attempt_longitude: row.attempt_longitude || 0,
+        };
+    }
+
+    _oldestCheckinFirst(rows) {
+        return [...rows].sort((a, b) => this._compareCheckinTimeDesc(b, a));
+    }
+
+    _successCheckpoints(members) {
+        const ordered = this._oldestCheckinFirst(members);
+        const hasCheckIn = ordered.some((row) => row.purpose === 'check_in');
+        const placeRow = [...ordered].reverse().find((row) => row.purpose === 'place_order');
+        // List status stays Place Order after promotion. The timeline still
+        // shows the original check-in and the later place-order as two steps.
+        if (placeRow && !hasCheckIn) {
+            const checkInTime = placeRow.startedAt
+                ? (this.formatUtcToPkt(placeRow.startedAt) || placeRow.time)
+                : placeRow.time;
+            const placeTime = placeRow.endedAt
+                ? (this.formatUtcToPkt(placeRow.endedAt) || placeRow.time)
+                : placeRow.time;
+            const placeMeters = placeRow.placeOrderDistanceM || placeRow.distance_m;
             return [
-                ['visit_id.state', '=', 'cancelled'],
-                ['visit_id.outcome', '!=', 'undone'],
+                {
+                    id: `${placeRow.id}-checkin`,
+                    time: checkInTime,
+                    distLabel: this._gpsMetersLabel(placeRow.checkInDistanceM, true),
+                    purpose: 'check_in',
+                    purposeLabel: 'Check-in',
+                    result: 'ok',
+                    status: 'GPS OK',
+                    isOk: true,
+                    label: 'Check-in · GPS OK',
+                    createdAt: placeRow.startedAt || placeRow.createdAt || '',
+                    attempt_latitude: placeRow.checkInLatitude || 0,
+                    attempt_longitude: placeRow.checkInLongitude || 0,
+                },
+                {
+                    id: `${placeRow.id}-place`,
+                    time: placeTime,
+                    distLabel: this._gpsMetersLabel(placeMeters, true),
+                    purpose: 'place_order',
+                    purposeLabel: 'Place Order',
+                    result: 'ok',
+                    status: 'GPS OK',
+                    isOk: true,
+                    label: 'Place Order · GPS OK',
+                    createdAt: placeRow.endedAt || placeRow.createdAt || '',
+                    attempt_latitude: placeRow.placeOrderLatitude || placeRow.attempt_latitude || 0,
+                    attempt_longitude: placeRow.placeOrderLongitude || placeRow.attempt_longitude || 0,
+                },
             ];
         }
-        return [];
+        return ordered.map((row) => this._gpsCheckpointFromRow(row));
+    }
+
+    _sessionLatestAt(members, checkpoints) {
+        const stamps = [
+            ...members.map((row) => row.createdAt || ''),
+            ...checkpoints.map((cp) => cp.createdAt || ''),
+        ];
+        return stamps.reduce((latest, stamp) => (stamp > latest ? stamp : latest), '');
+    }
+
+    _withVisitContext(headline, members) {
+        const visited = [...members].reverse().find((row) => (
+            this._m2oId(row.visit_id) || row.visitState || row.visitOutcomeKey
+        ));
+        if (!visited || visited === headline) return { ...headline };
+        return {
+            ...headline,
+            visitState: headline.visitState || visited.visitState,
+            visitOutcomeKey: headline.visitOutcomeKey || visited.visitOutcomeKey,
+            notes: headline.notes || visited.notes,
+            sale_order_id: headline.sale_order_id || visited.sale_order_id,
+            endTime: headline.endTime || visited.endTime,
+            duration: headline.duration || visited.duration,
+            hasOrder: headline.hasOrder || visited.hasOrder,
+            orderLabel: visited.orderLabel || headline.orderLabel,
+            outcomeBadgeClass: visited.outcomeBadgeClass || headline.outcomeBadgeClass,
+            visit_id: this._m2oId(headline.visit_id) ? headline.visit_id : visited.visit_id,
+            startedAt: headline.startedAt || visited.startedAt,
+            endedAt: headline.endedAt || visited.endedAt,
+            checkInDistanceM: headline.checkInDistanceM || visited.checkInDistanceM,
+            placeOrderDistanceM: headline.placeOrderDistanceM || visited.placeOrderDistanceM,
+        };
+    }
+
+    _groupCheckinSessions(rows) {
+        const groups = new Map();
+        for (const row of rows) {
+            const key = this._checkinSessionKey(row);
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(row);
+        }
+        const sessions = [];
+        for (const [key, members] of groups.entries()) {
+            const blockedSession = members.every((row) => row.result !== 'ok');
+            const headline = blockedSession
+                ? this._oldestCheckinFirst(members)[0]
+                : this._pickCheckinHeadline(members);
+            const checkpoints = blockedSession
+                ? this._oldestCheckinFirst(members).map((row) => this._gpsCheckpointFromRow(row))
+                : this._successCheckpoints(members);
+            const sessionLatestAt = this._sessionLatestAt(members, checkpoints);
+            const taskGroupId = key.startsWith('task:') ? key.split(':')[1] : false;
+            sessions.push({
+                ...this._withVisitContext(headline, members),
+                checkpoints,
+                checkpointCount: checkpoints.length,
+                sessionLatestAt,
+                taskGroupId,
+                filterPurposes: [...new Set(checkpoints.map((cp) => cp.purpose))],
+                filterResults: [...new Set([headline.result, ...checkpoints.map((cp) => cp.result)])],
+            });
+        }
+        this._shareVisitCheckpoints(sessions);
+        sessions.sort((a, b) => this._compareCheckinTimeDesc(
+            { createdAt: a.sessionLatestAt, id: a.id },
+            { createdAt: b.sessionLatestAt, id: b.id },
+        ));
+        return sessions;
+    }
+
+    _shareVisitCheckpoints(sessions) {
+        const byTask = new Map();
+        for (const session of sessions) {
+            if (!session.taskGroupId) continue;
+            if (!byTask.has(session.taskGroupId)) byTask.set(session.taskGroupId, []);
+            byTask.get(session.taskGroupId).push(session);
+        }
+        for (const group of byTask.values()) {
+            if (group.length < 2) continue;
+            const checkpoints = this._oldestCheckinFirst(group.flatMap((session) => session.checkpoints));
+            for (const session of group) {
+                session.checkpoints = checkpoints;
+                session.checkpointCount = checkpoints.length;
+            }
+        }
+    }
+
+    _filterCheckinSessions(sessions, filters) {
+        return sessions.filter((session) => {
+            if (filters.purpose && filters.purpose !== 'all') {
+                const purposes = session.result === 'ok'
+                    ? [session.purpose]
+                    : (session.filterPurposes || [session.purpose]);
+                if (!purposes.includes(filters.purpose)) return false;
+            }
+            if (filters.status) {
+                const results = session.result === 'ok'
+                    ? [session.result]
+                    : (session.filterResults || [session.result]);
+                if (!results.some((result) => this._checkinStatusMatches(result, filters.status))) {
+                    return false;
+                }
+            }
+            return this._checkinOutcomeMatches(session, filters.outcome);
+        });
+    }
+
+    _pageCheckinSessions(sessions) {
+        const pag = this.state.pagination.checkins;
+        const limit = pag.limit || 50;
+        const pageCount = Math.max(1, Math.ceil(sessions.length / limit) || 1);
+        let page = pag.page || 1;
+        if (page > pageCount) page = pageCount;
+        if (page < 1) page = 1;
+        pag.page = page;
+        pag.total = sessions.length;
+        const start = (page - 1) * limit;
+        return sessions.slice(start, start + limit);
+    }
+
+    _mapGpsAttempt(attempt, enrichment) {
+        const { visitsById, visitsByDmId, tasksById, jobsById } = enrichment;
+        const isOk = attempt.result === 'ok';
+        const status = this._gpsResultLabel(attempt.result);
+        const purposeLabel = this._gpsPurposeLabel(attempt.purpose);
+        const distLabel = attempt.distance_m
+            ? `${Math.round(attempt.distance_m)} m`
+            : (isOk ? '—' : 'n/a');
+        const visit = visitsById[this._m2oId(attempt.visit_id)]
+            || visitsByDmId[this._m2oId(attempt.dm_delivery_id)]
+            || null;
+        const job = jobsById[this._m2oId(attempt.dm_delivery_id)] || null;
+        const task = tasksById[this._m2oId(attempt.visit_task_id)] || null;
+        const saleOrder = attempt.sale_order_id || (visit && visit.sale_order_id) || false;
+        const outcome = this._gpsCheckinOutcome(attempt, Boolean(this._m2oId(saleOrder)));
+        const visitBadge = this._checkinVisitBadge(visit, outcome);
+        const notes = ((visit && visit.notes) || (task && task.notes) || '').trim();
+        const timing = this._checkinTiming(visit, job);
+        return {
+            id: attempt.id,
+            shop: attempt.shop_id ? attempt.shop_id[1] : 'Unknown shop',
+            shopId: attempt.shop_id ? attempt.shop_id[0] : false,
+            booker: attempt.user_id ? attempt.user_id[1] : 'Unknown',
+            bookerId: attempt.user_id ? attempt.user_id[0] : false,
+            userLabel: attempt.user_id ? attempt.user_id[1] : 'Unknown',
+            role: attempt.role,
+            roleLabel: this._gpsRoleLabel(attempt.role),
+            purpose: attempt.purpose,
+            purposeLabel,
+            result: attempt.result,
+            isOk,
+            status,
+            time: this.formatUtcToPkt(attempt.create_date) || '—',
+            createdAt: attempt.create_date || '',
+            distance_m: attempt.distance_m || 0,
+            min_distance_m: attempt.min_distance_m || 0,
+            max_distance_m: attempt.max_distance_m || 0,
+            distLabel,
+            message: attempt.message || '',
+            shop_latitude: attempt.shop_latitude || 0,
+            shop_longitude: attempt.shop_longitude || 0,
+            attempt_latitude: attempt.attempt_latitude || 0,
+            attempt_longitude: attempt.attempt_longitude || 0,
+            taskRef: attempt.visit_task_id
+                ? attempt.visit_task_id[1]
+                : (attempt.dm_delivery_id
+                    ? attempt.dm_delivery_id[1]
+                    : (saleOrder ? saleOrder[1] : '—')),
+            visit_id: attempt.visit_id || false,
+            visit_task_id: attempt.visit_task_id || false,
+            dm_delivery_id: attempt.dm_delivery_id || false,
+            sale_order_id: saleOrder,
+            isDeliveryCheckin: outcome.isDeliveryCheckin,
+            hasOrder: outcome.hasOrder,
+            orderLabel: visitBadge.label,
+            outcomeBadgeClass: visitBadge.className,
+            visitState: visit ? visit.state : '',
+            visitOutcomeKey: visit ? visit.outcome : '',
+            startedAt: visit ? (visit.started_at || '') : '',
+            endedAt: visit ? (visit.ended_at || '') : '',
+            checkInDistanceM: visit ? (visit.check_in_distance_m || 0) : 0,
+            placeOrderDistanceM: visit ? (visit.place_order_distance_m || 0) : 0,
+            checkInLatitude: visit ? (visit.check_in_latitude || 0) : 0,
+            checkInLongitude: visit ? (visit.check_in_longitude || 0) : 0,
+            placeOrderLatitude: visit ? (visit.place_order_latitude || 0) : 0,
+            placeOrderLongitude: visit ? (visit.place_order_longitude || 0) : 0,
+            notes,
+            endTime: timing.endTime,
+            duration: timing.duration,
+            outcome: purposeLabel,
+            checkpoints: [],
+            checkpointCount: 1,
+        };
     }
 
     _checkinVisitBadge(visit, outcome) {
@@ -859,7 +1174,9 @@ export class OperationsBase extends Component {
         const visitFields = [
             'notes', 'sale_order_id', 'outcome', 'state',
             'started_at', 'ended_at', 'duration_seconds', 'duration_minutes',
-            'dm_delivery_id',
+            'dm_delivery_id', 'check_in_distance_m', 'place_order_distance_m',
+            'check_in_latitude', 'check_in_longitude',
+            'place_order_latitude', 'place_order_longitude',
         ];
         const visitsById = {};
         const visitsByDmId = {};
@@ -1087,6 +1404,12 @@ export class OperationsBase extends Component {
         };
     }
 
+    _dispatchOrderStillOpen(row) {
+        if (!row || row.is_fully_delivered) return false;
+        if (row.deliveryStatus === "done" || row.deliveryStatus === "no_stock") return false;
+        return Number(row.qtyToDeliver) > 0;
+    }
+
     // --- THE MASTER DATA ENGINE ---
     async fetchActiveList() {
         let tab = this.state.activeSubTab;
@@ -1145,6 +1468,9 @@ export class OperationsBase extends Component {
                 if (tab === 'dispatch') {
                     domain.push(['state', 'in', ['sale', 'done']]);
                     domain.push(['shahtaj_delivery_status', 'in', ['pending', 'partial']]);
+                    domain.push(['shahtaj_qty_to_deliver', '>', 0]);
+                    if (filters.dateFrom) domain.push(['date_order', '>=', this._pktDateToUtcBounds(filters.dateFrom).start]);
+                    if (filters.dateTo) domain.push(['date_order', '<=', this._pktDateToUtcBounds(filters.dateTo).end]);
                 }
                 if (tab === 'verification') {
                     domain.push(['shahtaj_approval_state', '=', 'to_approve']);
@@ -1156,8 +1482,8 @@ export class OperationsBase extends Component {
                 if (filters.search) domain.push('|', '|', ['name', 'ilike', filters.search], ['partner_id.name', 'ilike', filters.search], ['user_id.name', 'ilike', filters.search]);
                 if ((tab === 'orders' || tab === 'verification') && filters.booker && filters.booker !== 'all') domain.push(['user_id', '=', parseInt(filters.booker)]);
                 if (tab === 'orders') {
-                    if (filters.dateFrom) domain.push(['date_order', '>=', filters.dateFrom]);
-                    if (filters.dateTo) domain.push(['date_order', '<=', `${filters.dateTo} 23:59:59`]);
+                    if (filters.dateFrom) domain.push(['date_order', '>=', this._pktDateToUtcBounds(filters.dateFrom).start]);
+                    if (filters.dateTo) domain.push(['date_order', '<=', this._pktDateToUtcBounds(filters.dateTo).end]);
                 }
                 if (tab === 'verification' && filters.reason && filters.reason !== 'all') {
                     if (filters.reason === 'discount') domain.push(['shahtaj_approval_reason_discount', '=', true]);
@@ -1193,7 +1519,8 @@ export class OperationsBase extends Component {
                 }
                 if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
                 domain.push(...this._dateRangeDomain(filters, 'scheduled_date'));
-                if (filters.state && filters.state !== 'all') domain.push(['state', '=', filters.state]);
+                if (filters.state === 'except_not_ready') domain.push(['state', '!=', 'not_ready']);
+                else if (filters.state && filters.state !== 'all') domain.push(['state', '=', filters.state]);
                 if (filters.field_state && filters.field_state !== 'all') domain.push(['field_state', '=', filters.field_state]);
                 domain.push(...this._dmJobsScheduleDomain(filters.schedule));
             }
@@ -1255,16 +1582,9 @@ export class OperationsBase extends Component {
                     domain.push(['create_date', '>=', bounds.start]);
                     domain.push(['create_date', '<=', bounds.end]);
                 }
-                if (filters.purpose && filters.purpose !== 'all') domain.push(['purpose', '=', filters.purpose]);
                 if (filters.role && filters.role !== 'all') domain.push(['role', '=', filters.role]);
-                if (filters.status === 'ok') domain.push(['result', '=', 'ok']);
-                else if (filters.status === 'blocked') domain.push(['result', '!=', 'ok']);
-                else if (filters.status === 'blocked_too_far') domain.push(['result', '=', 'blocked_too_far']);
-                else if (filters.status === 'blocked_too_close') domain.push(['result', '=', 'blocked_too_close']);
-                else if (filters.status === 'blocked_missing') {
-                    domain.push(['result', 'in', ['blocked_missing_shop_gps', 'blocked_missing_user_gps', 'blocked_invalid_coords']]);
-                }
-                domain.push(...this._checkinOutcomeDomain(filters.outcome));
+                // Status, purpose, and visit outcome apply after rows are grouped
+                // into one session, so a finished order still includes its blocked tries.
             }
             else if (tab === 'schedules') {
                 model = 'shahtaj.weekly.schedule'; targetState = 'tableSchedules';
@@ -1274,7 +1594,7 @@ export class OperationsBase extends Component {
             }
             else if (tab === 'targets') {
                 model = 'shahtaj.visit.target'; targetState = 'tableTargets';
-                fields = ['id', 'name', 'date_start', 'date_end', 'target_type', 'target_value', 'achieved_value', 'remaining_value', 'progress_percent', 'product_id', 'currency_id', 'target_weight_uom', 'active', 'order_booker_id'];
+                fields = ['id', 'name', 'date_start', 'date_end', 'period_status', 'target_type', 'target_value', 'achieved_value', 'remaining_value', 'progress_percent', 'product_id', 'currency_id', 'target_weight_uom', 'active', 'order_booker_id'];
                 if (filters.booker !== 'all') domain.push(['order_booker_id', '=', parseInt(filters.booker)]);
                 if (filters.type !== 'all') domain.push(['target_type', '=', filters.type]);
             }
@@ -1299,9 +1619,6 @@ export class OperationsBase extends Component {
             if (tab === 'schedules' || tab === 'targets') {
                 queryKwargs.context = { active_test: false };
             }
-            if (tab === 'checkins') {
-                queryKwargs.order = 'create_date desc, id desc';
-            }
             if (tab === 'sessions') {
                 queryKwargs.order = 'session_date desc, id desc';
             }
@@ -1317,6 +1634,11 @@ export class OperationsBase extends Component {
                 ({ total, records } = await this._fetchSchedulesSortedPage(domain, fields, pag));
             } else if (tab === 'dm_jobs') {
                 ({ total, records } = await this._fetchDmJobsPinnedPage(domain, fields, pag));
+            } else if (tab === 'checkins') {
+                records = await this.orm.searchRead(model, domain, fields, {
+                    order: 'create_date desc, id desc',
+                });
+                total = 0;
             } else {
                 [total, records] = await Promise.all([
                     this.orm.searchCount(
@@ -1328,7 +1650,9 @@ export class OperationsBase extends Component {
                 ]);
             }
 
-            this.state.pagination[tab].total = total;
+            if (tab !== 'checkins') {
+                this.state.pagination[tab].total = total;
+            }
 
             // 3. MAP RESULTS
             if (tab === 'deliveries' || tab === 'dispatch' || tab === 'orders' || tab === 'verification') {
@@ -1347,6 +1671,17 @@ export class OperationsBase extends Component {
                     }
                     return row;
                 });
+                if (tab === 'dispatch') {
+                    const visible = this.state[targetState].filter((row) => this._dispatchOrderStillOpen(row));
+                    const hidden = this.state[targetState].length - visible.length;
+                    this.state[targetState] = visible;
+                    if (hidden) {
+                        this.state.pagination.dispatch.total = Math.max(
+                            0,
+                            this.state.pagination.dispatch.total - hidden,
+                        );
+                    }
+                }
             }
             else if (tab === 'dm_jobs') {
                 this.state.tableDmJobs = records.map((j) => this._mapDmDeliveryRow(j));
@@ -1380,64 +1715,10 @@ export class OperationsBase extends Component {
                 }));
             }
             else if (tab === 'checkins') {
-                const { visitsById, visitsByDmId, tasksById, jobsById } = await this._enrichCheckinRows(records);
-                this.state.tableCheckins = records.map(a => {
-                    const isOk = a.result === 'ok';
-                    const status = this._gpsResultLabel(a.result);
-                    const purposeLabel = this._gpsPurposeLabel(a.purpose);
-                    const distLabel = a.distance_m
-                        ? `${Math.round(a.distance_m)} m`
-                        : (isOk ? '—' : 'n/a');
-                    const visit = visitsById[this._m2oId(a.visit_id)]
-                        || visitsByDmId[this._m2oId(a.dm_delivery_id)]
-                        || null;
-                    const job = jobsById[this._m2oId(a.dm_delivery_id)] || null;
-                    const task = tasksById[this._m2oId(a.visit_task_id)] || null;
-                    const saleOrder = a.sale_order_id || (visit && visit.sale_order_id) || false;
-                    const outcome = this._gpsCheckinOutcome(a, Boolean(this._m2oId(saleOrder)));
-                    const visitBadge = this._checkinVisitBadge(visit, outcome);
-                    const notes = ((visit && visit.notes) || (task && task.notes) || '').trim();
-                    const timing = this._checkinTiming(visit, job);
-                    return {
-                        id: a.id,
-                        shop: a.shop_id ? a.shop_id[1] : 'Unknown shop',
-                        shopId: a.shop_id ? a.shop_id[0] : false,
-                        booker: a.user_id ? a.user_id[1] : 'Unknown',
-                        bookerId: a.user_id ? a.user_id[0] : false,
-                        userLabel: a.user_id ? a.user_id[1] : 'Unknown',
-                        role: a.role,
-                        roleLabel: this._gpsRoleLabel(a.role),
-                        purpose: a.purpose,
-                        purposeLabel,
-                        result: a.result,
-                        isOk,
-                        status,
-                        time: this.formatUtcToPkt(a.create_date) || '—',
-                        distance_m: a.distance_m || 0,
-                        min_distance_m: a.min_distance_m || 0,
-                        max_distance_m: a.max_distance_m || 0,
-                        distLabel,
-                        message: a.message || '',
-                        shop_latitude: a.shop_latitude || 0,
-                        shop_longitude: a.shop_longitude || 0,
-                        attempt_latitude: a.attempt_latitude || 0,
-                        attempt_longitude: a.attempt_longitude || 0,
-                        taskRef: a.visit_task_id ? a.visit_task_id[1] : (a.dm_delivery_id ? a.dm_delivery_id[1] : (saleOrder ? saleOrder[1] : '—')),
-                        visit_id: a.visit_id || false,
-                        visit_task_id: a.visit_task_id || false,
-                        dm_delivery_id: a.dm_delivery_id || false,
-                        sale_order_id: saleOrder,
-                        isDeliveryCheckin: outcome.isDeliveryCheckin,
-                        hasOrder: outcome.hasOrder,
-                        orderLabel: visitBadge.label,
-                        outcomeBadgeClass: visitBadge.className,
-                        visitOutcomeKey: visit ? visit.outcome : '',
-                        notes,
-                        endTime: timing.endTime,
-                        duration: timing.duration,
-                        outcome: purposeLabel,
-                    };
-                });
+                const enrichment = await this._enrichCheckinRows(records);
+                const mapped = records.map((attempt) => this._mapGpsAttempt(attempt, enrichment));
+                const sessions = this._filterCheckinSessions(this._groupCheckinSessions(mapped), filters);
+                this.state.tableCheckins = this._pageCheckinSessions(sessions);
             }
             else if (tab === 'schedules') {
                 const dateStr = filters.date || '';
@@ -1464,7 +1745,7 @@ export class OperationsBase extends Component {
             else if (tab === 'targets') {
                 this.state.tableTargets = records.map(r => ({
                     id: r.id, name: r.name, bookerId: r.order_booker_id ? r.order_booker_id[0] : null, bookerName: r.order_booker_id ? r.order_booker_id[1] : 'Unknown',
-                    startDate: r.date_start, endDate: r.date_end, type: r.target_type, displayType: r.target_type ? r.target_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown',
+                    startDate: r.date_start, endDate: r.date_end, periodStatus: r.period_status || '', type: r.target_type, displayType: r.target_type ? r.target_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown',
                     targetValue: r.target_value, achievedValue: r.achieved_value, remainingValue: r.remaining_value, progress: r.progress_percent || 0,
                     product: r.product_id ? r.product_id[1] : null, currency: r.currency_id ? r.currency_id[1] : null, weightUom: r.target_weight_uom || '', active: r.active,
                     showActive: this._targetShowActive(r.active, r.date_end),
@@ -2672,16 +2953,114 @@ export class OperationsBase extends Component {
         this._resetTabFilters(tabName);
         this.fetchActiveList();
     }
+    _navSource() {
+        return this._navProps || this.props;
+    }
+
+    _defaultDispatchFilters() {
+        const date = this._navSource().requestedDispatchDate || '';
+        return { search: '', dateFrom: date, dateTo: date };
+    }
+
+    _defaultDmJobsFilters() {
+        const props = this._navSource();
+        return {
+            search: '',
+            dm: 'all',
+            dateFrom: props.requestedDmDate || '',
+            dateTo: props.requestedDmDate || '',
+            state: props.requestedDmState || 'all',
+            field_state: props.requestedDmFieldState || 'all',
+            schedule: 'all',
+        };
+    }
+
+    _defaultOrdersFilters() {
+        const date = this._navSource().requestedOrderDate || '';
+        return { search: '', status: '', booker: 'all', walkIn: false, dateFrom: date, dateTo: date };
+    }
+
+    _defaultCheckinFilters() {
+        const props = this._navSource();
+        return {
+            search: '',
+            status: '',
+            purpose: props.requestedCheckinPurpose || 'all',
+            booker: 'all',
+            date: props.requestedCheckinDate || '',
+            role: props.requestedCheckinRole || 'all',
+            outcome: 'all',
+        };
+    }
+
+    _applyDispatchNav(props) {
+        const date = props.requestedDispatchDate || '';
+        this.state.filters.dispatch.dateFrom = date;
+        this.state.filters.dispatch.dateTo = date;
+        this.state.pagination.dispatch.page = 1;
+    }
+
+    _applyDmNav(props) {
+        this.state.filters.dm_jobs.dateFrom = props.requestedDmDate || '';
+        this.state.filters.dm_jobs.dateTo = props.requestedDmDate || '';
+        this.state.filters.dm_jobs.state = props.requestedDmState || 'all';
+        this.state.filters.dm_jobs.field_state = props.requestedDmFieldState || 'all';
+        this.state.pagination.dm_jobs.page = 1;
+    }
+
+    _syncOpsNavFilters(nextProps, alreadyFetched) {
+        const prev = this.props;
+        if ((nextProps.requestedOrderDate || '') !== (prev.requestedOrderDate || '')) {
+            const date = nextProps.requestedOrderDate || '';
+            this.state.filters.orders.dateFrom = date;
+            this.state.filters.orders.dateTo = date;
+            this.state.pagination.orders.page = 1;
+            if (!alreadyFetched && this.state.activeSubTab === 'orders' && this.state.ordersSubTab !== 'verification') {
+                this.fetchActiveList();
+            }
+        }
+        if ((nextProps.requestedDispatchDate || '') !== (prev.requestedDispatchDate || '')) {
+            this._applyDispatchNav(nextProps);
+            if (!alreadyFetched && this.state.activeSubTab === 'deliveries' && this.state.deliveriesSubTab === 'dispatch') {
+                this.fetchActiveList();
+            }
+        }
+        const dmChanged = (nextProps.requestedDmDate || '') !== (prev.requestedDmDate || '')
+            || (nextProps.requestedDmFieldState || 'all') !== (prev.requestedDmFieldState || 'all')
+            || (nextProps.requestedDmState || 'all') !== (prev.requestedDmState || 'all');
+        if (dmChanged) {
+            this._applyDmNav(nextProps);
+            if (!alreadyFetched && this.state.activeSubTab === 'deliveries' && this.state.deliveriesSubTab === 'jobs') {
+                this.fetchActiveList();
+            }
+        }
+        const purpose = nextProps.requestedCheckinPurpose || 'all';
+        const role = nextProps.requestedCheckinRole || 'all';
+        const date = nextProps.requestedCheckinDate || '';
+        const prevPurpose = prev.requestedCheckinPurpose || 'all';
+        const prevRole = prev.requestedCheckinRole || 'all';
+        const prevDate = prev.requestedCheckinDate || '';
+        if (purpose !== prevPurpose || role !== prevRole || date !== prevDate) {
+            this.state.filters.checkins.purpose = purpose;
+            this.state.filters.checkins.role = role;
+            this.state.filters.checkins.date = date;
+            if (!alreadyFetched && this.state.activeSubTab === 'checkins') {
+                this.state.pagination.checkins.page = 1;
+                this.fetchActiveList();
+            }
+        }
+    }
+
     _resetTabFilters(tabName) {
         const defaultFilters = {
             deliveries: { search: '', status: '' },
-            dispatch:   { search: '' },
-            dm_jobs:    { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', schedule: 'all' },
+            dispatch:   this._defaultDispatchFilters(),
+            dm_jobs:    this._defaultDmJobsFilters(),
             sessions:   { dm: 'all', dateFrom: '', dateTo: '' },
             collections:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
             settlements:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
-                        checkins:   { search: '', status: '', purpose: this.props.requestedCheckinPurpose || 'all', booker: 'all', date: this.props.requestedCheckinDate || '', role: this.props.requestedCheckinRole || 'all', outcome: 'all' },
-            orders:     { search: '', status: '', booker: 'all', walkIn: false, dateFrom: '', dateTo: '' },
+                        checkins:   this._defaultCheckinFilters(),
+            orders:     this._defaultOrdersFilters(),
             verification: { search: '', booker: 'all', reason: 'all' },
             schedules:  { booker: 'all', date: '' },
             targets:    { booker: 'all', type: 'all' },
@@ -2704,11 +3083,12 @@ export class OperationsBase extends Component {
             this.state.selectedDmJob = null;
             this.state.selectedSettlement = null;
             this.state.selectedRecovery = null;
-            this.state.deliveriesSubTab = this.props.requestedDeliveriesSubTab === 'manual'
+            const requestedDeliveries = this._navSource().requestedDeliveriesSubTab;
+            this.state.deliveriesSubTab = requestedDeliveries === 'manual'
                 ? 'dispatch'
-                : (this.props.requestedDeliveriesSubTab || 'dispatch');
-            this.state.filters.dispatch = { search: '' };
-            this.state.filters.dm_jobs = { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all', field_state: 'all', schedule: 'all' };
+                : (requestedDeliveries || 'dispatch');
+            this.state.filters.dispatch = this._defaultDispatchFilters();
+            this.state.filters.dm_jobs = this._defaultDmJobsFilters();
             this.state.filters.sessions = { dm: 'all', dateFrom: '', dateTo: '' };
             this.state.filters.collections = { search: '', dm: 'all', dateFrom: '', dateTo: '' };
             this.state.filters.settlements = { search: '', dm: 'all', dateFrom: '', dateTo: '' };
@@ -3096,6 +3476,18 @@ export class OperationsBase extends Component {
             this.notification.add(error.data?.message || "Failed to reject order.", { type: "danger" });
         } finally {
             this.state.isRejectingOrder = false;
+        }
+    }
+
+    selectCheckinCheckpoint(cp) {
+        const log = this.state.selectedCheckin;
+        if (!log || !cp) return;
+        log.selectedCheckpointId = cp.id;
+        log.mapAttemptOk = !!cp.isOk;
+        log.mapAttemptLabel = cp.label || '';
+        if (cp.attempt_latitude || cp.attempt_longitude) {
+            log.attempt_latitude = cp.attempt_latitude || 0;
+            log.attempt_longitude = cp.attempt_longitude || 0;
         }
     }
 

@@ -371,7 +371,15 @@
                     <tr style="cursor:pointer;" class="transition-all" t-on-click="() => this.viewTarget(tgt)">
                         <td class="ps-4 text-nowrap"><div class="fw-bold text-dark"><t t-esc="tgt.bookerName"/></div></td>
                         <td class="align-middle"><div class="text-primary fw-bold"><t t-esc="tgt.displayType"/></div></td>
-                        <td class="align-middle text-nowrap"><div class="fw-bold small text-dark"><t t-esc="tgt.startDate"/></div><div class="text-muted small">to <t t-esc="tgt.endDate"/></div></td>
+                        <td class="align-middle text-nowrap">
+                            <div class="fw-bold small text-dark"><t t-esc="tgt.startDate"/></div>
+                            <div class="text-muted small">to <t t-esc="tgt.endDate"/></div>
+                            <div class="mt-1">
+                                <span t-if="tgt.periodStatus === 'upcoming'" class="badge rounded-pill px-2 py-1 text-white" style="background-color: #17a2b8;">Upcoming</span>
+                                <span t-elif="tgt.periodStatus === 'current'" class="badge rounded-pill bg-success text-white px-2 py-1">Current</span>
+                                <span t-elif="tgt.periodStatus === 'ended'" class="badge rounded-pill px-2 py-1" style="background-color: #e9ecef; color: #6c757d;">Ended</span>
+                            </div>
+                        </td>
                         <td class="align-middle text-center fw-bold text-dark text-nowrap"><span class="text-success"><t t-esc="tgt.achievedValue"/></span><span class="text-muted mx-1">/</span><t t-esc="tgt.targetValue"/></td>
                         <td class="align-middle text-center">
                             <div class="d-flex align-items-center justify-content-center w-100">
@@ -380,7 +388,6 @@
                             </div>
                         </td>
                         <td class="align-middle text-end pe-4 text-nowrap">
-                            <span t-if="tgt.periodComplete" class="badge bg-dark text-white px-2 py-1 shadow-sm me-1">Period Complete</span>
                             <span t-attf-class="badge #{tgt.showActive ? 'bg-success text-white' : 'bg-secondary text-dark'} px-2 py-1 shadow-sm"><t t-esc="tgt.showActive ? 'Active' : 'Inactive'"/></span>
                         </td>
                     </tr>
@@ -416,7 +423,9 @@
         <h4 class="text-dark fw-bold mb-0">Target: <t t-esc="this.state.selectedTarget.name"/>
         </h4>
         <div class="d-flex align-items-center gap-2">
-            <span t-if="this.state.selectedTarget.periodComplete" class="badge bg-dark text-white px-3 py-2 shadow-sm fs-6">Period Complete</span>
+            <span t-if="this.state.selectedTarget.periodStatus === 'upcoming'" class="badge rounded-pill px-3 py-2 text-white fs-6" style="background-color: #17a2b8;">Upcoming</span>
+            <span t-elif="this.state.selectedTarget.periodStatus === 'current'" class="badge rounded-pill bg-success text-white px-3 py-2 fs-6">Current</span>
+            <span t-elif="this.state.selectedTarget.periodStatus === 'ended'" class="badge rounded-pill px-3 py-2 fs-6" style="background-color: #e9ecef; color: #6c757d;">Ended</span>
             <span t-attf-class="badge #{this.state.selectedTarget.showActive ? 'text-success' : 'text-secondary'} px-3 py-2 shadow-sm fs-6">
                 <t t-esc="this.state.selectedTarget.showActive ? 'Active Target' : 'Inactive'"/>
             </span>

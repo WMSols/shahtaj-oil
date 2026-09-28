@@ -8,6 +8,8 @@ export class BankTransactions extends Component {
     static props = {
         embedded: { type: Boolean, optional: true },
         initialDirection: { type: String, optional: true },
+        initialDateFrom: { type: String, optional: true },
+        initialDateTo: { type: String, optional: true },
     };
 
     setup() {
@@ -38,8 +40,10 @@ export class BankTransactions extends Component {
             filters: {
                 transactions: { 
                     search: '', journal: 'all', 
-                    direction: this.props.initialDirection || 'all', 
-                    sortBy: 'date_desc', dateFrom: '', dateTo: '' 
+                    direction: this.props.initialDirection || 'all',
+                    sortBy: 'date_desc',
+                    dateFrom: this.props.initialDateFrom || '',
+                    dateTo: this.props.initialDateTo || '', 
                 },
                 journals: { search: '' }
             },
@@ -57,14 +61,21 @@ export class BankTransactions extends Component {
         this.debouncedFetchActiveList = this.debounceSearch(() => this.fetchActiveList(), 400);
 
         onWillUpdateProps((nextProps) => {
-            if (nextProps.initialDirection && nextProps.initialDirection !== this.state.filters.transactions.direction) {
-                this.state.filters.transactions.direction = nextProps.initialDirection;
-                this.state.activeTab = 'transactions';
-                this.state.viewMode = 'list';
-                this.state.selectedTransaction = null;
-                this.state.pagination.transactions.page = 1;
-                this.fetchActiveList();
+            const direction = nextProps.initialDirection || 'all';
+            const dateFrom = nextProps.initialDateFrom || '';
+            const dateTo = nextProps.initialDateTo || '';
+            const filters = this.state.filters.transactions;
+            if (direction === filters.direction && dateFrom === filters.dateFrom && dateTo === filters.dateTo) {
+                return;
             }
+            filters.direction = direction;
+            filters.dateFrom = dateFrom;
+            filters.dateTo = dateTo;
+            this.state.activeTab = 'transactions';
+            this.state.viewMode = 'list';
+            this.state.selectedTransaction = null;
+            this.state.pagination.transactions.page = 1;
+            this.fetchActiveList();
         });
 
         onWillStart(async () => {

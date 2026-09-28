@@ -9,6 +9,7 @@ export class StaffManagement extends Component {
     static components = { ConfirmModal };
     static props = {
         requestedStaffRole: { type: String, optional: true },
+        requestedStaffStatus: { type: String, optional: true },
     };
     setup() {
         this.orm = useService("orm");
@@ -77,7 +78,7 @@ export class StaffManagement extends Component {
                 detailJobs: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
             },
             filters: {
-                staff: { search: "", status: "all" },
+                staff: { search: "", status: this.props.requestedStaffStatus || "all" },
                 archive: { search: "" },
             },
         });
@@ -97,9 +98,18 @@ export class StaffManagement extends Component {
         });
 
         onWillUpdateProps((nextProps) => {
+            const status = nextProps.requestedStaffStatus || "all";
+            const statusChanged = status !== (this.props.requestedStaffStatus || "all");
+            if (statusChanged) {
+                this.state.filters.staff.status = status;
+                this.state.pagination.staff.page = 1;
+            }
             const role = nextProps.requestedStaffRole;
-            if (role && role !== this.state.activeTab && this.state.viewMode === "list" && !this.state.showForm) {
+            const roleChanged = role && role !== this.state.activeTab && this.state.viewMode === "list" && !this.state.showForm;
+            if (roleChanged) {
                 this.switchTab(role);
+            } else if (statusChanged && this.state.viewMode === "list" && !this.state.showForm) {
+                this.fetchStaffData();
             }
         });
 
@@ -346,7 +356,7 @@ export class StaffManagement extends Component {
         this.state.detailTargets = await this.orm.searchRead(
             "shahtaj.visit.target",
             [["order_booker_id", "=", staff.id]],
-            ["id", "date_start", "date_end", "target_type", "target_value", "achieved_value", "progress_percent", "active"],
+            ["id", "date_start", "date_end", "period_status", "target_type", "target_value", "achieved_value", "progress_percent", "active"],
             {
                 context: { active_test: false },
                 order: "date_start desc, active desc, id desc",

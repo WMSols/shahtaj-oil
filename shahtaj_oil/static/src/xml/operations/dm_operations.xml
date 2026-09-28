@@ -162,11 +162,16 @@
 
                 <t t-if="!this.state.selectedDelivery and !this.state.selectedDmJob and !this.state.selectedSettlement and !this.state.selectedRecovery and this.state.deliveriesSubTab === 'dispatch'">
                     <div class="p-3 bg-light border-bottom">
-                        <div class="input-group input-group-sm w-50 shadow-sm">
-                            <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
-                            <input type="text" class="form-control border-start-0 ps-0" placeholder="Search shop, booker, or order..."
-                                   t-att-value="this.state.filters.dispatch.search"
-                                   t-on-input="(ev) => this.onSearchInput(ev, 'dispatch')"/>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <div class="input-group input-group-sm shadow-sm" style="max-width: 360px;">
+                                <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
+                                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search shop, booker, or order..."
+                                       t-att-value="this.state.filters.dispatch.search"
+                                       t-on-input="(ev) => this.onSearchInput(ev, 'dispatch')"/>
+                            </div>
+                            <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.dispatch.dateFrom" t-on-change="() => this.onFilterChange('dispatch')" title="From date"/>
+                            <span class="text-muted small">to</span>
+                            <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.dispatch.dateTo" t-on-change="() => this.onFilterChange('dispatch')" title="To date"/>
                         </div>
                     </div>
                     <div class="position-relative">
@@ -249,6 +254,7 @@
                         <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.dm_jobs.dateTo" t-on-change="() => this.onFilterChange('dm_jobs')" title="To date"/>
                         <select class="form-select form-select-sm" style="max-width: 140px;" t-model="this.state.filters.dm_jobs.state" t-on-change="() => this.onFilterChange('dm_jobs')">
                             <option value="all">All stock</option>
+                            <option value="except_not_ready">Except not ready</option>
                             <option value="ready">Ready</option>
                             <option value="picked">Picked</option>
                             <option value="partial">Partial</option>

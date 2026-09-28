@@ -265,7 +265,7 @@ export class SchedulesTargets extends Component {
             'shahtaj.visit.target',
             [['order_booker_id', '=', bookerId]],
             [
-                'id', 'name', 'date_start', 'date_end', 'target_type',
+                'id', 'name', 'date_start', 'date_end', 'period_status', 'target_type',
                 'target_value', 'achieved_value', 'remaining_value', 'progress_percent',
                 'product_id', 'currency_id', 'target_weight_uom', 'active'
             ],
@@ -280,6 +280,7 @@ export class SchedulesTargets extends Component {
             name: r.name,
             startDate: r.date_start,
             endDate: r.date_end,
+            periodStatus: r.period_status || '',
             type: r.target_type,
             amount: r.target_value,
             achievedAmount: r.achieved_value,

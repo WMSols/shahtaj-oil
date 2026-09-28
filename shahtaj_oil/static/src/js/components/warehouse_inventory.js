@@ -8,6 +8,7 @@ import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
 export class WarehouseInventory extends Component {
     static props = {
         requestedSubTab: { type: String, optional: true },
+        requestedStockStatus: { type: String, optional: true },
     };
     static components = { ConfirmModal };
     setup() {
@@ -53,7 +54,7 @@ export class WarehouseInventory extends Component {
             },
             filters: {
                 inventory: { search: '', sort: 'default' },
-                management: { search: '', status: 'all' },
+                management: { search: '', status: this.props.requestedStockStatus || 'all' },
                 taxes: { search: '' }
             },
         });
@@ -78,8 +79,17 @@ export class WarehouseInventory extends Component {
             await this.fetchActiveList();
         });
         onWillUpdateProps((nextProps) => {
-            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.state.activeSubTab) {
+            const status = nextProps.requestedStockStatus || 'all';
+            const statusChanged = status !== (this.props.requestedStockStatus || 'all');
+            if (statusChanged) {
+                this.state.filters.management.status = status;
+                this.state.pagination.management.page = 1;
+            }
+            const subChanged = nextProps.requestedSubTab && nextProps.requestedSubTab !== this.state.activeSubTab;
+            if (subChanged) {
                 this.setSubTab(nextProps.requestedSubTab);
+            } else if (statusChanged && this.state.activeSubTab === 'management') {
+                this.fetchActiveList();
             }
         });
 

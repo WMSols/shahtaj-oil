@@ -15,6 +15,11 @@ export class OperationsTracking extends Component {
         requestedCheckinPurpose: { type: String, optional: true },
         requestedCheckinRole: { type: String, optional: true },
         requestedCheckinDate: { type: String, optional: true },
+        requestedOrderDate: { type: String, optional: true },
+        requestedDispatchDate: { type: String, optional: true },
+        requestedDmDate: { type: String, optional: true },
+        requestedDmFieldState: { type: String, optional: true },
+        requestedDmState: { type: String, optional: true },
     };
 
     setup() {

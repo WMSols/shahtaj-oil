@@ -45,6 +45,23 @@
                 </button>
             </div>
 
+            <div class="px-3 py-2 border-bottom bg-white d-flex flex-wrap align-items-center gap-2" t-if="this.state.pill === 'reports' and this.state.mode === 'list'">
+                <small class="fw-bold text-muted text-nowrap">Created</small>
+                <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;" title="From date"
+                       t-att-value="this.state.filters.dateFrom" t-on-change="(ev) => this.onFilter('dateFrom', ev)"/>
+                <span class="text-muted small">to</span>
+                <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;" title="To date"
+                       t-att-value="this.state.filters.dateTo" t-on-change="(ev) => this.onFilter('dateTo', ev)"/>
+                <select class="form-select form-select-sm w-auto shadow-sm" t-att-value="this.state.filters.booker" t-on-change="(ev) => this.onFilter('booker', ev)">
+                    <option value="all">All bookers</option>
+                    <option t-foreach="this.state.bookers" t-as="booker" t-key="booker.id" t-att-value="booker.id" t-esc="booker.name"/>
+                </select>
+                <select class="form-select form-select-sm w-auto shadow-sm" t-att-value="this.state.filters.deliveryMan" t-on-change="(ev) => this.onFilter('deliveryMan', ev)">
+                    <option value="all">All delivery men</option>
+                    <option t-foreach="this.state.deliveryMen" t-as="dm" t-key="dm.id" t-att-value="dm.id" t-esc="dm.name"/>
+                </select>
+            </div>
+
             <div class="flex-grow-1 overflow-auto">
                 <t t-if="this.state.pill === 'reports' and this.state.mode === 'list'">
                     <div class="position-relative">

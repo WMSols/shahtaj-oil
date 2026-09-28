@@ -504,6 +504,7 @@
                                     t-model="this.state.filters.invoices.status" 
                                     t-on-change="() => this.onFilterChange('invoices')">
                                 <option value="all">All Statuses</option>
+                                <option value="Open">Open (unpaid or partial)</option>
                                 <option value="Posted">Posted (Open)</option>
                                 <option value="Partial">Partially Paid</option>
                                 <option value="Paid">Paid</option>

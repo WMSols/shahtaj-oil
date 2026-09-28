@@ -128,12 +128,7 @@
                 display: inline-flex;
                 align-items: center;
                 gap: 8px;
-                cursor: pointer;
-                transition: transform 0.15s ease, box-shadow 0.15s ease;
-            }
-            .so-ov-chip:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+                cursor: default;
             }
             .so-ov-chip--warn { background: #fff7ed; color: #c2410c; }
             .so-ov-chip--amber { background: #fef3c7; color: #b45309; }
@@ -591,24 +586,24 @@
                             </div>
 
                             <div t-if="this.hasAttentionItems" class="d-flex flex-wrap gap-2 mb-4">
-                                <button t-if="this.state.kpis.pendingShops > 0" class="so-ov-chip so-ov-chip--warn" t-on-click="() => this.switchTab('territory', 'shops')">
+                                <span t-if="this.state.kpis.pendingShops > 0" class="so-ov-chip so-ov-chip--warn">
                                     <t t-esc="this.state.kpis.pendingShops"/> shops awaiting approval
-                                </button>
-                                <button t-if="this.state.kpis.pendingDeliveries > 0" class="so-ov-chip so-ov-chip--amber" t-on-click="() => this.openDeliveries('dispatch')">
+                                </span>
+                                <span t-if="this.state.kpis.pendingDeliveries > 0" class="so-ov-chip so-ov-chip--amber">
                                     <t t-esc="this.state.kpis.pendingDeliveries"/> pending deliveries
-                                </button>
-                                <button t-if="this.state.kpis.ordersToDispatch > 0" class="so-ov-chip so-ov-chip--amber" t-on-click="() => this.openDeliveries('dispatch')">
+                                </span>
+                                <span t-if="this.state.kpis.ordersToDispatch > 0" class="so-ov-chip so-ov-chip--amber">
                                     <t t-esc="this.state.kpis.ordersToDispatch"/> orders to dispatch
-                                </button>
-                                <button t-if="this.state.kpis.dmInTransit > 0" class="so-ov-chip so-ov-chip--amber" t-on-click="() => this.openDeliveries('jobs')">
+                                </span>
+                                <span t-if="this.state.kpis.dmInTransit > 0" class="so-ov-chip so-ov-chip--amber">
                                     <t t-esc="this.state.kpis.dmInTransit"/> jobs in transit
-                                </button>
-                                <button t-if="this.state.kpis.outOfStockProducts > 0" class="so-ov-chip so-ov-chip--red" t-on-click="() => this.switchTab('warehouse', 'management')">
+                                </span>
+                                <span t-if="this.state.kpis.outOfStockProducts > 0" class="so-ov-chip so-ov-chip--red">
                                     <t t-esc="this.state.kpis.outOfStockProducts"/> products out of stock
-                                </button>
-                                <button t-if="this.hasFinancialAccess and this.state.kpis.toInvoice > 0" class="so-ov-chip so-ov-chip--warn" t-on-click="() => this.switchTab('financials', 'orders')">
+                                </span>
+                                <span t-if="this.hasFinancialAccess and this.state.kpis.toInvoice > 0" class="so-ov-chip so-ov-chip--warn">
                                     <t t-esc="this.state.kpis.toInvoice"/> orders to invoice
-                                </button>
+                                </span>
                             </div>
 
                             <div class="row g-3 mb-3">
@@ -649,16 +644,16 @@
                                                 </div>
                                             </div>
                                             <div class="col-6 col-md-3">
-                                                <div t-attf-class="so-ov-metric #{this.state.kpis.pendingShops > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.switchTab('territory', 'shops')">
+                                                <div t-attf-class="so-ov-metric #{this.state.kpis.pendingShops > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openShops({ shopStatus: 'pending' })">
                                                     <div class="so-ov-metric-label">Pending</div>
                                                     <div class="d-flex align-items-center justify-content-between gap-2">
                                                         <div class="so-ov-metric-value" t-esc="this.state.kpis.pendingShops"/>
-                                                        <span t-if="this.state.kpis.pendingShops > 0" class="badge rounded-pill bg-danger">Review</span>
+                                                        <span t-if="this.state.kpis.pendingShops > 0" class="badge rounded-pill bg-warning ">Review</span>
                                                     </div>
                                                 </div>
                                             </div>
                                             <div class="col-12">
-                                                <div class="so-ov-metric" style="cursor: default;">
+                                                <div class="so-ov-metric" t-on-click="openRegisteredShops">
                                                     <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
                                                         <div class="so-ov-metric-label mb-0">Shops registered by OBs</div>
                                                         <input type="date" class="form-control form-control-sm" style="max-width: 150px;"
@@ -709,7 +704,7 @@
                                                     </div>
                                                 </div>
                                                 <div class="col-6">
-                                                    <div class="so-ov-metric" t-on-click="() => this.switchTab('operations', 'orders')">
+                                                    <div class="so-ov-metric" t-on-click="openLiveOrders">
                                                         <div class="so-ov-metric-label">Orders</div>
                                                         <div class="so-ov-metric-value" t-esc="this.state.kpis.todayOrders"/>
                                                     </div>
@@ -720,19 +715,19 @@
                                             <div class="so-ov-group-title">DM Operations</div>
                                             <div class="row g-2">
                                                 <div class="col-6 col-sm-4">
-                                                    <div t-attf-class="so-ov-metric #{this.state.kpis.todayDeliveries > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openDeliveries('dispatch')">
+                                                    <div t-attf-class="so-ov-metric #{this.state.kpis.todayDeliveries > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="openActiveDeliveries">
                                                         <div class="so-ov-metric-label">Active Deliveries</div>
                                                         <div class="so-ov-metric-value" t-esc="this.state.kpis.todayDeliveries"/>
                                                     </div>
                                                 </div>
                                                 <div class="col-6 col-sm-4">
-                                                    <div class="so-ov-metric" t-on-click="() => this.openDeliveries('jobs')">
+                                                    <div class="so-ov-metric" t-on-click="() => this.openDmJobs({ dmState: 'except_not_ready' })">
                                                         <div class="so-ov-metric-label">DM Jobs</div>
                                                         <div class="so-ov-metric-value" t-esc="this.state.kpis.dmJobsToday"/>
                                                     </div>
                                                 </div>
                                                 <div class="col-6 col-sm-4">
-                                                    <div t-attf-class="so-ov-metric #{this.state.kpis.todayInTransit > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openDeliveries('jobs')">
+                                                    <div t-attf-class="so-ov-metric #{this.state.kpis.todayInTransit > 0 ? 'so-ov-metric--warn' : ''}" t-on-click="() => this.openDmJobs({ dmFieldState: 'in_transit' })">
                                                         <div class="so-ov-metric-label">In Transit</div>
                                                         <div class="so-ov-metric-value" t-esc="this.state.kpis.todayInTransit"/>
                                                     </div>
@@ -766,13 +761,13 @@
                                         </div>
                                         <div class="row g-2 mb-3">
                                             <div class="col-6">
-                                                <div class="so-ov-metric" t-on-click="() => this.openStaff('order_booker')">
+                                                <div class="so-ov-metric" t-on-click="() => this.openStaff('order_booker', 'all')">
                                                     <div class="so-ov-metric-label">Bookers</div>
                                                     <div class="so-ov-metric-value" t-esc="this.state.kpis.totalBookers"/>
                                                 </div>
                                             </div>
                                             <div class="col-6">
-                                                <div t-attf-class="so-ov-metric #{this.state.kpis.onlineBookers > 0 ? 'so-ov-metric--live' : ''}" t-on-click="() => this.openStaff('order_booker')">
+                                                <div t-attf-class="so-ov-metric #{this.state.kpis.onlineBookers > 0 ? 'so-ov-metric--live' : ''}" t-on-click="() => this.openStaff('order_booker', 'online')">
                                                     <div class="so-ov-metric-label">Bookers online</div>
                                                     <div class="d-flex align-items-center justify-content-between gap-2">
                                                         <div class="so-ov-metric-value" t-esc="this.state.kpis.onlineBookers"/>
@@ -781,13 +776,13 @@
                                                 </div>
                                             </div>
                                             <div class="col-6">
-                                                <div class="so-ov-metric" t-on-click="() => this.openStaff('delivery_man')">
+                                                <div class="so-ov-metric" t-on-click="() => this.openStaff('delivery_man', 'all')">
                                                     <div class="so-ov-metric-label">Delivery men</div>
                                                     <div class="so-ov-metric-value" t-esc="this.state.kpis.totalDeliveryMen"/>
                                                 </div>
                                             </div>
                                             <div class="col-6">
-                                                <div t-attf-class="so-ov-metric #{this.state.kpis.onlineDeliveryMen > 0 ? 'so-ov-metric--live' : ''}" t-on-click="() => this.openStaff('delivery_man')">
+                                                <div t-attf-class="so-ov-metric #{this.state.kpis.onlineDeliveryMen > 0 ? 'so-ov-metric--live' : ''}" t-on-click="() => this.openStaff('delivery_man', 'online')">
                                                     <div class="so-ov-metric-label">DMs online</div>
                                                     <div class="d-flex align-items-center justify-content-between gap-2">
                                                         <div class="so-ov-metric-value" t-esc="this.state.kpis.onlineDeliveryMen"/>
@@ -823,13 +818,13 @@
                                         </div>
                                         <div class="row g-2">
                                             <div class="col-6">
-                                                <div class="so-ov-metric" t-on-click="() => this.switchTab('warehouse', 'management')">
+                                                <div class="so-ov-metric" t-on-click="() => this.openStock('in_stock')">
                                                     <div class="so-ov-metric-label">In stock</div>
                                                     <div class="so-ov-metric-value" t-esc="this.inStockProducts"/>
                                                 </div>
                                             </div>
                                             <div class="col-6">
-                                                <div t-attf-class="so-ov-metric #{this.state.kpis.outOfStockProducts > 0 ? 'so-ov-metric--danger' : ''}" t-on-click="() => this.switchTab('warehouse', 'management')">
+                                                <div t-attf-class="so-ov-metric #{this.state.kpis.outOfStockProducts > 0 ? 'so-ov-metric--danger' : ''}" t-on-click="() => this.openStock('out_of_stock')">
                                                     <div class="so-ov-metric-label">Out of stock</div>
                                                     <div class="d-flex align-items-center justify-content-between gap-2">
                                                         <div class="so-ov-metric-value" t-esc="this.state.kpis.outOfStockProducts"/>
@@ -909,13 +904,13 @@
                                             </div>
                                             <div class="row g-2 position-relative mb-3" style="z-index: 1;">
                                                 <div class="col-6 col-lg-3">
-                                                    <div class="so-ov-finance-metric" t-on-click="() => this.switchTab('financials', 'cash')">
+                                                    <div class="so-ov-finance-metric" t-on-click="() => this.openCash('inbound')">
                                                         <div class="so-ov-finance-label">Cash in</div>
                                                         <div class="so-ov-finance-value" t-esc="this.formatMoney(this.state.kpis.cashIn)"/>
                                                     </div>
                                                 </div>
                                                 <div class="col-6 col-lg-3">
-                                                    <div class="so-ov-finance-metric" t-on-click="() => this.switchTab('financials', 'cash')">
+                                                    <div class="so-ov-finance-metric" t-on-click="() => this.openCash('outbound')">
                                                         <div class="so-ov-finance-label">Cash out</div>
                                                         <div class="so-ov-finance-value" t-esc="this.formatMoney(this.state.kpis.cashOut)"/>
                                                     </div>
@@ -976,7 +971,7 @@
                                                     </div>
                                                 </div>
                                                 <div class="col-6">
-                                                    <div class="so-ov-metric so-ov-bills-metric" t-on-click="() => this.switchTab('financials', 'customer_invoices')">
+                                                    <div class="so-ov-metric so-ov-bills-metric" t-on-click="() => this.openCustomerInvoices('Open')">
                                                         <div class="so-ov-metric-label">Open invoices</div>
                                                         <div class="so-ov-metric-value" t-esc="this.state.kpis.openInvoices"/>
                                                     </div>
@@ -1002,15 +997,15 @@
                         </div>
                     </div>
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'territory'" class="h-100">
-                        <TerritoryRoutes requestedSubTab="this.state.activeSubTab" />
+                        <TerritoryRoutes requestedSubTab="this.state.activeSubTab" requestedShopStatus="this.state.shopStatus" requestedShopRegisteredOn="this.state.shopRegisteredOn" requestedShopRegistrar="this.state.shopRegistrar" />
                     </div>
 
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'warehouse'" class="h-100">
-                        <WarehouseInventory requestedSubTab="this.state.activeSubTab" />
+                        <WarehouseInventory requestedSubTab="this.state.activeSubTab" requestedStockStatus="this.state.stockStatus" />
                     </div>
 
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'operations' and this.state.activeSubTab !== 'dm_performance'" class="h-100">
-                        <OperationsTracking requestedSubTab="this.state.activeSubTab" requestedDeliveriesSubTab="this.state.deliveriesSubTab" requestedCheckinPurpose="this.state.checkinPurpose" requestedCheckinRole="this.state.checkinRole" requestedCheckinDate="this.state.checkinDate" />
+                        <OperationsTracking requestedSubTab="this.state.activeSubTab" requestedDeliveriesSubTab="this.state.deliveriesSubTab" requestedCheckinPurpose="this.state.checkinPurpose" requestedCheckinRole="this.state.checkinRole" requestedCheckinDate="this.state.checkinDate" requestedOrderDate="this.state.orderDate" requestedDispatchDate="this.state.dispatchDate" requestedDmDate="this.state.dmDate" requestedDmFieldState="this.state.dmFieldState" requestedDmState="this.state.dmState" />
                     </div>
 
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'operations' and this.state.activeSubTab === 'dm_performance'" class="h-100">
@@ -1018,11 +1013,11 @@
                     </div>
 
                     <div t-if="!this.state.isSwitchingTab and this.hasFinancialAccess and this.state.activeTab === 'financials'" class="h-100">
-                        <FinancialsInvoicing requestedSubTab="this.state.activeSubTab" />
+                        <FinancialsInvoicing requestedSubTab="this.state.activeSubTab" requestedInvoiceStatus="this.state.invoiceStatus" requestedCashDirection="this.state.cashDirection" requestedCashDateFrom="this.state.cashDateFrom" requestedCashDateTo="this.state.cashDateTo" />
                     </div>
 
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'staff'" class="h-100">
-                        <StaffManagement requestedStaffRole="this.state.staffRole" />
+                        <StaffManagement requestedStaffRole="this.state.staffRole" requestedStaffStatus="this.state.staffStatus" />
                     </div>
 
                     <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'reports'" class="h-100">

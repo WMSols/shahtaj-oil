@@ -16,6 +16,7 @@ export class InvoiceManagement extends Component {
     static components = { ConfirmModal };
     static props = {
         requestedInvoiceSubTab: { type: String, optional: true },
+        requestedInvoiceStatus: { type: String, optional: true },
         refreshNonce: { type: Number, optional: true },
         onStatsRefresh: { type: Function, optional: true },
     };
@@ -62,7 +63,7 @@ export class InvoiceManagement extends Component {
             filters: {
                 allOrders: { search: "", status: "all", shop: "all", dateFrom: "", dateTo: "" },
                 orders: { search: "", shop: "all", dateFrom: "", dateTo: "" },
-                invoices: { search: "", status: "all", shop: "all", dateFrom: "", dateTo: "", walkIn: false },
+                invoices: { search: "", status: this.props.requestedInvoiceStatus || "all", shop: "all", dateFrom: "", dateTo: "", walkIn: false },
                 creditNotes: { search: "", status: "all", shop: "all", dateFrom: "", dateTo: "" },
                 payments: { search: "", shop: "all", dateFrom: "", dateTo: "" },
             },
@@ -104,8 +105,17 @@ export class InvoiceManagement extends Component {
         };
         this.debouncedFetchActiveList = this.debounceSearch(() => this.fetchActiveList(), 400);
         onWillUpdateProps(async (nextProps) => {
-            if (nextProps.requestedInvoiceSubTab && nextProps.requestedInvoiceSubTab !== this.props.requestedInvoiceSubTab) {
+            const status = nextProps.requestedInvoiceStatus || "all";
+            const statusChanged = status !== (this.props.requestedInvoiceStatus || "all");
+            if (statusChanged) {
+                this.state.filters.invoices.status = status;
+                this.state.pagination.invoices.page = 1;
+            }
+            const subChanged = nextProps.requestedInvoiceSubTab && nextProps.requestedInvoiceSubTab !== this.props.requestedInvoiceSubTab;
+            if (subChanged) {
                 this.setInvoiceSubTab(nextProps.requestedInvoiceSubTab);
+            } else if (statusChanged && this.state.invoiceSubTab === "customer_invoices") {
+                this.fetchActiveList();
             }
             if (nextProps.refreshNonce !== this.props.refreshNonce) {
                 await this.reloadFromRefresh();
@@ -333,6 +343,7 @@ export class InvoiceManagement extends Component {
 
             if (filters.status && filters.status !== 'all') {
                 if (stateKey === 'invoices' || stateKey === 'creditNotes') {
+                    if (filters.status === 'Open') domain.push(['state', '=', 'posted'], ['payment_state', 'in', ['not_paid', 'partial']]);
                     if (filters.status === 'Posted') domain.push(['state', '=', 'posted'], ['payment_state', 'in', ['not_paid']]);
                     if (filters.status === 'Paid' || filters.status === 'Paid/Reconciled') domain.push(['payment_state', 'in', ['paid', 'in_payment', 'reversed']]);
                     if (filters.status === 'Partial') domain.push(['payment_state', '=', 'partial']);

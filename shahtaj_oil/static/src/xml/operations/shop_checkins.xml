@@ -32,6 +32,49 @@
                     color: #c2410c;
                     border: 1px solid #fed7aa;
                 }
+                .so-gps-timeline {
+                    margin-left: 0.35rem;
+                    padding-left: 1.15rem;
+                    border-left: 2px solid #e2e8f0;
+                }
+                .so-gps-step {
+                    position: relative;
+                    padding-bottom: 0.9rem;
+                }
+                .so-gps-step-btn {
+                    cursor: pointer;
+                    border-radius: 0.4rem;
+                    margin-right: -0.25rem;
+                    padding-right: 0.25rem;
+                }
+                .so-gps-step-btn:hover {
+                    background: #f8fafc;
+                }
+                .so-gps-step-active {
+                    background: #ecfeff;
+                }
+                .so-gps-step:last-child {
+                    padding-bottom: 0;
+                }
+                .so-gps-dot {
+                    position: absolute;
+                    left: -1.48rem;
+                    top: 0.35rem;
+                    width: 0.7rem;
+                    height: 0.7rem;
+                    border-radius: 50%;
+                    border: 2px solid #fff;
+                    box-shadow: 0 0 0 1px #e2e8f0;
+                }
+                .so-gps-dot-ok {
+                    background: #0f766e;
+                }
+                .so-gps-dot-blocked {
+                    background: #be123c;
+                }
+                .so-gps-dot-warn {
+                    background: #c2410c;
+                }
             </style>
         <!-- Shop Checkins Tab (GPS attempts: success + blocked) -->
         <t t-if="this.state.activeSubTab === 'checkins'">
@@ -120,6 +163,7 @@
                                             Shop ID: <t t-esc="log.shopId"/> ·
                                             <t t-esc="log.booker"/>
                                             <t t-if="this.checkinShowsGps(log)"> · <t t-esc="log.time"/></t>
+                                            <t t-if="log.checkpointCount &gt; 1"> · <t t-esc="log.checkpointCount"/> checkpoints</t>
                                         </small>
                                     </div>
                                 </div>
@@ -211,6 +255,25 @@
                         <strong>Notes: </strong>
                         <t t-esc="this.state.selectedCheckin.notes"/>
                     </p>
+                    <div class="mt-3" t-if="this.checkinShowsGps(this.state.selectedCheckin) and this.state.selectedCheckin.checkpoints and this.state.selectedCheckin.checkpoints.length">
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-2">Checkpoints</span>
+                        <div class="so-gps-timeline">
+                            <t t-foreach="this.state.selectedCheckin.checkpoints" t-as="cp" t-key="cp.id">
+                                    <div t-attf-class="so-gps-step so-gps-step-btn #{cp.id === this.state.selectedCheckin.selectedCheckpointId ? 'so-gps-step-active' : ''}" t-on-click="() => this.selectCheckinCheckpoint(cp)" title="Show this checkpoint on the map">
+                                    <span t-attf-class="so-gps-dot #{cp.isOk ? 'so-gps-dot-ok' : (cp.result === 'blocked_too_far' or cp.result === 'blocked_too_close' ? 'so-gps-dot-blocked' : 'so-gps-dot-warn')}"></span>
+                                    <div class="d-flex justify-content-between align-items-start gap-2">
+                                        <div>
+                                            <span t-attf-class="badge so-gps-tag #{this._gpsListTagClass(cp.result)}">
+                                                <t t-esc="cp.label"/>
+                                            </span>
+                                            <div class="text-muted small mt-1"><t t-esc="cp.time"/></div>
+                                        </div>
+                                        <span class="fw-bold text-dark small text-nowrap"><t t-esc="cp.distLabel"/></span>
+                                    </div>
+                                </div>
+                            </t>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="col-md-6">
@@ -417,6 +480,9 @@
                         <span><span class="d-inline-block rounded-circle me-1" style="width:10px;height:10px;background:#198754;"></span> GPS OK attempt</span>
                         <span><span class="d-inline-block rounded-circle me-1" style="width:10px;height:10px;background:#dc3545;"></span> Blocked attempt</span>
                         <span class="text-muted">Dashed blue circle = max allowed distance</span>
+                    </div>
+                    <div class="small fw-bold text-dark mb-2" t-if="this.state.selectedCheckin.mapAttemptLabel">
+                        Showing: <t t-esc="this.state.selectedCheckin.mapAttemptLabel"/>
                     </div>
                     <div t-ref="checkinMapContainer" class="w-100 rounded-3 shadow-sm border border-2" style="height: 300px; z-index: 1; position: relative; background-color: #f8f9fa;">
                         <t t-if="(!this.state.selectedCheckin.shop_latitude or !this.state.selectedCheckin.shop_longitude) and (!this.state.selectedCheckin.attempt_latitude or !this.state.selectedCheckin.attempt_longitude)">

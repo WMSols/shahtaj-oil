@@ -13,6 +13,9 @@ export class TerritoryBase extends Component {
         onRefreshSettled: { type: Function, optional: true },
         previousSubTab: { type: String, optional: true },
         onBack: { type: Function, optional: true },
+        requestedShopStatus: { type: String, optional: true },
+        requestedShopRegisteredOn: { type: String, optional: true },
+        requestedShopRegistrar: { type: String, optional: true },
     };
     static components = { ConfirmModal };
     
@@ -49,9 +52,11 @@ export class TerritoryBase extends Component {
 
             shopSearchQuery: '',
             shopFilterCategory: 'all',
-            shopFilterStatus: 'all',
+            shopFilterStatus: this.props.requestedShopStatus || 'all',
             shopFilterVerified: 'all',
-            shopFilterBooker: 'all', 
+            shopFilterBooker: 'all',
+            shopFilterRegisteredOn: this.props.requestedShopRegisteredOn || '',
+            shopFilterRegistrar: this.props.requestedShopRegistrar || 'all',
             shopFilterRoute: 'all',
             routeFilterZone: 'all',  
             bookers: [],
@@ -127,8 +132,16 @@ export class TerritoryBase extends Component {
             await this.fetchActiveList(); // Force the paginator to run on initial load
         });
         onWillUpdateProps((nextProps) => {
-            if (nextProps.requestedSubTab && nextProps.requestedSubTab !== this.props.requestedSubTab) {
+            const shopChanged = this._shopNavChanged(nextProps);
+            if (shopChanged) {
+                this._applyShopNav(nextProps);
+                this.state.pagination.shops.page = 1;
+            }
+            const subChanged = nextProps.requestedSubTab && nextProps.requestedSubTab !== this.props.requestedSubTab;
+            if (subChanged) {
                 this.setSubTab(nextProps.requestedSubTab);
+            } else if (shopChanged && this.state.activeSubTab === 'shops') {
+                this.fetchActiveList();
             }
             if (nextProps.refreshNonce !== undefined && nextProps.refreshNonce !== this.props.refreshNonce) {
                 this.reloadFromRefresh().finally(() => {
@@ -183,6 +196,25 @@ export class TerritoryBase extends Component {
     onFilterChange(tabName) {
         this.state.pagination[tabName].page = 1;
         this.fetchActiveList(); 
+    }
+
+    _applyShopNav(props) {
+        this.state.shopFilterStatus = props.requestedShopStatus || 'all';
+        this.state.shopFilterRegisteredOn = props.requestedShopRegisteredOn || '';
+        this.state.shopFilterRegistrar = props.requestedShopRegistrar || 'all';
+    }
+
+    _shopNavChanged(nextProps) {
+        return (nextProps.requestedShopStatus || 'all') !== (this.props.requestedShopStatus || 'all')
+            || (nextProps.requestedShopRegisteredOn || '') !== (this.props.requestedShopRegisteredOn || '')
+            || (nextProps.requestedShopRegistrar || 'all') !== (this.props.requestedShopRegistrar || 'all');
+    }
+
+    _pktDateToUtcBounds(dateStr) {
+        const start = new Date(`${dateStr}T00:00:00+05:00`);
+        const end = new Date(`${dateStr}T23:59:59+05:00`);
+        const toOdooUtc = (d) => d.toISOString().slice(0, 19).replace("T", " ");
+        return { start: toOdooUtc(start), end: toOdooUtc(end) };
     }
 
     changePage(tabName, direction) {
@@ -255,6 +287,15 @@ export class TerritoryBase extends Component {
                     } else {
                         domain.push(['route_ids', 'in', [parseInt(this.state.shopFilterRoute)]]);
                     }
+                }
+                if (this.state.shopFilterRegistrar === 'order_booker') {
+                    domain.push(['registered_by_id', '!=', false]);
+                    domain.push(['registered_by_id.shahtaj_is_order_booker', '=', true]);
+                }
+                if (this.state.shopFilterRegisteredOn) {
+                    const bounds = this._pktDateToUtcBounds(this.state.shopFilterRegisteredOn);
+                    domain.push(['create_date', '>=', bounds.start]);
+                    domain.push(['create_date', '<=', bounds.end]);
                 }
             }
 

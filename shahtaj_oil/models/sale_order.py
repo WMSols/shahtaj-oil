@@ -744,10 +744,12 @@ class SaleOrder(models.Model):
             delivered = sum(storable_lines.mapped('qty_delivered'))
             remaining = ordered - delivered
             order.shahtaj_qty_to_deliver = max(remaining, 0.0)
-            if float_compare(delivered, 0.0, precision_digits=2) <= 0:
+            if float_compare(remaining, 0.0, precision_digits=2) <= 0:
+                order.shahtaj_delivery_status = (
+                    'done' if float_compare(ordered, 0.0, precision_digits=2) > 0 else 'no_stock'
+                )
+            elif float_compare(delivered, 0.0, precision_digits=2) <= 0:
                 order.shahtaj_delivery_status = 'pending'
-            elif float_compare(remaining, 0.0, precision_digits=2) <= 0:
-                order.shahtaj_delivery_status = 'done'
             else:
                 order.shahtaj_delivery_status = 'partial'
 

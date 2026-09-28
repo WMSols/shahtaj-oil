@@ -552,6 +552,11 @@
                                         <td class="ps-4 align-middle text-nowrap">
                                             <div class="fw-bold small text-dark"><t t-esc="target.date_start"/></div>
                                             <div class="text-muted small">to <t t-esc="target.date_end"/></div>
+                                            <div class="mt-1">
+                                                <span t-if="target.period_status === 'upcoming'" class="badge rounded-pill px-2 py-1 text-white" style="background-color: #17a2b8;">Upcoming</span>
+                                                <span t-elif="target.period_status === 'current'" class="badge rounded-pill bg-success text-white px-2 py-1">Current</span>
+                                                <span t-elif="target.period_status === 'ended'" class="badge rounded-pill px-2 py-1" style="background-color: #e9ecef; color: #6c757d;">Ended</span>
+                                            </div>
                                         </td>
                                         <td class="align-middle">
                                             <div class="text-dark fw-bold text-capitalize text-nowrap">

@@ -97,7 +97,9 @@ export class FieldReports extends Component {
             draft: "",
             closingRemark: "",
             screenshotName: "",
-            filters: { search: "", state: "all", role: "all" },
+            filters: { search: "", state: "all", role: "all", booker: "all", deliveryMan: "all", dateFrom: "", dateTo: "" },
+            bookers: [],
+            deliveryMen: [],
             form: this._emptyForm(),
             tagForm: this._emptyTagForm(),
             editingTagId: null,
@@ -114,7 +116,7 @@ export class FieldReports extends Component {
             total: 0,
         });
         onWillStart(async () => {
-            await Promise.all([this.loadTags(), this.loadReports()]);
+            await Promise.all([this.loadTags(), this.loadPeople(), this.loadReports()]);
         });
     }
 
@@ -205,7 +207,7 @@ export class FieldReports extends Component {
         }
         this.state.isRefreshing = true;
         try {
-            await this.loadTags();
+            await Promise.all([this.loadTags(), this.loadPeople()]);
             if (this.state.mode === "detail" && this.state.selected) {
                 await this.openReport(this.state.selected.id);
                 return;
@@ -222,6 +224,32 @@ export class FieldReports extends Component {
         this.state.pill = pill;
         this.state.mode = "list";
         this.state.selected = null;
+    }
+
+    _pktDateToUtcBounds(dateStr) {
+        const start = new Date(`${dateStr}T00:00:00+05:00`);
+        const end = new Date(`${dateStr}T23:59:59+05:00`);
+        const toOdooUtc = (d) => d.toISOString().slice(0, 19).replace("T", " ");
+        return { start: toOdooUtc(start), end: toOdooUtc(end) };
+    }
+
+    async loadPeople() {
+        const [bookers, deliveryMen] = await Promise.all([
+            this.orm.searchRead(
+                "res.users",
+                [["shahtaj_is_order_booker", "=", true], ["active", "=", true]],
+                ["name"],
+                { order: "name, id" }
+            ),
+            this.orm.searchRead(
+                "res.users",
+                [["shahtaj_is_delivery_man", "=", true], ["active", "=", true]],
+                ["name"],
+                { order: "name, id" }
+            ),
+        ]);
+        this.state.bookers = bookers;
+        this.state.deliveryMen = deliveryMen;
     }
 
     async loadTags() {
@@ -250,6 +278,21 @@ export class FieldReports extends Component {
             }
             if (this.state.filters.role !== "all") {
                 domain.push(["reporter_role", "=", this.state.filters.role]);
+            }
+            const bookerId = this.state.filters.booker !== "all" ? parseInt(this.state.filters.booker, 10) : false;
+            const dmId = this.state.filters.deliveryMan !== "all" ? parseInt(this.state.filters.deliveryMan, 10) : false;
+            if (bookerId && dmId) {
+                domain.push(["user_id", "in", [bookerId, dmId]]);
+            } else if (bookerId) {
+                domain.push(["user_id", "=", bookerId]);
+            } else if (dmId) {
+                domain.push(["user_id", "=", dmId]);
+            }
+            if (this.state.filters.dateFrom) {
+                domain.push(["create_date", ">=", this._pktDateToUtcBounds(this.state.filters.dateFrom).start]);
+            }
+            if (this.state.filters.dateTo) {
+                domain.push(["create_date", "<=", this._pktDateToUtcBounds(this.state.filters.dateTo).end]);
             }
             const offset = (this.state.page - 1) * this.state.pageSize;
             const [total, rows] = await Promise.all([

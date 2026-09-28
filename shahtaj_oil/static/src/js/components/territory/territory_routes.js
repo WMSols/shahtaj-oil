@@ -11,6 +11,9 @@ export class TerritoryRoutes extends Component {
     static components = { TerritoryZones, TerritoryRouteList, TerritoryShops, TerritoryArchive };
     static props = {
         requestedSubTab: { type: String, optional: true },
+        requestedShopStatus: { type: String, optional: true },
+        requestedShopRegisteredOn: { type: String, optional: true },
+        requestedShopRegistrar: { type: String, optional: true },
     };
 
     setup() {

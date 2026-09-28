@@ -38,7 +38,21 @@ export class ShahtajDashboard extends Component {
             deliveriesSubTab: '',
             checkinPurpose: 'all',
             checkinRole: 'all',
-            checkinDate: '', 
+            checkinDate: '',
+            shopStatus: 'all',
+            shopRegisteredOn: '',
+            shopRegistrar: 'all',
+            staffStatus: 'all',
+            stockStatus: 'all',
+            orderDate: '',
+            dispatchDate: '',
+            dmDate: '',
+            dmFieldState: 'all',
+            dmState: 'all',
+            invoiceStatus: 'all',
+            cashDirection: 'all',
+            cashDateFrom: '',
+            cashDateTo: '', 
             isSidebarOpen: false, 
             isSwitchingTab: false,
             isSidebarLocked: false,
@@ -102,10 +116,13 @@ export class ShahtajDashboard extends Component {
             if (ev.detail.deliveriesSubTab) {
                 this.state.deliveriesSubTab = ev.detail.deliveriesSubTab;
             }
-            this.state.checkinPurpose = ev.detail.checkinPurpose || 'all';
-            this.state.checkinRole = ev.detail.checkinRole || 'all';
-            this.state.checkinDate = ev.detail.checkinDate || '';
-            this.switchTab(ev.detail.tab, ev.detail.subTab);
+            const filters = {};
+            if (ev.detail.checkinPurpose || ev.detail.checkinRole || ev.detail.checkinDate) {
+                filters.checkinPurpose = ev.detail.checkinPurpose || 'all';
+                filters.checkinRole = ev.detail.checkinRole || 'all';
+                filters.checkinDate = ev.detail.checkinDate || '';
+            }
+            this.switchTab(ev.detail.tab, ev.detail.subTab, { filters });
         });
         onWillStart(async () => {
             const chartPromise = this.hasFinancialAccess ? this.ensureChartJs() : Promise.resolve();
@@ -244,10 +261,15 @@ export class ShahtajDashboard extends Component {
                 this.orm.searchCount("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["state", "!=", "not_ready"]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["field_state", "=", "in_transit"]]),
-                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["state", "=", "sale"]]),
+                this.orm.searchCount("shahtaj.dm.delivery", [["field_state", "=", "pending"]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["state", "in", ["ready", "picked", "partial"]]]),
                 this.orm.searchCount("shahtaj.dm.delivery", [["field_state", "=", "in_transit"]]),
-                this.orm.searchCount("sale.order", [["state", "in", ["sale", "done"]], ["shahtaj_delivery_status", "in", ["pending", "partial"]]]),
+                this.orm.searchCount("sale.order", [
+                    ["state", "in", ["sale", "done"]],
+                    ["shahtaj_delivery_status", "in", ["pending", "partial"]],
+                    ["shahtaj_qty_to_deliver", ">", 0],
+                    ["shahtaj_dm_delivery_ids", "=", false],
+                ]),
             ]);
 
             const financialPromise = this.hasFinancialAccess
@@ -623,31 +645,98 @@ export class ShahtajDashboard extends Component {
             || (this.hasFinancialAccess && kpis.toInvoice > 0);
     }
 
-    openStaff(role = 'order_booker') {
-        this.state.staffRole = role;
-        this.switchTab('staff');
+    _applyNavFilters(filters = {}) {
+        const next = filters || {};
+        this.state.shopStatus = next.shopStatus || 'all';
+        this.state.shopRegisteredOn = next.shopRegisteredOn || '';
+        this.state.shopRegistrar = next.shopRegistrar || 'all';
+        this.state.staffStatus = next.staffStatus || 'all';
+        this.state.stockStatus = next.stockStatus || 'all';
+        this.state.orderDate = next.orderDate || '';
+        this.state.dispatchDate = next.dispatchDate || '';
+        this.state.dmDate = next.dmDate || '';
+        this.state.dmFieldState = next.dmFieldState || 'all';
+        this.state.dmState = next.dmState || 'all';
+        this.state.invoiceStatus = next.invoiceStatus || 'all';
+        this.state.cashDirection = next.cashDirection || 'all';
+        this.state.cashDateFrom = next.cashDateFrom || '';
+        this.state.cashDateTo = next.cashDateTo || '';
+        this.state.checkinPurpose = next.checkinPurpose || 'all';
+        this.state.checkinRole = next.checkinRole || 'all';
+        this.state.checkinDate = next.checkinDate || '';
     }
 
-    openDeliveries(subTab = 'dispatch') {
+    _opsDay() {
+        return this.state.opsDate || this.todayStr;
+    }
+
+    openStaff(role = 'order_booker', status = 'all') {
+        this.state.staffRole = role;
+        this.switchTab('staff', '', { filters: { staffStatus: status } });
+    }
+
+    openShops(filters = {}) {
+        this.switchTab('territory', 'shops', { filters });
+    }
+
+    openRegisteredShops() {
+        this.openShops({
+            shopRegisteredOn: this.state.shopRegDate || this.todayStr,
+            shopRegistrar: 'order_booker',
+        });
+    }
+
+    openStock(status = 'all') {
+        this.switchTab('warehouse', 'management', { filters: { stockStatus: status } });
+    }
+
+    openLiveOrders() {
+        this.switchTab('operations', 'orders', { filters: { orderDate: this._opsDay() } });
+    }
+
+    openDeliveries(subTab = 'dispatch', filters = {}) {
         const forceBusy = this.state.activeTab === 'operations'
             && this.state.activeSubTab === 'deliveries'
             && this.state.deliveriesSubTab !== subTab;
         this.state.deliveriesSubTab = subTab;
-        this.switchTab('operations', 'deliveries', { forceBusy });
+        this.switchTab('operations', 'deliveries', { forceBusy, filters });
+    }
+
+    openActiveDeliveries() {
+        this.openDeliveries('dispatch', { dispatchDate: this._opsDay() });
+    }
+
+    openDmJobs(extra = {}) {
+        this.openDeliveries('jobs', { dmDate: this._opsDay(), ...extra });
     }
 
     openCheckins() {
-        this.state.checkinPurpose = 'all';
-        this.state.checkinRole = 'all';
-        this.state.checkinDate = '';
         this.switchTab('operations', 'checkins');
     }
 
     openTodayCheckins() {
-        this.state.checkinPurpose = 'check_in';
-        this.state.checkinRole = 'all';
-        this.state.checkinDate = this.state.opsDate || this.todayStr;
-        this.switchTab('operations', 'checkins');
+        this.switchTab('operations', 'checkins', {
+            filters: {
+                checkinPurpose: 'check_in',
+                checkinRole: 'all',
+                checkinDate: this._opsDay(),
+            },
+        });
+    }
+
+    openCash(direction) {
+        const { from, to } = this._getCashDateRange();
+        this.switchTab('financials', 'cash', {
+            filters: {
+                cashDirection: direction,
+                cashDateFrom: from,
+                cashDateTo: to,
+            },
+        });
+    }
+
+    openCustomerInvoices(status = 'all') {
+        this.switchTab('financials', 'customer_invoices', { filters: { invoiceStatus: status } });
     }
 
     async toggleMenu(menuName, defaultSubTab = '') {
@@ -691,6 +780,8 @@ export class ShahtajDashboard extends Component {
         if (!this.hasFinancialAccess && tabName === 'warehouse' && ['inventory', 'taxes'].includes(subTabName)) {
             subTabName = 'management';
         }
+
+        this._applyNavFilters(options.filters);
 
         const sameTab = this.state.activeTab === tabName;
         const sameSub = sameTab && (this.state.activeSubTab || '') === (subTabName || '');

@@ -108,10 +108,10 @@
                 <MoneyOverview refreshNonce="this.state.refreshNonce"/>
             </t>
             <t t-if="this.state.activeSubTab === 'cash'">
-                <CashActivity initialDirection="this.state.cashDirection" refreshNonce="this.state.refreshNonce"/>
+                <CashActivity initialDirection="this.state.cashDirection" initialDateFrom="this.state.cashDateFrom" initialDateTo="this.state.cashDateTo" refreshNonce="this.state.refreshNonce"/>
             </t>
             <t t-if="this.state.activeSubTab === 'invoices'">
-                <InvoiceManagement requestedInvoiceSubTab="this.state.invoiceSubTab" refreshNonce="this.state.refreshNonce" onStatsRefresh.bind="onStatsRefresh"/>
+                <InvoiceManagement requestedInvoiceSubTab="this.state.invoiceSubTab" requestedInvoiceStatus="this.state.invoiceStatus" refreshNonce="this.state.refreshNonce" onStatsRefresh.bind="onStatsRefresh"/>
             </t>
             <t t-if="this.state.activeSubTab === 'po_management'">
                 <PoManagement requestedPoSubTab="this.state.poSubTab" refreshNonce="this.state.refreshNonce" onStatsRefresh.bind="onStatsRefresh"/>
