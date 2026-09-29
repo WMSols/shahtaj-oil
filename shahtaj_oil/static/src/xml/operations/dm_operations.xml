@@ -186,7 +186,8 @@
                                     <tr>
                                         <th class="ps-4 border-top-0">Order</th>
                                         <th class="border-top-0">Shop &amp; Booker</th>
-                                        <th class="border-top-0">Left</th>
+                                        <th class="border-top-0">Delivery Status</th>
+                                        <th class="text-end border-top-0">Qty Still to Deliver</th>
                                         <th class="border-top-0">Invoice</th>
                                         <th class="border-top-0">DM Jobs</th>
                                         <th class="text-end pe-4 border-top-0">Action</th>
@@ -194,7 +195,7 @@
                                 </thead>
                                 <tbody>
                                     <t t-if="this.state.tableDispatch.length === 0 and !this.state.isLoadingList">
-                                        <tr><td colspan="6" class="text-center py-5 text-muted fw-bold">No orders waiting to dispatch.</td></tr>
+                                        <tr><td colspan="7" class="text-center py-5 text-muted fw-bold">No orders waiting to dispatch.</td></tr>
                                     </t>
                                     <t t-foreach="this.state.tableDispatch" t-as="row" t-key="row.odoo_id">
                                         <tr>
@@ -203,7 +204,12 @@
                                                 <div class="fw-bold"><t t-esc="row.shop"/></div>
                                                 <small class="text-muted"><t t-esc="row.booker"/></small>
                                             </td>
-                                            <td><t t-esc="row.qtyToDeliver"/></td>
+                                            <td>
+                                                <span t-attf-class="badge #{this.deliveryStatusBadgeClass(row.deliveryStatus)}">
+                                                    <t t-esc="this.deliveryStatusLabel(row.deliveryStatus)"/>
+                                                </span>
+                                            </td>
+                                            <td class="text-end"><t t-esc="this._formatQty(row.qtyToDeliver)"/></td>
                                             <td>
                                                 <span t-if="row.hasPostedInvoice" class="badge bg-success text-white">Posted</span>
                                                 <span t-else="" class="badge bg-warning text-dark">Invoice first</span>
@@ -1082,10 +1088,14 @@
                                     </t>
                                 </t>
                             </div>
+                            <div class="mb-3" style="max-width: 240px;">
+                                <label class="small fw-bold">Planned Delivery Date</label>
+                                <input type="date" class="form-control form-control-sm" t-model="this.state.assignModal.plannedDeliveryDate" t-att-disabled="this.state.assignModal.readOnly || !this.state.assignModal.canEditDeliveryDate"/>
+                            </div>
                             <t t-foreach="this.state.assignModal.jobs" t-as="job" t-key="job.id">
                                 <div class="border rounded-3 p-3 mb-3">
                                     <div class="row g-2 mb-2">
-                                        <div class="col-md-6">
+                                        <div t-attf-class="#{this.state.assignModal.readOnly ? 'col-12' : 'col-md-10'}">
                                             <label class="small fw-bold">Delivery man</label>
                                             <select class="form-select form-select-sm" t-att-disabled="this.state.assignModal.readOnly" t-on-change="(ev) => this.setAssignDeliveryMan(job, ev.target.value)">
                                                 <option value="" t-att-selected="this.isSelectedId(job.deliveryManId, '')">Select</option>
@@ -1093,10 +1103,6 @@
                                                     <option t-att-value="this.optionId(dm.id)" t-att-selected="this.isSelectedId(job.deliveryManId, dm.id)"><t t-esc="dm.name"/></option>
                                                 </t>
                                             </select>
-                                        </div>
-                                        <div t-attf-class="#{this.state.assignModal.readOnly ? 'col-md-6' : 'col-md-4'}">
-                                            <label class="small fw-bold">Delivery day</label>
-                                            <input type="date" class="form-control form-control-sm" t-model="job.scheduledDate" t-att-disabled="this.state.assignModal.readOnly"/>
                                         </div>
                                         <div class="col-md-2 d-flex align-items-end" t-if="!this.state.assignModal.readOnly">
                                             <button class="btn btn-sm btn-outline-danger fw-bold w-100" t-on-click="() => this.removeAssignDeliveryMan(job.id)" t-att-disabled="this.state.assignModal.saving || !job.canRemove" title="Remove this delivery man">Remove</button>

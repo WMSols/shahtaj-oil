@@ -77,6 +77,9 @@ export class OperationsBase extends Component {
                 wizardId: null,
                 orderName: '',
                 shop: '',
+                orderId: null,
+                plannedDeliveryDate: '',
+                canEditDeliveryDate: true,
                 jobs: [],
                 saving: false,
             },
@@ -2163,6 +2166,26 @@ export class OperationsBase extends Component {
         this.fetchActiveList();
     }
 
+    deliveryStatusLabel(status) {
+        const map = {
+            pending: "To Deliver",
+            partial: "Partially Delivered",
+            done: "Fully Delivered",
+            no_stock: "No Stock Moves",
+        };
+        return map[status] || "—";
+    }
+
+    deliveryStatusBadgeClass(status) {
+        const map = {
+            pending: "bg-warning text-dark",
+            partial: "bg-info text-white",
+            done: "bg-success text-white",
+            no_stock: "bg-secondary text-white",
+        };
+        return map[status] || "bg-secondary text-white";
+    }
+
     stockStateLabel(state) {
         const map = {
             not_ready: "Not ready", ready: "Ready", picked: "Picked",
@@ -2384,11 +2407,18 @@ export class OperationsBase extends Component {
             [wizardId],
             ["sale_order_id", "partner_id", "job_ids"],
         );
+        const orderId = wiz.sale_order_id ? wiz.sale_order_id[0] : false;
+        const [order] = orderId
+            ? await this.orm.read("sale.order", [orderId], [
+                "shahtaj_planned_delivery_date",
+                "shahtaj_can_edit_delivery_plan",
+            ])
+            : [null];
         const jobs = wiz.job_ids?.length
             ? await this.orm.read(
                 "shahtaj.dm.assign.wizard.job",
                 wiz.job_ids,
-                ["id", "delivery_man_id", "scheduled_date", "line_ids", "existing_job_id"],
+                ["id", "delivery_man_id", "line_ids", "existing_job_id"],
             )
             : [];
         const allLineIds = jobs.flatMap((j) => j.line_ids || []);
@@ -2405,9 +2435,17 @@ export class OperationsBase extends Component {
             : [];
         const existingById = Object.fromEntries(existingRecs.map((e) => [e.id, e]));
         const linesById = Object.fromEntries(lineRecs.map((l) => [l.id, l]));
+        const sameOrder = this.state.assignModal.orderId === orderId;
+        const keepTypedDate = sameOrder && this.state.assignModal.plannedDeliveryDate;
         this.state.assignModal.wizardId = wizardId;
+        this.state.assignModal.orderId = orderId || null;
         this.state.assignModal.orderName = wiz.sale_order_id ? wiz.sale_order_id[1] : "";
         this.state.assignModal.shop = wiz.partner_id ? wiz.partner_id[1] : "";
+        const hasExistingJob = jobs.some((j) => j.existing_job_id);
+        this.state.assignModal.canEditDeliveryDate = !hasExistingJob || !!(order && order.shahtaj_can_edit_delivery_plan);
+        if (!keepTypedDate) {
+            this.state.assignModal.plannedDeliveryDate = (order && order.shahtaj_planned_delivery_date) || this.todayStr;
+        }
         this.state.assignModal.jobs = jobs.map((j) => {
             const existingId = j.existing_job_id ? j.existing_job_id[0] : false;
             const existing = existingId ? existingById[existingId] : null;
@@ -2418,7 +2456,6 @@ export class OperationsBase extends Component {
                 existingJobId: existingId || false,
                 deliveryManId: dm ? String(Array.isArray(dm) ? dm[0] : dm) : "",
                 deliveryManName: Array.isArray(dm) ? (dm[1] || "") : "",
-                scheduledDate: j.scheduled_date || this.todayStr,
                 stockState: existing ? existing.state : "",
                 fieldState: existing ? existing.field_state : "",
                 canRemove: !existing || !lockedStates.includes(existing.state),
@@ -2442,7 +2479,30 @@ export class OperationsBase extends Component {
         this.state.assignModal.open = false;
         this.state.assignModal.readOnly = false;
         this.state.assignModal.wizardId = null;
+        this.state.assignModal.orderId = null;
+        this.state.assignModal.plannedDeliveryDate = "";
+        this.state.assignModal.canEditDeliveryDate = true;
         this.state.assignModal.jobs = [];
+    }
+
+    async _savePlannedDeliveryDate() {
+        const modal = this.state.assignModal;
+        if (modal.readOnly || !modal.orderId || !modal.canEditDeliveryDate || !modal.plannedDeliveryDate) {
+            return;
+        }
+        const [order] = await this.orm.read("sale.order", [modal.orderId], [
+            "shahtaj_planned_delivery_date",
+            "shahtaj_can_edit_delivery_plan",
+        ]);
+        if (!order || !order.shahtaj_can_edit_delivery_plan) {
+            return;
+        }
+        if (order.shahtaj_planned_delivery_date === modal.plannedDeliveryDate) {
+            return;
+        }
+        await this.orm.write("sale.order", [modal.orderId], {
+            shahtaj_planned_delivery_date: modal.plannedDeliveryDate,
+        });
     }
 
     async persistAssignEdits() {
@@ -2450,7 +2510,6 @@ export class OperationsBase extends Component {
         for (const job of jobs) {
             await this.orm.write("shahtaj.dm.assign.wizard.job", [job.id], {
                 delivery_man_id: job.deliveryManId ? parseInt(job.deliveryManId, 10) : false,
-                scheduled_date: job.scheduledDate || this.todayStr,
             });
             for (const line of job.lines) {
                 await this.orm.write("shahtaj.dm.assign.wizard.line", [line.id], {
@@ -2498,7 +2557,13 @@ export class OperationsBase extends Component {
         this.state.assignModal.saving = true;
         try {
             await this.persistAssignEdits();
-            await this.orm.call("shahtaj.dm.assign.wizard", "action_confirm_assign", [[this.state.assignModal.wizardId]]);
+            await this.orm.call(
+                "shahtaj.dm.assign.wizard",
+                "action_confirm_assign",
+                [[this.state.assignModal.wizardId]],
+                { context: { shahtaj_skip_planning_log: true } },
+            );
+            await this._savePlannedDeliveryDate();
             this.notification.add("Delivery men assigned.", { type: "success" });
             const openJob = this.state.selectedDmJob;
             this.closeAssignModal();
