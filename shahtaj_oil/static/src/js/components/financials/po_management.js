@@ -3,6 +3,7 @@
 import { Component, useState, onWillStart, onWillUpdateProps, onWillUnmount } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { hasFinancialAccess, notifyPortalBusy } from "../../shahtaj_access";
+import { printFilter, printListPdf } from "../../shahtaj_list_export";
 import { ConfirmModal } from "../confirm_modal";
 import {
     applyLookupsToState,
@@ -68,9 +69,9 @@ export class PoManagement extends Component {
             vendorBills: [],
             vendors: [],
             filters: {
-                purchaseOrders: { search: "", status: "all" },
-                receipts: { search: "", status: "all" },
-                vendorBills: { search: "", status: "all" },
+                purchaseOrders: { search: "", status: "all", vendor: "all", dateFrom: "", dateTo: "" },
+                receipts: { search: "", status: "all", vendor: "all", dateFrom: "", dateTo: "" },
+                vendorBills: { search: "", status: "all", vendor: "all", dateFrom: "", dateTo: "" },
                 vendors: { search: "" },
             },
             paymentForm: {
@@ -80,6 +81,7 @@ export class PoManagement extends Component {
             confirmModal: { isOpen: false, title: "", message: "", onConfirm: null },
             itemsPerPage: ITEMS_PER_PAGE,
             isLoadingList: false,
+            isPrintingList: false,
             searchTimeout: null,
             pagination: {
                 purchaseOrders: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
@@ -208,6 +210,82 @@ export class PoManagement extends Component {
         }
         this.fetchActiveList();
     }
+
+    _listDomain(stateKey, filters) {
+        filters = filters || {};
+        const domain = [];
+        if (stateKey === "allOrders") domain.push(["shahtaj_visit_id", "!=", false]);
+        if (stateKey === "orders") domain.push(["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]);
+        if (stateKey === "invoices") domain.push(["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true]);
+        if (stateKey === "creditNotes") domain.push(["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]);
+        if (stateKey === "payments") domain.push(["partner_id.is_shahtaj_shop", "=", true]);
+        if (stateKey === "purchaseOrders") domain.push(["partner_id.supplier_rank", ">", 0]);
+        if (stateKey === "receipts") domain.push(...this._receiptsListDomain());
+        if (stateKey === "vendorBills") domain.push(["move_type", "in", ["in_invoice", "in_refund"]]);
+        if (stateKey === "vendors") {
+            domain.push(["supplier_rank", ">", 0], ["is_shahtaj_shop", "=", false]);
+            if (this.state.vendorViewMode === "archived") {
+                domain.push(["active", "=", false]);
+            } else {
+                domain.push(["active", "=", true]);
+            }
+        }
+        if (stateKey === "credits") {
+            domain.push(["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]);
+            if (this.state.creditSubView === "risk") {
+                domain.push(["shahtaj_shop_category", "=", "credit"]);
+            }
+            if (this.state.creditSubView === "balances" && this.state.filters.credits.hasCreditLimit) {
+                domain.push(["credit_limit", ">", 0]);
+            }
+        }
+        if (filters.search) {
+            if (stateKey === "credits") {
+                domain.push("|", ["name", "ilike", filters.search], ["owner_name", "ilike", filters.search]);
+            } else if (stateKey === "vendors") {
+                domain.push("|", "|", ["name", "ilike", filters.search], ["phone", "ilike", filters.search], ["email", "ilike", filters.search]);
+            } else if (stateKey === "receipts") {
+                domain.push("|", "|", ["name", "ilike", filters.search], ["origin", "ilike", filters.search], ["partner_id.name", "ilike", filters.search]);
+            } else {
+                domain.push("|", ["name", "ilike", filters.search], ["partner_id.name", "ilike", filters.search]);
+            }
+        }
+        if (filters.status && filters.status !== "all") {
+            if (stateKey === "invoices" || stateKey === "creditNotes") {
+                if (filters.status === "Posted") domain.push(["state", "=", "posted"], ["payment_state", "in", ["not_paid"]]);
+                if (filters.status === "Paid" || filters.status === "Paid/Reconciled") domain.push(["payment_state", "in", ["paid", "in_payment", "reversed"]]);
+                if (filters.status === "Partial") domain.push(["payment_state", "=", "partial"]);
+                if (filters.status === "Draft") domain.push(["state", "=", "draft"]);
+                if (filters.status === "Cancelled") domain.push(["state", "=", "cancel"]);
+            }
+            if (stateKey === "allOrders") {
+                if (filters.status === "Confirmed") domain.push(["state", "not in", ["draft", "cancel"]]);
+                if (filters.status === "Draft") domain.push(["state", "=", "draft"]);
+                if (filters.status === "Cancelled") domain.push(["state", "=", "cancel"]);
+            }
+            if (stateKey === "purchaseOrders") {
+                if (filters.status === "Draft") domain.push(["state", "in", ["draft", "sent"]]);
+                if (filters.status === "Confirmed") domain.push(["state", "=", "purchase"]);
+                if (filters.status === "Cancelled") domain.push(["state", "=", "cancel"]);
+                if (filters.status === "To Bill") domain.push(["invoice_status", "=", "to invoice"]);
+            }
+            if (stateKey === "receipts") {
+                if (filters.status === "Ready") domain.push(["state", "in", ["assigned", "confirmed", "waiting"]]);
+                if (filters.status === "Product Received") domain.push(["state", "=", "done"], ["picking_type_code", "=", "incoming"]);
+                if (filters.status === "Returned") domain.push(["state", "=", "done"], ["picking_type_code", "=", "outgoing"]);
+                if (filters.status === "Cancelled") domain.push(["state", "=", "cancel"]);
+            }
+            if (stateKey === "vendorBills") {
+                if (filters.status === "Draft") domain.push(["state", "=", "draft"]);
+                if (filters.status === "Posted") domain.push(["state", "=", "posted"], ["payment_state", "not in", ["paid", "in_payment", "reversed"]]);
+                if (filters.status === "Paid") domain.push(["payment_state", "in", ["paid", "in_payment", "reversed"]]);
+                if (filters.status === "Cancelled") domain.push(["state", "=", "cancel"]);
+            }
+        }
+        this._applyInvoiceListFilters(domain, stateKey, filters);
+        return domain;
+    }
+
     async fetchActiveList() {
         if (!['invoices', 'expenses', 'credit', 'po_management'].includes(this.state.activeSubTab)) return;
         
@@ -237,83 +315,10 @@ export class PoManagement extends Component {
             const { stateKey, model, fields } = config;
             const pag = this.state.pagination[stateKey];
             const filters = this.state.filters[stateKey];
-            let domain = [];
             if (["allOrders", "orders", "invoices", "creditNotes", "payments"].includes(stateKey)) {
                 await this.ensureInvoiceShopLookup();
             }
-            
-            if (stateKey === 'allOrders') domain.push(["shahtaj_visit_id", "!=", false]);
-            if (stateKey === 'orders') domain.push(["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]);
-            if (stateKey === 'invoices') domain.push(["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true]);
-            if (stateKey === 'creditNotes') domain.push(["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]);
-            if (stateKey === 'payments') domain.push(["partner_id.is_shahtaj_shop", "=", true]);
-            if (stateKey === 'purchaseOrders') domain.push(["partner_id.supplier_rank", ">", 0]);
-            if (stateKey === 'receipts') domain.push(...this._receiptsListDomain());
-            if (stateKey === 'vendorBills') domain.push(["move_type", "in", ["in_invoice", "in_refund"]]);
-            if (stateKey === 'vendors') {
-                domain.push(["supplier_rank", ">", 0], ["is_shahtaj_shop", "=", false]);
-                if (this.state.vendorViewMode === 'archived') {
-                    domain.push(["active", "=", false]);
-                } else {
-                    domain.push(["active", "=", true]);
-                }
-            }
-            if (stateKey === 'credits') {
-                domain.push(["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]);
-                if (this.state.creditSubView === 'risk') {
-                    domain.push(["shahtaj_shop_category", "=", "credit"]);
-                }
-                if (this.state.creditSubView === 'balances' && this.state.filters.credits.hasCreditLimit) {
-                    domain.push(["credit_limit", ">", 0]);
-                }
-            }
-
-            if (filters.search) {
-                if (stateKey === 'credits') {
-                    domain.push('|', ['name', 'ilike', filters.search], ['owner_name', 'ilike', filters.search]);
-                } else if (stateKey === 'vendors') {
-                    domain.push('|', '|', ['name', 'ilike', filters.search], ['phone', 'ilike', filters.search], ['email', 'ilike', filters.search]);
-                } else if (stateKey === 'receipts') {
-                    domain.push('|', '|', ['name', 'ilike', filters.search], ['origin', 'ilike', filters.search], ['partner_id.name', 'ilike', filters.search]);
-                } else {
-                    domain.push('|', ['name', 'ilike', filters.search], ['partner_id.name', 'ilike', filters.search]);
-                }
-            }
-
-            if (filters.status && filters.status !== 'all') {
-                if (stateKey === 'invoices' || stateKey === 'creditNotes') {
-                    if (filters.status === 'Posted') domain.push(['state', '=', 'posted'], ['payment_state', 'in', ['not_paid']]);
-                    if (filters.status === 'Paid' || filters.status === 'Paid/Reconciled') domain.push(['payment_state', 'in', ['paid', 'in_payment', 'reversed']]);
-                    if (filters.status === 'Partial') domain.push(['payment_state', '=', 'partial']);
-                    if (filters.status === 'Draft') domain.push(['state', '=', 'draft']);
-                    if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
-                }
-                if (stateKey === 'allOrders') {
-                    if (filters.status === 'Confirmed') domain.push(['state', 'not in', ['draft', 'cancel']]);
-                    if (filters.status === 'Draft') domain.push(['state', '=', 'draft']);
-                    if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
-                }
-                if (stateKey === 'purchaseOrders') {
-                    if (filters.status === 'Draft') domain.push(['state', 'in', ['draft', 'sent']]);
-                    if (filters.status === 'Confirmed') domain.push(['state', '=', 'purchase']);
-                    if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
-                    if (filters.status === 'To Bill') domain.push(['invoice_status', '=', 'to invoice']);
-                }
-                if (stateKey === 'receipts') {
-                    if (filters.status === 'Ready') domain.push(['state', 'in', ['assigned', 'confirmed', 'waiting']]);
-                    if (filters.status === 'Product Received') domain.push(['state', '=', 'done'], ['picking_type_code', '=', 'incoming']);
-                    if (filters.status === 'Returned') domain.push(['state', '=', 'done'], ['picking_type_code', '=', 'outgoing']);
-                    if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
-                }
-                if (stateKey === 'vendorBills') {
-                    if (filters.status === 'Draft') domain.push(['state', '=', 'draft']);
-                    if (filters.status === 'Posted') domain.push(['state', '=', 'posted'], ['payment_state', 'not in', ['paid', 'in_payment', 'reversed']]);
-                    if (filters.status === 'Paid') domain.push(['payment_state', 'in', ['paid', 'in_payment', 'reversed']]);
-                    if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
-                }
-            }
-
-            this._applyInvoiceListFilters(domain, stateKey, filters);
+            const domain = this._listDomain(stateKey, filters);
 
             // 4. FIRE DUAL QUERIES (Total Count + Paged Records)
             const queryContext = (stateKey === 'vendors' && this.state.vendorViewMode === 'archived') ? { active_test: false } : {};
@@ -1759,12 +1764,21 @@ export class PoManagement extends Component {
                 domain.push(["partner_id", "=", shopId]);
             }
         }
+        if (filters.vendor && filters.vendor !== "all" && ["purchaseOrders", "receipts", "vendorBills"].includes(stateKey)) {
+            const vendorId = parseInt(filters.vendor, 10);
+            if (vendorId) {
+                domain.push(["partner_id", "=", vendorId]);
+            }
+        }
         const dateFieldByKey = {
             allOrders: "date_order",
             orders: "date_order",
             invoices: "invoice_date",
             creditNotes: "invoice_date",
             payments: "date",
+            purchaseOrders: "date_order",
+            receipts: "scheduled_date",
+            vendorBills: "invoice_date",
         };
         const dateField = dateFieldByKey[stateKey];
         if (!dateField) {
@@ -1774,8 +1788,86 @@ export class PoManagement extends Component {
             domain.push([dateField, ">=", filters.dateFrom]);
         }
         if (filters.dateTo) {
-            const toValue = dateField === "date_order" ? `${filters.dateTo} 23:59:59` : filters.dateTo;
+            const toValue = ["date_order", "scheduled_date"].includes(dateField) ? `${filters.dateTo} 23:59:59` : filters.dateTo;
             domain.push([dateField, "<=", toValue]);
+        }
+    }
+
+    _vendorFilterName(vendorId) {
+        if (!vendorId || vendorId === "all") return "";
+        const vendor = (this.state.poLookups.vendors || []).find((row) => String(row.id) === String(vendorId));
+        return vendor ? vendor.name : "";
+    }
+
+    _poPrintFilters(filters) {
+        return [
+            printFilter("Search", filters.search),
+            printFilter("Vendor", this._vendorFilterName(filters.vendor)),
+            printFilter("From", filters.dateFrom),
+            printFilter("To", filters.dateTo),
+            printFilter("Status", filters.status),
+        ];
+    }
+
+    async _openListPrint(title, filters, columns, rows) {
+        if (!rows.length) {
+            this.notification.add("No rows match the current filters.", { type: "warning" });
+            return;
+        }
+        await printListPdf(this.orm, this.action, { title, filters, columns, rows });
+    }
+
+    async printPurchaseOrders() {
+        if (this.state.isPrintingList) return;
+        this.state.isPrintingList = true;
+        try {
+            const filters = this.state.filters.purchaseOrders;
+            const records = await this.orm.searchRead(
+                "purchase.order",
+                this._listDomain("purchaseOrders", filters),
+                ["name", "partner_id", "date_order", "date_planned", "amount_total", "state", "invoice_status"],
+                { order: "id desc" }
+            );
+            await this._openListPrint(
+                "Purchase Orders",
+                this._poPrintFilters(filters),
+                ["Reference", "Vendor", "Order Date", "Expected Date", "Total", "Status"],
+                records.map((po) => {
+                    const row = this._mapPurchaseOrder(po);
+                    return [row.display_name, row.vendor, row.date, row.expectedDate, `Rs. ${row.amount}`, row.status];
+                }),
+            );
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrintingList = false;
+        }
+    }
+
+    async printVendorBills() {
+        if (this.state.isPrintingList) return;
+        this.state.isPrintingList = true;
+        try {
+            const filters = this.state.filters.vendorBills;
+            const records = await this.orm.searchRead(
+                "account.move",
+                this._listDomain("vendorBills", filters),
+                ["name", "partner_id", "invoice_date", "amount_total", "amount_residual", "payment_state", "state", "invoice_origin", "move_type", "journal_id"],
+                { order: "id desc" }
+            );
+            await this._openListPrint(
+                "Vendor Bills",
+                this._poPrintFilters(filters),
+                ["Bill", "Vendor", "Origin", "Date", "Amount", "Status"],
+                records.map((bill) => {
+                    const row = this._mapVendorBill(bill);
+                    return [row.display_name, row.vendor, row.origin, row.date, `Rs. ${row.amount}`, row.status];
+                }),
+            );
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrintingList = false;
         }
     }
 

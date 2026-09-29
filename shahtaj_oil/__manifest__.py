@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Shahtaj Oil',
-    'version': '19.0.1.1.153',
+    'version': '19.0.1.1.161',
     'post_init_hook': 'post_init_hook',
     'category': 'Sales/Distribution',
     'summary': 'Unified Command Center for Shahtaj Oil distributions, field booking, and SPA frontend',
@@ -101,6 +101,7 @@
 
         'report/shahtaj_manufacturer_summary_report.xml',
         'report/shahtaj_financial_statements_report.xml',
+        'report/shahtaj_list_print_report.xml',
         
         # ── 8. SECURITY FIXES (must update rules created in step 1) ──
         'security/shahtaj_record_rules_fix.xml',
@@ -124,6 +125,7 @@
     'shahtaj_oil/static/src/scss/shahtaj_route_checklist.scss',
     'shahtaj_oil/static/src/js/custom_portal_shell.js',
     'shahtaj_oil/static/src/js/shahtaj_access.js',
+    'shahtaj_oil/static/src/js/shahtaj_list_export.js',
     'shahtaj_oil/static/src/js/shahtaj_geolocate_widget.js',
     'shahtaj_oil/static/src/xml/dashboard.xml',
     'shahtaj_oil/static/src/js/components/staff_management.js',

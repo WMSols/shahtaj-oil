@@ -3,12 +3,14 @@
 import { Component, useState, onWillStart } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { notifyPortalBusy } from "../shahtaj_access";
+import { printListPdf } from "../shahtaj_list_export";
 
 const DONE_STATES = ["delivered", "returned"];
 
 export class DeliveryManPerformance extends Component {
     setup() {
         this.orm = useService("orm");
+        this.action = useService("action");
         this.notification = useService("notification");
         const today = new Date();
         this.todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -22,6 +24,7 @@ export class DeliveryManPerformance extends Component {
             pagination: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
             deliveryMen: [],
             filters: { search: "", dm: "all" },
+            isPrinting: false,
             searchTimeout: null,
         });
 
@@ -218,6 +221,56 @@ export class DeliveryManPerformance extends Component {
         if (newPage < 1 || newPage > maxPage) return;
         pag.page = newPage;
         this.fetchProgress();
+    }
+
+    async printSummary() {
+        if (this.state.isPrinting || this.state.selectedDm) return;
+        this.state.isPrinting = true;
+        try {
+            const domain = this._userDomain();
+            const users = await this.orm.searchRead(
+                "res.users",
+                domain,
+                ["id", "name", "shahtaj_employee_code", "shahtaj_online_status"],
+                { order: "name asc" },
+            );
+            const stats = await this._jobStats(users.map((user) => user.id));
+            const rows = users.map((user) => {
+                const bucket = stats[user.id] || { assigned: 0, done: 0 };
+                const pending = Math.max(bucket.assigned - bucket.done, 0);
+                const progress = bucket.assigned ? (bucket.done / bucket.assigned) * 100 : 0;
+                return [
+                    user.name || "",
+                    user.shahtaj_employee_code || "",
+                    `${Math.round(progress)}%`,
+                    String(bucket.done),
+                    String(pending),
+                    String(bucket.assigned),
+                    this.statusLabel(user.shahtaj_online_status || "offline"),
+                ];
+            });
+            if (!rows.length) {
+                this.notification.add("No rows match the current filters.", { type: "warning" });
+                return;
+            }
+            const dmName = this.state.filters.dm !== "all"
+                ? (this.state.deliveryMen.find((dm) => String(dm.id) === String(this.state.filters.dm)) || {}).name
+                : "";
+            await printListPdf(this.orm, this.action, {
+                title: "DM Performance",
+                filters: [
+                    this.state.filters.search ? `Search: ${this.state.filters.search}` : "",
+                    this.state.date ? `Date: ${this.state.date}` : "",
+                    dmName ? `Delivery man: ${dmName}` : "",
+                ],
+                columns: ["Delivery Man", "Code", "Progress %", "Done", "Pending", "Assigned", "Online"],
+                rows,
+            });
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrinting = false;
+        }
     }
 
     statusLabel(status) {

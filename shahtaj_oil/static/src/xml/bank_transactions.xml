@@ -69,6 +69,11 @@
                             <input type="date" class="form-control" t-model="this.state.filters.transactions.dateTo" t-on-change="() => this.onFilterChange('transactions')"/>
                         </div>
                     </div>
+                    <div class="d-flex justify-content-end mb-3">
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printCash" t-att-disabled="this.state.isPrinting or this.state.isLoading.data" title="Print the rows that match the current filters">
+                            <i class="fa fa-print me-1"/> Print
+                        </button>
+                    </div>
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-4">

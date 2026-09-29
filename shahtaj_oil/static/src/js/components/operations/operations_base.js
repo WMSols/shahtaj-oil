@@ -4,6 +4,7 @@ import { Component, useState, onWillStart, onWillUpdateProps, useEffect, useRef 
 import { useService } from "@web/core/utils/hooks";
 import { hasFinancialAccess, notifyPortalBusy } from "../../shahtaj_access";
 import { ConfirmModal } from "../confirm_modal";
+import { printListPdf } from "../../shahtaj_list_export";
 import {
     applyOperationsCatalogsToState,
     applyOperationsLookupsToState,
@@ -135,6 +136,7 @@ export class OperationsBase extends Component {
             // --- BACKEND PAGINATION & FILTERS ---
             itemsPerPage: ITEMS_PER_PAGE,
             isLoadingList: false,
+            isPrintingList: false,
             searchTimeout: null,
             
             tableDeliveries: [], tableCheckins: [], tableOrders: [], tableVerification: [], tableSchedules: [], tableTargets: [],
@@ -1413,6 +1415,176 @@ export class OperationsBase extends Component {
         return Number(row.qtyToDeliver) > 0;
     }
 
+    _operationsListQuery(tab, filters) {
+        const domain = [];
+        let model = '';
+        let fields = [];
+        let targetState = '';
+        let order = 'id desc';
+        let context = null;
+
+        if (tab === 'deliveries' || tab === 'dispatch' || tab === 'orders' || tab === 'verification') {
+            model = 'sale.order';
+            targetState = tab === 'deliveries' ? 'tableDeliveries' : (tab === 'dispatch' ? 'tableDispatch' : (tab === 'verification' ? 'tableVerification' : 'tableOrders'));
+            fields = ["name", "partner_id", "user_id", "date_order", "amount_total", "amount_tax", "amount_untaxed", "state", "order_line", "invoice_status", "invoice_ids", "shahtaj_is_walk_in"];
+            if (tab === 'dispatch') {
+                fields.push("shahtaj_delivery_status", "shahtaj_qty_to_deliver", "shahtaj_dm_delivery_count");
+            }
+            if (tab !== 'deliveries' && tab !== 'dispatch') {
+                fields.push(
+                    "shahtaj_approval_state", "shahtaj_approval_reason_discount", "shahtaj_approval_reason_credit",
+                    "shahtaj_approval_reasons_display", "shahtaj_catalog_amount_total", "shahtaj_total_discount_amount",
+                    "shahtaj_discount_reasons",
+                );
+            }
+            if (tab === 'orders' && filters.walkIn) {
+                domain.push(['shahtaj_is_walk_in', '=', true]);
+            } else if (tab === 'orders') {
+                domain.push('|', '|',
+                    ['shahtaj_visit_id', '!=', false],
+                    ['partner_id.is_shahtaj_shop', '=', true],
+                    ['shahtaj_is_walk_in', '=', true],
+                );
+            } else {
+                domain.push('|', ['shahtaj_visit_id', '!=', false], ['partner_id.is_shahtaj_shop', '=', true]);
+            }
+            if (tab === 'deliveries') domain.push(['state', 'in', ['sale', 'done']]);
+            if (tab === 'dispatch') {
+                domain.push(['state', 'in', ['sale', 'done']]);
+                domain.push(['shahtaj_delivery_status', 'in', ['pending', 'partial']]);
+                domain.push(['shahtaj_qty_to_deliver', '>', 0]);
+                if (filters.dateFrom) domain.push(['date_order', '>=', this._pktDateToUtcBounds(filters.dateFrom).start]);
+                if (filters.dateTo) domain.push(['date_order', '<=', this._pktDateToUtcBounds(filters.dateTo).end]);
+            }
+            if (tab === 'verification') {
+                domain.push(['shahtaj_approval_state', '=', 'to_approve']);
+                domain.push(['state', 'in', ['draft', 'sent']]);
+            }
+            if (tab === 'orders') {
+                domain.push(['shahtaj_approval_state', '!=', 'to_approve']);
+            }
+            if (filters.search) domain.push('|', '|', ['name', 'ilike', filters.search], ['partner_id.name', 'ilike', filters.search], ['user_id.name', 'ilike', filters.search]);
+            if ((tab === 'orders' || tab === 'verification') && filters.booker && filters.booker !== 'all') domain.push(['user_id', '=', parseInt(filters.booker)]);
+            if (tab === 'orders') {
+                if (filters.dateFrom) domain.push(['date_order', '>=', this._pktDateToUtcBounds(filters.dateFrom).start]);
+                if (filters.dateTo) domain.push(['date_order', '<=', this._pktDateToUtcBounds(filters.dateTo).end]);
+            }
+            if (tab === 'verification' && filters.reason && filters.reason !== 'all') {
+                if (filters.reason === 'discount') domain.push(['shahtaj_approval_reason_discount', '=', true]);
+                if (filters.reason === 'credit') domain.push(['shahtaj_approval_reason_credit', '=', true]);
+                if (filters.reason === 'both') {
+                    domain.push(['shahtaj_approval_reason_discount', '=', true]);
+                    domain.push(['shahtaj_approval_reason_credit', '=', true]);
+                }
+            }
+            if (tab === 'orders' && filters.status) {
+                if (filters.status === 'Draft') domain.push(['state', '=', 'draft']);
+                else if (filters.status === 'Delivered') domain.push(['state', '=', 'done']);
+                else if (filters.status === 'To Invoice') domain.push(['state', '=', 'sale'], ['invoice_status', '!=', 'invoiced']);
+                else if (filters.status === 'Invoiced') domain.push(['invoice_status', '=', 'invoiced']);
+                else if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
+            }
+        } else if (tab === 'dm_jobs') {
+            model = 'shahtaj.dm.delivery';
+            targetState = 'tableDmJobs';
+            fields = [
+                'id', 'display_name', 'delivery_man_id', 'partner_id', 'sale_order_id',
+                'order_booker_id', 'scheduled_date', 'state', 'field_state',
+                'amount_total', 'shop_outstanding_balance', 'assignment_mode', 'gps_verified',
+            ];
+            if (filters.search) {
+                domain.push('|', '|', '|',
+                    ['display_name', 'ilike', filters.search],
+                    ['partner_id.name', 'ilike', filters.search],
+                    ['sale_order_id.name', 'ilike', filters.search],
+                    ['delivery_man_id.name', 'ilike', filters.search],
+                );
+            }
+            if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
+            domain.push(...this._dateRangeDomain(filters, 'scheduled_date'));
+            if (filters.state === 'except_not_ready') domain.push(['state', '!=', 'not_ready']);
+            else if (filters.state && filters.state !== 'all') domain.push(['state', '=', filters.state]);
+            if (filters.field_state && filters.field_state !== 'all') domain.push(['field_state', '=', filters.field_state]);
+            domain.push(...this._dmJobsScheduleDomain(filters.schedule));
+        } else if (tab === 'sessions') {
+            model = 'shahtaj.dm.day.session';
+            targetState = 'tableSessions';
+            fields = ['id', 'delivery_man_id', 'session_date', 'state', 'departed_at', 'ended_at'];
+            order = 'session_date desc, id desc';
+            if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
+            domain.push(...this._dateRangeDomain(filters, 'session_date'));
+        } else if (tab === 'collections') {
+            model = 'account.payment';
+            targetState = 'tableCollections';
+            fields = ['id', 'name', 'date', 'amount', 'partner_id', 'shahtaj_collected_by_dm_id', 'shahtaj_payment_channel', 'state'];
+            order = 'date desc, id desc';
+            domain.push(['shahtaj_is_dm_wallet_collection', '=', true]);
+            if (filters.search) {
+                domain.push('|', '|',
+                    ['name', 'ilike', filters.search],
+                    ['partner_id.name', 'ilike', filters.search],
+                    ['shahtaj_collected_by_dm_id.name', 'ilike', filters.search],
+                );
+            }
+            if (filters.dm && filters.dm !== 'all') domain.push(['shahtaj_collected_by_dm_id', '=', parseInt(filters.dm)]);
+            domain.push(...this._dateRangeDomain(filters, 'date'));
+        } else if (tab === 'settlements') {
+            model = 'shahtaj.dm.wallet.settlement';
+            targetState = 'tableSettlements';
+            fields = ['id', 'name', 'delivery_man_id', 'amount', 'settlement_date', 'bank_journal_id', 'settled_by_id', 'move_id', 'state', 'notes'];
+            order = 'settlement_date desc, id desc';
+            if (filters.search) {
+                domain.push('|', '|',
+                    ['name', 'ilike', filters.search],
+                    ['delivery_man_id.name', 'ilike', filters.search],
+                    ['move_id.name', 'ilike', filters.search],
+                );
+            }
+            if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
+            domain.push(...this._dateRangeDomain(filters, 'settlement_date'));
+        } else if (tab === 'checkins') {
+            model = 'shahtaj.gps.attempt';
+            targetState = 'tableCheckins';
+            order = 'create_date desc, id desc';
+            fields = [
+                'id', 'create_date', 'user_id', 'role', 'purpose', 'result', 'message',
+                'shop_id', 'shop_latitude', 'shop_longitude',
+                'attempt_latitude', 'attempt_longitude',
+                'distance_m', 'min_distance_m', 'max_distance_m',
+                'visit_task_id', 'visit_id', 'dm_delivery_id', 'sale_order_id',
+            ];
+            if (filters.search) {
+                domain.push('|', '|',
+                    ['shop_id.name', 'ilike', filters.search],
+                    ['user_id.name', 'ilike', filters.search],
+                    ['message', 'ilike', filters.search],
+                );
+            }
+            if (filters.booker && filters.booker !== 'all') domain.push(['user_id', '=', parseInt(filters.booker)]);
+            if (filters.date) {
+                const bounds = this._pktDateToUtcBounds(filters.date);
+                domain.push(['create_date', '>=', bounds.start]);
+                domain.push(['create_date', '<=', bounds.end]);
+            }
+            if (filters.role && filters.role !== 'all') domain.push(['role', '=', filters.role]);
+        } else if (tab === 'schedules') {
+            model = 'shahtaj.weekly.schedule';
+            targetState = 'tableSchedules';
+            context = { active_test: false };
+            fields = ['id', 'name', 'day_of_week', 'route_id', 'zone_id', 'active', 'shop_count', 'order_booker_id'];
+            if (filters.booker !== 'all') domain.push(['order_booker_id', '=', parseInt(filters.booker)]);
+            if (filters.date) domain.push(['day_of_week', '=', this._pktWeekdayForDate(filters.date)]);
+        } else if (tab === 'targets') {
+            model = 'shahtaj.visit.target';
+            targetState = 'tableTargets';
+            context = { active_test: false };
+            fields = ['id', 'name', 'date_start', 'date_end', 'period_status', 'target_type', 'target_value', 'achieved_value', 'remaining_value', 'progress_percent', 'product_id', 'currency_id', 'target_weight_uom', 'active', 'order_booker_id'];
+            if (filters.booker !== 'all') domain.push(['order_booker_id', '=', parseInt(filters.booker)]);
+            if (filters.type !== 'all') domain.push(['target_type', '=', filters.type]);
+        }
+        return { model, domain, fields, targetState, order, context };
+    }
+
     // --- THE MASTER DATA ENGINE ---
     async fetchActiveList() {
         let tab = this.state.activeSubTab;
@@ -1436,171 +1608,12 @@ export class OperationsBase extends Component {
                 notifyPortalBusy(false);
                 return;
             }
-            let domain = []; let model = ''; let fields = []; let targetState = '';
+            const listQuery = this._operationsListQuery(tab, filters);
+            const domain = listQuery.domain;
+            const model = listQuery.model;
+            const fields = listQuery.fields;
+            const targetState = listQuery.targetState;
 
-            // 1. DOMAIN MAPPINGS
-            if (tab === 'deliveries' || tab === 'dispatch' || tab === 'orders' || tab === 'verification') {
-                model = 'sale.order';
-                targetState = tab === 'deliveries' ? 'tableDeliveries' : (tab === 'dispatch' ? 'tableDispatch' : (tab === 'verification' ? 'tableVerification' : 'tableOrders'));
-                fields = ["name", "partner_id", "user_id", "date_order", "amount_total", "amount_tax", "amount_untaxed", "state", "order_line", "invoice_status", "invoice_ids", "shahtaj_is_walk_in"];
-                if (tab === 'dispatch') {
-                    fields.push("shahtaj_delivery_status", "shahtaj_qty_to_deliver", "shahtaj_dm_delivery_count");
-                }
-                if (tab !== 'deliveries' && tab !== 'dispatch') {
-                    // Stored fields only. Credit/history snapshot fields are computed
-                    // and stall this list on a production database — load them in viewOrder.
-                    fields.push(
-                        "shahtaj_approval_state", "shahtaj_approval_reason_discount", "shahtaj_approval_reason_credit",
-                        "shahtaj_approval_reasons_display", "shahtaj_catalog_amount_total", "shahtaj_total_discount_amount",
-                        "shahtaj_discount_reasons",
-                    );
-                }
-                if (tab === 'orders' && filters.walkIn) {
-                    domain.push(['shahtaj_is_walk_in', '=', true]);
-                } else if (tab === 'orders') {
-                    domain.push('|', '|',
-                        ['shahtaj_visit_id', '!=', false],
-                        ['partner_id.is_shahtaj_shop', '=', true],
-                        ['shahtaj_is_walk_in', '=', true],
-                    );
-                } else {
-                    domain.push('|', ['shahtaj_visit_id', '!=', false], ['partner_id.is_shahtaj_shop', '=', true]);
-                }
-                
-                if (tab === 'deliveries') domain.push(['state', 'in', ['sale', 'done']]);
-                if (tab === 'dispatch') {
-                    domain.push(['state', 'in', ['sale', 'done']]);
-                    domain.push(['shahtaj_delivery_status', 'in', ['pending', 'partial']]);
-                    domain.push(['shahtaj_qty_to_deliver', '>', 0]);
-                    if (filters.dateFrom) domain.push(['date_order', '>=', this._pktDateToUtcBounds(filters.dateFrom).start]);
-                    if (filters.dateTo) domain.push(['date_order', '<=', this._pktDateToUtcBounds(filters.dateTo).end]);
-                }
-                if (tab === 'verification') {
-                    domain.push(['shahtaj_approval_state', '=', 'to_approve']);
-                    domain.push(['state', 'in', ['draft', 'sent']]);
-                }
-                if (tab === 'orders') {
-                    domain.push(['shahtaj_approval_state', '!=', 'to_approve']);
-                }
-                if (filters.search) domain.push('|', '|', ['name', 'ilike', filters.search], ['partner_id.name', 'ilike', filters.search], ['user_id.name', 'ilike', filters.search]);
-                if ((tab === 'orders' || tab === 'verification') && filters.booker && filters.booker !== 'all') domain.push(['user_id', '=', parseInt(filters.booker)]);
-                if (tab === 'orders') {
-                    if (filters.dateFrom) domain.push(['date_order', '>=', this._pktDateToUtcBounds(filters.dateFrom).start]);
-                    if (filters.dateTo) domain.push(['date_order', '<=', this._pktDateToUtcBounds(filters.dateTo).end]);
-                }
-                if (tab === 'verification' && filters.reason && filters.reason !== 'all') {
-                    if (filters.reason === 'discount') domain.push(['shahtaj_approval_reason_discount', '=', true]);
-                    if (filters.reason === 'credit') domain.push(['shahtaj_approval_reason_credit', '=', true]);
-                    if (filters.reason === 'both') {
-                        domain.push(['shahtaj_approval_reason_discount', '=', true]);
-                        domain.push(['shahtaj_approval_reason_credit', '=', true]);
-                    }
-                }
-                if (tab === 'orders' && filters.status) {
-                    if (filters.status === 'Draft') domain.push(['state', '=', 'draft']);
-                    else if (filters.status === 'Delivered') domain.push(['state', '=', 'done']);
-                    else if (filters.status === 'To Invoice') domain.push(['state', '=', 'sale'], ['invoice_status', '!=', 'invoiced']);
-                    else if (filters.status === 'Invoiced') domain.push(['invoice_status', '=', 'invoiced']);
-                    else if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
-                }
-            } 
-            else if (tab === 'dm_jobs') {
-                model = 'shahtaj.dm.delivery';
-                targetState = 'tableDmJobs';
-                fields = [
-                    'id', 'display_name', 'delivery_man_id', 'partner_id', 'sale_order_id',
-                    'order_booker_id', 'scheduled_date', 'state', 'field_state',
-                    'amount_total', 'shop_outstanding_balance', 'assignment_mode', 'gps_verified',
-                ];
-                if (filters.search) {
-                    domain.push('|', '|', '|',
-                        ['display_name', 'ilike', filters.search],
-                        ['partner_id.name', 'ilike', filters.search],
-                        ['sale_order_id.name', 'ilike', filters.search],
-                        ['delivery_man_id.name', 'ilike', filters.search],
-                    );
-                }
-                if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
-                domain.push(...this._dateRangeDomain(filters, 'scheduled_date'));
-                if (filters.state === 'except_not_ready') domain.push(['state', '!=', 'not_ready']);
-                else if (filters.state && filters.state !== 'all') domain.push(['state', '=', filters.state]);
-                if (filters.field_state && filters.field_state !== 'all') domain.push(['field_state', '=', filters.field_state]);
-                domain.push(...this._dmJobsScheduleDomain(filters.schedule));
-            }
-            else if (tab === 'sessions') {
-                model = 'shahtaj.dm.day.session';
-                targetState = 'tableSessions';
-                fields = ['id', 'delivery_man_id', 'session_date', 'state', 'departed_at', 'ended_at'];
-                if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
-                domain.push(...this._dateRangeDomain(filters, 'session_date'));
-            }
-            else if (tab === 'collections') {
-                model = 'account.payment';
-                targetState = 'tableCollections';
-                fields = ['id', 'name', 'date', 'amount', 'partner_id', 'shahtaj_collected_by_dm_id', 'shahtaj_payment_channel', 'state'];
-                domain.push(['shahtaj_is_dm_wallet_collection', '=', true]);
-                if (filters.search) {
-                    domain.push('|', '|',
-                        ['name', 'ilike', filters.search],
-                        ['partner_id.name', 'ilike', filters.search],
-                        ['shahtaj_collected_by_dm_id.name', 'ilike', filters.search],
-                    );
-                }
-                if (filters.dm && filters.dm !== 'all') domain.push(['shahtaj_collected_by_dm_id', '=', parseInt(filters.dm)]);
-                domain.push(...this._dateRangeDomain(filters, 'date'));
-            }
-            else if (tab === 'settlements') {
-                model = 'shahtaj.dm.wallet.settlement';
-                targetState = 'tableSettlements';
-                fields = ['id', 'name', 'delivery_man_id', 'amount', 'settlement_date', 'bank_journal_id', 'settled_by_id', 'move_id', 'state', 'notes'];
-                if (filters.search) {
-                    domain.push('|', '|',
-                        ['name', 'ilike', filters.search],
-                        ['delivery_man_id.name', 'ilike', filters.search],
-                        ['move_id.name', 'ilike', filters.search],
-                    );
-                }
-                if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
-                domain.push(...this._dateRangeDomain(filters, 'settlement_date'));
-            }
-            else if (tab === 'checkins') {
-                model = 'shahtaj.gps.attempt'; targetState = 'tableCheckins';
-                fields = [
-                    'id', 'create_date', 'user_id', 'role', 'purpose', 'result', 'message',
-                    'shop_id', 'shop_latitude', 'shop_longitude',
-                    'attempt_latitude', 'attempt_longitude',
-                    'distance_m', 'min_distance_m', 'max_distance_m',
-                    'visit_task_id', 'visit_id', 'dm_delivery_id', 'sale_order_id',
-                ];
-                if (filters.search) {
-                    domain.push('|', '|',
-                        ['shop_id.name', 'ilike', filters.search],
-                        ['user_id.name', 'ilike', filters.search],
-                        ['message', 'ilike', filters.search],
-                    );
-                }
-                if (filters.booker && filters.booker !== 'all') domain.push(['user_id', '=', parseInt(filters.booker)]);
-                if (filters.date) {
-                    const bounds = this._pktDateToUtcBounds(filters.date);
-                    domain.push(['create_date', '>=', bounds.start]);
-                    domain.push(['create_date', '<=', bounds.end]);
-                }
-                if (filters.role && filters.role !== 'all') domain.push(['role', '=', filters.role]);
-                // Status, purpose, and visit outcome apply after rows are grouped
-                // into one session, so a finished order still includes its blocked tries.
-            }
-            else if (tab === 'schedules') {
-                model = 'shahtaj.weekly.schedule'; targetState = 'tableSchedules';
-                fields = ['id', 'name', 'day_of_week', 'route_id', 'zone_id', 'active', 'shop_count', 'order_booker_id'];
-                if (filters.booker !== 'all') domain.push(['order_booker_id', '=', parseInt(filters.booker)]);
-                if (filters.date) domain.push(['day_of_week', '=', this._pktWeekdayForDate(filters.date)]);
-            }
-            else if (tab === 'targets') {
-                model = 'shahtaj.visit.target'; targetState = 'tableTargets';
-                fields = ['id', 'name', 'date_start', 'date_end', 'period_status', 'target_type', 'target_value', 'achieved_value', 'remaining_value', 'progress_percent', 'product_id', 'currency_id', 'target_weight_uom', 'active', 'order_booker_id'];
-                if (filters.booker !== 'all') domain.push(['order_booker_id', '=', parseInt(filters.booker)]);
-                if (filters.type !== 'all') domain.push(['target_type', '=', filters.type]);
-            }
 
             if ((tab === 'collections' || tab === 'settlements') && !this.hasFinancialAccess) {
                 this.state.isLoadingList = false;
@@ -3734,5 +3747,337 @@ export class OperationsBase extends Component {
                 await this.fetchActiveList();
             }
         });
+    }
+
+    _lookupName(list, id) {
+        const row = (list || []).find((item) => String(item.id) === String(id));
+        return row ? row.name : "";
+    }
+
+    _printFilter(label, value) {
+        if (value === undefined || value === null || value === "" || value === "all") return "";
+        return `${label}: ${value}`;
+    }
+
+    async _loadMappedPrintRows(tab) {
+        const filters = this.state.filters[tab] || {};
+        const spec = this._operationsListQuery(tab, filters);
+        if (!spec.model) return [];
+        const kwargs = { order: spec.order || "id desc" };
+        if (spec.context) kwargs.context = spec.context;
+        const records = await this.orm.searchRead(spec.model, spec.domain, spec.fields, kwargs);
+        if (tab === "orders") {
+            const orderIds = records.map((order) => order.id);
+            const lines = orderIds.length
+                ? await this.orm.searchRead("sale.order.line", [["order_id", "in", orderIds]], ["order_id", "product_uom_qty", "qty_delivered"])
+                : [];
+            return records.map((order) => this._mapSaleOrderRow(order, lines));
+        }
+        if (tab === "dm_jobs") return records.map((job) => this._mapDmDeliveryRow(job));
+        if (tab === "collections") return records.map((payment) => this._mapRecoveryRow(payment));
+        if (tab === "settlements") {
+            return records.map((row) => ({
+                id: row.id,
+                name: row.name,
+                dm: row.delivery_man_id ? row.delivery_man_id[1] : "—",
+                amount: row.amount || 0,
+                date: row.settlement_date || "—",
+                journal: row.bank_journal_id ? row.bank_journal_id[1] : "—",
+                settledBy: row.settled_by_id ? row.settled_by_id[1] : "—",
+                state: row.state,
+            }));
+        }
+        if (tab === "checkins") {
+            const enrichment = await this._enrichCheckinRows(records);
+            const mapped = records.map((attempt) => this._mapGpsAttempt(attempt, enrichment));
+            return this._filterCheckinSessions(this._groupCheckinSessions(mapped), filters);
+        }
+        if (tab === "schedules") {
+            const dateStr = filters.date || "";
+            const stats = await this._loadScheduleProgressForDate(records, dateStr);
+            const dayMap = { "0": "Monday", "1": "Tuesday", "2": "Wednesday", "3": "Thursday", "4": "Friday", "5": "Saturday", "6": "Sunday" };
+            const rows = records.map((row) => {
+                const bookerId = row.order_booker_id ? row.order_booker_id[0] : null;
+                const routeId = row.route_id ? row.route_id[0] : null;
+                const occurrenceDate = dateStr || this._weekOccurrenceDate(row.day_of_week);
+                const rowStats = stats[`${bookerId || 0}:${routeId || 0}:${occurrenceDate}`] || { planned: 0, done: 0, skipped: 0 };
+                const progress = rowStats.planned ? (rowStats.done / rowStats.planned * 100) : 0;
+                return {
+                    id: row.id,
+                    bookerId,
+                    bookerName: row.order_booker_id ? row.order_booker_id[1] : "Unknown",
+                    day_raw: row.day_of_week,
+                    day: dayMap[row.day_of_week] || row.day_of_week,
+                    route: row.route_id ? row.route_id[1] : "Unassigned",
+                    zone: row.zone_id ? row.zone_id[1] : "Unassigned",
+                    active: row.active,
+                    progress,
+                    occurrenceDate,
+                };
+            });
+            if (!dateStr) {
+                rows.sort((a, b) => this._compareSchedulesByToday(a, b, this._pktTodayWeekday()));
+            }
+            return rows;
+        }
+        if (tab === "targets") {
+            return records.map((row) => ({
+                bookerName: row.order_booker_id ? row.order_booker_id[1] : "Unknown",
+                displayType: row.target_type ? row.target_type.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Unknown",
+                startDate: row.date_start,
+                endDate: row.date_end,
+                periodStatus: row.period_status || "",
+                achievedValue: row.achieved_value,
+                targetValue: row.target_value,
+                progress: row.progress_percent || 0,
+                showActive: this._targetShowActive(row.active, row.date_end),
+            }));
+        }
+        return [];
+    }
+
+    async _openListPrint(title, filters, columns, rows) {
+        if (!rows.length) {
+            this.notification.add("No rows match the current filters.", { type: "warning" });
+            return;
+        }
+        await printListPdf(this.orm, this.action, { title, filters, columns, rows });
+    }
+
+    async printCheckins() {
+        if (this.state.isPrintingList) return;
+        this.state.isPrintingList = true;
+        try {
+            const filters = this.state.filters.checkins || {};
+            const purposeLabels = { check_in: "Check-in", place_order: "Place Order", deliver: "Deliver to Shop", walk_in: "Walk In" };
+            const roleLabels = { order_booker: "Order Bookers", delivery_man: "Delivery Men" };
+            const outcomeLabels = { in_progress: "In Progress", order: "Order Placed", no_order: "No Order", incomplete: "Incomplete", undone: "Undone", cancelled: "Cancelled" };
+            const gpsLabels = { ok: "GPS OK", blocked: "All Blocked", blocked_too_far: "Blocked — Too Far", blocked_too_close: "Blocked — Too Close", blocked_missing: "Blocked — Missing / Invalid GPS" };
+            const rows = await this._loadMappedPrintRows("checkins");
+            await this._openListPrint(
+                "Shop Check-ins",
+                [
+                    this._printFilter("Search", filters.search),
+                    this._printFilter("Field user", filters.booker !== "all" ? this._lookupName(this.state.lookupFieldUsers, filters.booker) : ""),
+                    this._printFilter("Date", filters.date),
+                    this._printFilter("Purpose", purposeLabels[filters.purpose]),
+                    this._printFilter("Role", roleLabels[filters.role]),
+                    this._printFilter("Visit outcome", outcomeLabels[filters.outcome]),
+                    this._printFilter("GPS result", gpsLabels[filters.status]),
+                ],
+                ["Shop", "Purpose", "Role", "Shop ID", "User", "Time", "Checkpoints", "GPS Result", "Distance", "Duration", "Visit Outcome"],
+                rows.map((log) => {
+                    const gps = this.checkinShowsGps(log);
+                    const showOutcome = log.isOk && log.purpose !== "walk_in";
+                    return [
+                        log.shop || "",
+                        log.purposeLabel || "",
+                        log.roleLabel || "",
+                        log.shopId || "",
+                        log.booker || "",
+                        gps ? (log.time || "") : "",
+                        log.checkpointCount || "",
+                        gps ? (log.status || "") : "",
+                        gps ? (log.distLabel || "") : "",
+                        gps ? (log.duration || "") : "",
+                        showOutcome ? (log.orderLabel || "") : "",
+                    ];
+                }),
+            );
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrintingList = false;
+        }
+    }
+
+    async printLiveOrders() {
+        if (this.state.isPrintingList) return;
+        this.state.isPrintingList = true;
+        try {
+            const filters = this.state.filters.orders || {};
+            const rows = await this._loadMappedPrintRows("orders");
+            const financial = this.hasFinancialAccess;
+            const columns = ["Order Ref", "Shop", "Walk-in", "Shop ID", "Booker ID", "Booker", "Date", financial ? "Order Value" : "Units", "Status"];
+            await this._openListPrint(
+                "Live Orders",
+                [
+                    this._printFilter("Search", filters.search),
+                    this._printFilter("Order booker", filters.booker !== "all" ? this._lookupName(this.state.lookupBookers, filters.booker) : ""),
+                    this._printFilter("From", filters.dateFrom),
+                    this._printFilter("To", filters.dateTo),
+                    this._printFilter("Status", filters.status),
+                    filters.walkIn ? "Walk In: Yes" : "",
+                ],
+                columns,
+                rows.map((order) => [
+                    order.id || "",
+                    order.shop || "",
+                    order.isWalkIn ? "Yes" : "No",
+                    order.shopId || "",
+                    order.bookerId || "",
+                    order.booker || "",
+                    order.date || "",
+                    financial ? (order.total || "") : `${order.items || 0} units`,
+                    order.status || "",
+                ]),
+            );
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrintingList = false;
+        }
+    }
+
+    async printBookerPerformance() {
+        if (this.state.isPrintingList) return;
+        this.state.isPrintingList = true;
+        try {
+            if (this.state.perfSubTab === "targets") {
+                await this._printBookerTargets();
+            } else {
+                await this._printBookerSchedules();
+            }
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrintingList = false;
+        }
+    }
+
+    async _printBookerSchedules() {
+        const filters = this.state.filters.schedules || {};
+        const rows = await this._loadMappedPrintRows("schedules");
+        await this._openListPrint(
+            "Booker Performance — Schedules",
+            [
+                this._printFilter("Booker", filters.booker !== "all" ? this._lookupName(this.state.lookupBookers, filters.booker) : ""),
+                this._printFilter("Date", filters.date),
+            ],
+            ["Booker", "Booker ID", "Day", "Date", "Route", "Zone", "Progress %", "Status"],
+            rows.map((row) => [
+                row.bookerName || "",
+                row.bookerId || "",
+                row.day || "",
+                row.occurrenceDate || "Recurring",
+                row.route || "",
+                row.zone || "",
+                `${Math.round(row.progress || 0)}%`,
+                row.active ? "Active" : "Deactivated",
+            ]),
+        );
+    }
+
+    async _printBookerTargets() {
+        const filters = this.state.filters.targets || {};
+        const typeRow = (this.state.lookupTargetTypes || []).find((item) => item.value === filters.type);
+        const periodLabels = { upcoming: "Upcoming", current: "Current", ended: "Ended" };
+        const rows = await this._loadMappedPrintRows("targets");
+        await this._openListPrint(
+            "Booker Performance — Targets",
+            [
+                this._printFilter("Booker", filters.booker !== "all" ? this._lookupName(this.state.lookupBookers, filters.booker) : ""),
+                this._printFilter("Target type", typeRow ? typeRow.label : ""),
+            ],
+            ["Booker", "Target Metric", "Period Start", "Period End", "Period Status", "Achieved", "Goal", "Progress %", "Status"],
+            rows.map((row) => [
+                row.bookerName || "",
+                row.displayType || "",
+                row.startDate || "",
+                row.endDate || "",
+                periodLabels[row.periodStatus] || row.periodStatus || "",
+                row.achievedValue ?? "",
+                row.targetValue ?? "",
+                `${Math.round(row.progress || 0)}%`,
+                row.showActive ? "Active" : "Inactive",
+            ]),
+        );
+    }
+
+    async printDmJobs() {
+        if (this.state.isPrintingList) return;
+        this.state.isPrintingList = true;
+        try {
+            const filters = this.state.filters.dm_jobs || {};
+            const stockLabels = { except_not_ready: "Except not ready", ready: "Ready", picked: "Picked", partial: "Partial", delivered: "Delivered", returned: "Returned", not_ready: "Not ready" };
+            const fieldLabels = { pending: "Pending", in_transit: "In transit", done: "Done", not_attended: "Shop closed", failed: "Failed" };
+            const scheduleLabels = { overdue: "Overdue / Not Done", unscheduled: "Unscheduled" };
+            const rows = await this._loadMappedPrintRows("dm_jobs");
+            const financial = this.hasFinancialAccess;
+            const columns = ["Job", "Date", "Order", "Shop", "Delivery Man", "Booker"];
+            if (financial) columns.push("Amount");
+            columns.push("Shop Due", "Stock", "Field");
+            await this._openListPrint(
+                "Delivery Jobs",
+                [
+                    this._printFilter("Search", filters.search),
+                    this._printFilter("Delivery man", filters.dm !== "all" ? this._lookupName(this.state.lookupDeliveryMen, filters.dm) : ""),
+                    this._printFilter("From", filters.dateFrom),
+                    this._printFilter("To", filters.dateTo),
+                    this._printFilter("Stock", stockLabels[filters.state]),
+                    this._printFilter("Field", fieldLabels[filters.field_state]),
+                    this._printFilter("Schedule", scheduleLabels[filters.schedule]),
+                ],
+                columns,
+                rows.map((job) => {
+                    const cells = [job.name || "", job.date || "", job.order || "", job.shop || "", job.dm || "", job.booker || ""];
+                    if (financial) cells.push(this.formatMoney(job.amount));
+                    cells.push(this.formatMoney(job.shopDue), this.stockStateLabel(job.state), this.fieldStateLabel(job.fieldState));
+                    return cells;
+                }),
+            );
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrintingList = false;
+        }
+    }
+
+    async printRecovery() {
+        if (this.state.isPrintingList || !this.hasFinancialAccess) return;
+        this.state.isPrintingList = true;
+        try {
+            const filters = this.state.filters.collections || {};
+            const rows = await this._loadMappedPrintRows("collections");
+            await this._openListPrint(
+                "Recovery",
+                [
+                    this._printFilter("Search", filters.search),
+                    this._printFilter("Delivery man", filters.dm !== "all" ? this._lookupName(this.state.lookupDeliveryMen, filters.dm) : ""),
+                    this._printFilter("From", filters.dateFrom),
+                    this._printFilter("To", filters.dateTo),
+                ],
+                ["Payment", "Date", "Shop", "Delivery Man", "Amount"],
+                rows.map((pay) => [pay.name || "", pay.date || "", pay.shop || "", pay.dm || "", this.formatMoney(pay.amount)]),
+            );
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrintingList = false;
+        }
+    }
+
+    async printSettlements() {
+        if (this.state.isPrintingList || !this.hasFinancialAccess) return;
+        this.state.isPrintingList = true;
+        try {
+            const filters = this.state.filters.settlements || {};
+            const rows = await this._loadMappedPrintRows("settlements");
+            await this._openListPrint(
+                "Wallet Settlements",
+                [
+                    this._printFilter("Search", filters.search),
+                    this._printFilter("Delivery man", filters.dm !== "all" ? this._lookupName(this.state.lookupDeliveryMen, filters.dm) : ""),
+                    this._printFilter("From", filters.dateFrom),
+                    this._printFilter("To", filters.dateTo),
+                ],
+                ["Date", "Delivery Man", "Amount", "Journal", "Settled By", "State"],
+                rows.map((row) => [row.date || "", row.dm || "", this.formatMoney(row.amount), row.journal || "", row.settledBy || "", row.state || ""]),
+            );
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrintingList = false;
+        }
     }
 }

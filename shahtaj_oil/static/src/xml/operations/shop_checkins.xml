@@ -134,6 +134,9 @@
                         <option value="blocked_too_close">Blocked — Too Close</option>
                         <option value="blocked_missing">Blocked — Missing / Invalid GPS</option>
                     </select>
+                    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printCheckins" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
+                        <i class="fa fa-print me-1"/> Print
+                    </button>
                 </div>
 
                 <div class="position-relative">

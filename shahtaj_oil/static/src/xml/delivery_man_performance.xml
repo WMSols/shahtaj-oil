@@ -23,6 +23,9 @@
                                t-on-input="onSearchInput"/>
                     </div>
                     <input type="date" class="form-control form-control-sm" style="max-width: 180px;" t-model="this.state.date" t-on-change="refreshActive"/>
+                    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printSummary" t-att-disabled="this.state.isPrinting or this.state.isLoading" title="Print the rows that match the current filters">
+                        <i class="fa fa-print me-1"/> Print
+                    </button>
                     <select class="form-select form-select-sm" style="max-width: 200px;" t-on-change="onDmFilterChange">
                         <option value="all" t-att-selected="this.state.filters.dm === 'all'">All delivery men</option>
                         <t t-foreach="this.state.deliveryMen" t-as="dm" t-key="dm.id">

@@ -406,6 +406,9 @@
                         <option t-att-value="route.id"><t t-esc="route.name"/></option>
                     </t>
                 </select>
+                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printShops" t-att-disabled="this.state.isPrintingShops or this.state.isLoadingList" title="Print the shops that match the current filters">
+                    <i class="fa fa-print me-1"/> Print
+                </button>
                 <button class="btn btn-sm btn-dark d-flex align-items-center text-white ms-2 shadow-sm" t-on-click="() => this.state.showShopForm = true" title="Manually register a new shop to the database">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus me-1">
                         <path d="M5 12h14"/>

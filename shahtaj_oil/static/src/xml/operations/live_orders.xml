@@ -157,6 +157,9 @@
                                    t-on-change="onOrdersWalkInToggle"/>
                             <label class="form-check-label small fw-bold text-nowrap ms-2" for="liveOrdersWalkIn">Walk In</label>
                         </div>
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printLiveOrders" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
+                            <i class="fa fa-print me-1"/> Print
+                        </button>
                         <button class="btn btn-sm btn-dark fw-bold text-white shadow-sm ms-auto" t-on-click="openSaleOrderForm">
                             <i class="fa fa-plus me-1"></i> New Sales Order
                         </button>

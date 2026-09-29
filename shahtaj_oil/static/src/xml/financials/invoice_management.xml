@@ -517,6 +517,9 @@
                                        t-on-change="onInvoicesWalkInToggle"/>
                                 <label class="form-check-label small fw-bold text-nowrap ms-2" for="customerInvoicesWalkIn">Walk In</label>
                             </div>
+                            <button class="btn btn-sm btn-outline-secondary fw-bold ms-auto" t-on-click="printCustomerInvoices" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
+                                <i class="fa fa-print me-1"/> Print
+                            </button>
                         </div>
 
                         <!-- LIST CONTAINER WITH LOADER AND FOOTER -->
@@ -1020,7 +1023,10 @@
                                    t-model="this.state.filters.payments.dateTo"
                                    t-on-change="() => this.onFilterChange('payments')"
                                    title="To date"/>
-                            <div class="ms-auto">
+                            <div class="ms-auto d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printCustomerPayments" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
+                                    <i class="fa fa-print me-1"/> Print
+                                </button>
                                 <button class="btn btn-sm btn-dark fw-bold text-white shadow-sm"
                                         t-on-click="openCollectModal"
                                         t-att-disabled="this.state.collectModal.loading">
@@ -1215,6 +1221,9 @@
                                 <option value="Draft">Draft</option>
                                 <option value="Cancelled">Cancelled</option>
                             </select>
+                            <button class="btn btn-sm btn-outline-secondary fw-bold ms-auto" t-on-click="printCreditNotes" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
+                                <i class="fa fa-print me-1"/> Print
+                            </button>
                         </div>
                         
                         <div class="position-relative">

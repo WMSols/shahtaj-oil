@@ -281,6 +281,9 @@
                             <option value="overdue">Overdue / Not Done</option>
                             <option value="unscheduled">Unscheduled</option>
                         </select>
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printDmJobs" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
+                            <i class="fa fa-print me-1"/> Print
+                        </button>
                     </div>
                     <div class="position-relative">
                         <t t-if="this.state.isLoadingList">
@@ -428,6 +431,9 @@
                         <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.collections.dateFrom" t-on-change="() => this.onFilterChange('collections')"/>
                         <span class="text-muted small align-self-center">to</span>
                         <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.collections.dateTo" t-on-change="() => this.onFilterChange('collections')"/>
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printRecovery" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
+                            <i class="fa fa-print me-1"/> Print
+                        </button>
                     </div>
                     <div class="position-relative">
                         <t t-if="this.state.isLoadingList">
@@ -498,6 +504,9 @@
                         <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.settlements.dateFrom" t-on-change="() => this.onFilterChange('settlements')"/>
                         <span class="text-muted small align-self-center">to</span>
                         <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.settlements.dateTo" t-on-change="() => this.onFilterChange('settlements')"/>
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printSettlements" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
+                            <i class="fa fa-print me-1"/> Print
+                        </button>
                         <button class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openSettleModal()">Settle Wallet</button>
                     </div>
                     <div class="position-relative">

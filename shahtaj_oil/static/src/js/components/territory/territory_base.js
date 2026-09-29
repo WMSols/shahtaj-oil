@@ -4,6 +4,7 @@ import { Component, useState, onWillStart, useEffect, useRef,onWillUpdateProps }
 import { useService } from "@web/core/utils/hooks";
 import { ConfirmModal } from "../confirm_modal";
 import { hasFinancialAccess } from "../../shahtaj_access";
+import { printFilter, printListPdf } from "../../shahtaj_list_export";
 import { applyTerritoryDashboardToState, getTerritoryDashboard } from "./territory_cache";
 
 export class TerritoryBase extends Component {
@@ -22,6 +23,7 @@ export class TerritoryBase extends Component {
     setup() {
         this.orm = useService("orm");
         this.notification = useService("notification");
+        this.action = useService("action");
         this.mapRef = useRef("mapContainer");
         this.mapInstance = null; 
         // Universal items per page shared across Zones, Routes, and Shops
@@ -82,6 +84,7 @@ export class TerritoryBase extends Component {
             // --- NEW: Backend Pagination & Loading ---
             itemsPerPage: ITEMS_PER_PAGE,
             isLoadingList: false,
+            isPrintingShops: false,
             searchTimeout: null,
             tableAreas: [],
             tableRoutes: [],
@@ -217,6 +220,110 @@ export class TerritoryBase extends Component {
         return { start: toOdooUtc(start), end: toOdooUtc(end) };
     }
 
+    _shopsListDomain() {
+        const domain = [['is_shahtaj_shop', '=', true], ['active', '=', true]];
+        if (this.state.shopSearchQuery) {
+            domain.push('|', ['name', 'ilike', this.state.shopSearchQuery], ['owner_name', 'ilike', this.state.shopSearchQuery]);
+        }
+        if (this.state.shopFilterCategory !== 'all') {
+            domain.push(['shahtaj_shop_category', '=', this.state.shopFilterCategory]);
+        }
+        if (this.state.shopFilterStatus !== 'all') {
+            domain.push(['shop_approval_state', '=', this.state.shopFilterStatus]);
+        }
+        if (this.state.shopFilterVerified !== 'all') {
+            if (this.state.shopFilterVerified === 'verified') {
+                domain.push(['shahtaj_visit_tag', '=', 'visited']);
+            } else {
+                domain.push(['shahtaj_visit_tag', '!=', 'visited']);
+            }
+        }
+        if (this.state.shopFilterBooker !== 'all') {
+            domain.push(['registered_by_id', '=', parseInt(this.state.shopFilterBooker)]);
+        }
+        if (this.state.shopFilterRoute !== 'all') {
+            if (this.state.shopFilterRoute === 'unassigned') {
+                domain.push(['route_ids', '=', false]);
+            } else {
+                domain.push(['route_ids', 'in', [parseInt(this.state.shopFilterRoute)]]);
+            }
+        }
+        if (this.state.shopFilterRegistrar === 'order_booker') {
+            domain.push(['registered_by_id', '!=', false]);
+            domain.push(['registered_by_id.shahtaj_is_order_booker', '=', true]);
+        }
+        if (this.state.shopFilterRegisteredOn) {
+            const bounds = this._pktDateToUtcBounds(this.state.shopFilterRegisteredOn);
+            domain.push(['create_date', '>=', bounds.start]);
+            domain.push(['create_date', '<=', bounds.end]);
+        }
+        return domain;
+    }
+
+    _lookupName(list, id) {
+        const row = (list || []).find((item) => String(item.id) === String(id));
+        return row ? row.name : "";
+    }
+
+    async printShops() {
+        if (this.state.isPrintingShops) return;
+        this.state.isPrintingShops = true;
+        try {
+            const records = await this.orm.searchRead(
+                "res.partner",
+                this._shopsListDomain(),
+                ["name", "owner_name", "phone", "registered_by_id", "shahtaj_visit_tag", "shahtaj_shop_category", "shop_approval_state", "credit_limit", "outstanding_balance"],
+                { order: "id desc" }
+            );
+            if (!records.length) {
+                this.notification.add("No shops match the current filters.", { type: "warning" });
+                return;
+            }
+            const categoryLabels = { cash: "Cash Only", credit: "Credit Only" };
+            const statusLabels = { approved: "Approved", pending: "Pending Review", rejected: "Rejected" };
+            const verifiedLabels = { verified: "On-site Verified", unverified: "Not Verified" };
+            const routeLabel = this.state.shopFilterRoute === "unassigned"
+                ? "Unassigned Only"
+                : this._lookupName(this.state.routes, this.state.shopFilterRoute);
+            await printListPdf(this.orm, this.action, {
+                title: "Registered Shops",
+                filters: [
+                    printFilter("Search", this.state.shopSearchQuery),
+                    printFilter("Type", categoryLabels[this.state.shopFilterCategory]),
+                    printFilter("Status", statusLabels[this.state.shopFilterStatus]),
+                    printFilter("Verification", verifiedLabels[this.state.shopFilterVerified]),
+                    printFilter("Registered On", this.state.shopFilterRegisteredOn),
+                    printFilter("Registrar", this.state.shopFilterRegistrar === "order_booker" ? "Order bookers" : ""),
+                    printFilter("Order Booker", this._lookupName(this.state.bookers, this.state.shopFilterBooker)),
+                    printFilter("Route", this.state.shopFilterRoute === "all" ? "" : routeLabel),
+                ],
+                columns: ["Shop", "Shop ID", "Owner", "Phone", "Registered By", "Registered By ID", "On-site Verified", "Category", "Status", "Credit Limit", "Outstanding Balance"],
+                rows: records.map((shop) => {
+                    const cash = shop.shahtaj_shop_category === "cash";
+                    const registeredBy = shop.registered_by_id ? shop.registered_by_id[1] : "";
+                    const registeredById = shop.registered_by_id ? shop.registered_by_id[0] : "";
+                    return [
+                        shop.name || "",
+                        shop.id,
+                        shop.owner_name || "N/A",
+                        shop.phone || "N/A",
+                        registeredBy,
+                        registeredById,
+                        shop.shahtaj_visit_tag === "visited" ? "Verified" : "Not Verified",
+                        cash ? "Cash" : "Credit",
+                        (shop.shop_approval_state || "").toUpperCase(),
+                        cash ? "N/A" : `Rs. ${(shop.credit_limit || 0).toLocaleString()}`,
+                        `Rs. ${(shop.outstanding_balance || 0).toLocaleString()}`,
+                    ];
+                }),
+            });
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrintingShops = false;
+        }
+    }
+
     changePage(tabName, direction) {
         const pag = this.state.pagination[tabName];
         const newPage = pag.page + direction;
@@ -260,43 +367,7 @@ export class TerritoryBase extends Component {
                 model = 'res.partner';
                 fields = ["id", "name", "owner_name", "phone", "route_ids", "shahtaj_route_tag", "shop_approval_state", "shahtaj_shop_category", "registered_by_id", "active", "shahtaj_visit_tag"];
                 targetState = 'tableShops';
-                domain = [['is_shahtaj_shop', '=', true], ['active', '=', true]]; 
-                
-                if (this.state.shopSearchQuery) {
-                    domain.push('|', ['name', 'ilike', this.state.shopSearchQuery], ['owner_name', 'ilike', this.state.shopSearchQuery]);
-                }
-                if (this.state.shopFilterCategory !== 'all') {
-                    domain.push(['shahtaj_shop_category', '=', this.state.shopFilterCategory]);
-                }
-                if (this.state.shopFilterStatus !== 'all') {
-                    domain.push(['shop_approval_state', '=', this.state.shopFilterStatus]);
-                }
-                if (this.state.shopFilterVerified !== 'all') {
-                    if (this.state.shopFilterVerified === 'verified') {
-                        domain.push(['shahtaj_visit_tag', '=', 'visited']);
-                    } else {
-                        domain.push(['shahtaj_visit_tag', '!=', 'visited']);
-                    }
-                }
-                if (this.state.shopFilterBooker !== 'all') {
-                    domain.push(['registered_by_id', '=', parseInt(this.state.shopFilterBooker)]);
-                }
-                if (this.state.shopFilterRoute !== 'all') {
-                    if (this.state.shopFilterRoute === 'unassigned') {
-                        domain.push(['route_ids', '=', false]);
-                    } else {
-                        domain.push(['route_ids', 'in', [parseInt(this.state.shopFilterRoute)]]);
-                    }
-                }
-                if (this.state.shopFilterRegistrar === 'order_booker') {
-                    domain.push(['registered_by_id', '!=', false]);
-                    domain.push(['registered_by_id.shahtaj_is_order_booker', '=', true]);
-                }
-                if (this.state.shopFilterRegisteredOn) {
-                    const bounds = this._pktDateToUtcBounds(this.state.shopFilterRegisteredOn);
-                    domain.push(['create_date', '>=', bounds.start]);
-                    domain.push(['create_date', '<=', bounds.end]);
-                }
+                domain = this._shopsListDomain();
             }
 
             const requests = [

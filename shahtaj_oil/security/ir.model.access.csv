@@ -190,4 +190,5 @@ access_shahtaj_field_report_ob,shahtaj.field.report.ob,model_shahtaj_field_repor
 access_shahtaj_field_report_dm,shahtaj.field.report.dm,model_shahtaj_field_report,group_shahtaj_delivery_man,1,1,1,0
 access_shahtaj_field_report_dist,shahtaj.field.report.dist,model_shahtaj_field_report,group_shahtaj_distributor,1,1,1,1
 access_shahtaj_field_report_native,shahtaj.field.report.native,model_shahtaj_field_report,group_shahtaj_native_distributor_ui,1,1,1,1
+access_shahtaj_list_print_distributor,shahtaj.list.print.distributor,model_shahtaj_list_print,group_shahtaj_distributor,1,1,1,1
 

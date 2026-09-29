@@ -52,6 +52,9 @@
            t-model="this.state.filters.schedules.date"
            t-on-change="() => this.onFilterChange('schedules')"
            title="Optional: show this booker's performance on a specific date"/>
+    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printBookerPerformance" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
+        <i class="fa fa-print me-1"/> Print
+    </button>
 </div>
 <div class="position-relative">
     <t t-if="this.state.isLoadingList">
@@ -344,6 +347,9 @@
             <option t-att-value="type.value"><t t-esc="type.label"/></option>
         </t>
     </select>
+    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printBookerPerformance" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
+        <i class="fa fa-print me-1"/> Print
+    </button>
 </div>
 <div class="position-relative">
     <t t-if="this.state.isLoadingList">

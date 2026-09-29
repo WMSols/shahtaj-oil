@@ -3,6 +3,7 @@
 import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { hasFinancialAccess, notifyPortalBusy } from "../../shahtaj_access";
+import { printFilter, printListPdf } from "../../shahtaj_list_export";
 import { invalidateFinancialStats } from "./financials_cache";
 
 export class CreditControl extends Component {
@@ -15,6 +16,7 @@ export class CreditControl extends Component {
     setup() {
         this.notification = useService("notification");
         this.orm = useService("orm");
+        this.action = useService("action");
         const ITEMS_PER_PAGE = 50;
         this.state = useState({
             activeSubTab: "credit",
@@ -26,6 +28,7 @@ export class CreditControl extends Component {
             },
             itemsPerPage: ITEMS_PER_PAGE,
             isLoadingList: false,
+            isPrintingList: false,
             searchTimeout: null,
             pagination: {
                 credits: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
@@ -391,6 +394,57 @@ export class CreditControl extends Component {
 
     _receiptsListDomain() {
         return [];
+    }
+
+    async printShopBalances() {
+        if (this.state.isPrintingList) return;
+        this.state.isPrintingList = true;
+        try {
+            const filters = this.state.filters.credits;
+            const domain = [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]];
+            if (filters.hasCreditLimit) {
+                domain.push(["credit_limit", ">", 0]);
+            }
+            if (filters.search) {
+                domain.push("|", ["name", "ilike", filters.search], ["owner_name", "ilike", filters.search]);
+            }
+            const records = await this.orm.searchRead(
+                "res.partner",
+                domain,
+                ["name", "owner_name", "shahtaj_shop_category", "credit_limit", "outstanding_balance"]
+            );
+            records.sort((a, b) => (b.outstanding_balance || 0) - (a.outstanding_balance || 0));
+            if (!records.length) {
+                this.notification.add("No rows match the current filters.", { type: "warning" });
+                return;
+            }
+            await printListPdf(this.orm, this.action, {
+                title: "Shop Balances",
+                filters: [
+                    printFilter("Search", filters.search),
+                    printFilter("Credit Limit > 0", filters.hasCreditLimit ? "Yes" : ""),
+                ],
+                columns: ["Shop Name", "Shop ID", "Shop Owner", "Credit Limit", "Outstanding", "Available Credit"],
+                rows: records.map((shop) => {
+                    const cash = shop.shahtaj_shop_category === "cash";
+                    const limit = shop.credit_limit || 0;
+                    const outstanding = shop.outstanding_balance || 0;
+                    const available = Math.max(0, limit - outstanding).toLocaleString();
+                    return [
+                        shop.name || "",
+                        shop.id,
+                        shop.owner_name || "N/A",
+                        cash ? "N/A" : `Rs. ${limit.toLocaleString()}`,
+                        `Rs. ${outstanding.toLocaleString()}`,
+                        cash ? "N/A" : `Rs. ${available}`,
+                    ];
+                }),
+            });
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrintingList = false;
+        }
     }
 
     _mapPurchaseOrder(po) { return po; }
