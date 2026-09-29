@@ -1186,10 +1186,10 @@
                         </div>
                         <div class="p-4">
                             <label class="small fw-bold">Delivery man</label>
-                            <select class="form-select mb-3" t-model="this.state.settleModal.dmId" t-on-change="onSettleDmChange">
-                                <option value="">Select delivery man</option>
-                                <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="'settle-' + dm.id">
-                                    <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
+                            <select class="form-select mb-3" t-on-change="onSettleDmChange">
+                                <option value="" t-att-selected="this.isSelectedId(this.state.settleModal.dmId, '')">Select delivery man</option>
+                                <t t-foreach="this.settleDmOptions()" t-as="dm" t-key="'settle-' + dm.id">
+                                    <option t-att-value="this.optionId(dm.id)" t-att-selected="this.isSelectedId(this.state.settleModal.dmId, dm.id)"><t t-esc="dm.name"/></option>
                                 </t>
                             </select>
                             <label class="small fw-bold">Wallet Balance</label>
@@ -1197,10 +1197,10 @@
                             <label class="small fw-bold">Settle Amount</label>
                             <input type="number" class="form-control mb-3" t-model.number="this.state.settleModal.amount" min="0"/>
                             <label class="small fw-bold">Deposit to</label>
-                            <select class="form-select mb-3" t-model="this.state.settleModal.bankJournalId">
-                                <option value="">Select journal</option>
+                            <select class="form-select mb-3" t-on-change="setSettleJournal">
+                                <option value="" t-att-selected="this.isSelectedId(this.state.settleModal.bankJournalId, '')">Select journal</option>
                                 <t t-foreach="this.state.settleModal.journals" t-as="jnl" t-key="jnl.id">
-                                    <option t-att-value="jnl.id"><t t-esc="jnl.name"/></option>
+                                    <option t-att-value="this.optionId(jnl.id)" t-att-selected="this.isSelectedId(this.state.settleModal.bankJournalId, jnl.id)"><t t-esc="jnl.name"/></option>
                                 </t>
                             </select>
                             <label class="small fw-bold">Notes</label>

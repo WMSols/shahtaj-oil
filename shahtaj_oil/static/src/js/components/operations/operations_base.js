@@ -70,6 +70,7 @@ export class OperationsBase extends Component {
                 journals: [],
                 notes: '',
                 dmId: '',
+                dmName: '',
                 saving: false,
             },
             assignModal: {
@@ -2889,8 +2890,19 @@ export class OperationsBase extends Component {
     }
 
     openRecoverySettle() {
-        const dmId = this.state.selectedRecovery && this.state.selectedRecovery.dmId;
-        return this.openSettleModal(dmId || "");
+        const recovery = this.state.selectedRecovery;
+        const dmId = recovery && recovery.dmId;
+        const dmName = recovery && recovery.dm && recovery.dm !== "—" ? recovery.dm : "";
+        return this.openSettleModal(dmId || "", dmName);
+    }
+
+    settleDmOptions() {
+        const list = this.state.lookupDeliveryMen || [];
+        const selected = this.optionId(this.state.settleModal.dmId);
+        if (!selected || list.some((dm) => this.optionId(dm.id) === selected)) {
+            return list;
+        }
+        return [{ id: selected, name: this.state.settleModal.dmName || "Delivery man" }, ...list];
     }
 
     viewSettlement(row) {
@@ -2913,15 +2925,16 @@ export class OperationsBase extends Component {
         return journals;
     }
 
-    async openSettleModal(dmId = "") {
+    async openSettleModal(dmId = "", dmName = "") {
         this.state.settleModal.saving = true;
         try {
             const journals = await this._ensureSettleJournals();
             this.state.settleModal.open = true;
             this.state.settleModal.wizardId = null;
-            this.state.settleModal.dmId = dmId ? String(dmId) : "";
+            this.state.settleModal.dmId = this.optionId(dmId);
+            this.state.settleModal.dmName = dmName || "";
             this.state.settleModal.notes = "";
-            this.state.settleModal.bankJournalId = journals[0] ? String(journals[0].id) : "";
+            this.state.settleModal.bankJournalId = journals[0] ? this.optionId(journals[0].id) : "";
             this.state.settleModal.walletBalance = 0;
             this.state.settleModal.amount = 0;
             if (this.state.settleModal.dmId) {
@@ -2934,7 +2947,17 @@ export class OperationsBase extends Component {
         }
     }
 
-    async onSettleDmChange() {
+    setSettleJournal(ev) {
+        this.state.settleModal.bankJournalId = this.optionId(ev.target.value);
+    }
+
+    async onSettleDmChange(ev) {
+        if (ev && ev.target) {
+            const dmId = this.optionId(ev.target.value);
+            this.state.settleModal.dmId = dmId;
+            const match = (this.state.lookupDeliveryMen || []).find((dm) => this.optionId(dm.id) === dmId);
+            this.state.settleModal.dmName = match ? match.name : (dmId ? this.state.settleModal.dmName : "");
+        }
         const dmId = parseInt(this.state.settleModal.dmId, 10);
         if (!dmId) {
             this.state.settleModal.walletBalance = 0;
