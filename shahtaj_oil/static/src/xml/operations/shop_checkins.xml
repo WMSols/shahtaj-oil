@@ -331,8 +331,8 @@
                         </p>
                     </div>
 
-                    <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top" t-if="this.state.selectedCheckin.isOk and this.state.selectedCheckin.purpose !== 'walk_in'">
-                        <span class="text-muted small"><t t-esc="this.state.selectedCheckin.isDeliveryCheckin ? 'Delivery:' : 'Order:'"/></span>
+                    <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top" t-if="this.state.selectedCheckin.isOk and (this.state.selectedCheckin.purpose !== 'walk_in' or this.state.selectedCheckin.sale_order_id)">
+                        <span class="text-muted small"><t t-esc="this.state.selectedCheckin.purpose === 'walk_in' or !this.state.selectedCheckin.isDeliveryCheckin ? 'Order:' : 'Delivery:'"/></span>
                         <t t-if="this.state.selectedCheckin.sale_order_id">
                             <button class="btn btn-sm btn-primary shadow-sm fw-bold" t-on-click="() => this.viewOrderFromCheckin(this.state.selectedCheckin)" title="Open the sales order linked to this visit">
                                 <t t-esc="this.state.selectedCheckin.sale_order_id[1]"/>

@@ -324,7 +324,7 @@
                                                     <td><span class="badge bg-secondary text-dark"><i class="fa fa-user me-1"></i><t t-esc="ord.booker"/></span><small class="d-block text-muted mt-1">Booker ID: <t t-esc="ord.bookerId"/></small></td>
                                                     <td class="text-muted"><t t-esc="ord.date"/></td>
                                                     <td class="text-end fw-bold text-dark">Rs. <t t-esc="ord.amount"/></td>
-                                                    <td class="text-end pe-4"><button class="btn btn-sm btn-dark fw-bold px-3" t-on-click="() => this.viewOrder(ord)" title="Open this order to verify items and generate a bill">View &amp; Invoice</button></td>
+                                                    <td class="text-end pe-4"><button class="btn btn-sm btn-dark fw-bold px-3" t-on-click="() => this.viewOrder(ord)" t-att-title="this.isKpo ? 'Open this order to verify items' : 'Open this order to verify items and generate a bill'"><t t-if="this.isKpo">View</t><t t-else="">View &amp; Invoice</t></button></td>
                                         </tr>
                                             </t>
                                     </t>

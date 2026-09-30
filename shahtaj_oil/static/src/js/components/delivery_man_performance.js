@@ -21,6 +21,7 @@ export class DeliveryManPerformance extends Component {
             rows: [],
             selectedDm: null,
             jobs: [],
+            recentActivity: [],
             pagination: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
             deliveryMen: [],
             filters: { search: "", dm: "all" },
@@ -149,12 +150,25 @@ export class DeliveryManPerformance extends Component {
 
     async openDm(row) {
         this.state.selectedDm = row;
+        this.state.jobs = [];
+        this.state.recentActivity = [];
         await this.fetchDmJobs();
     }
 
     closeDm() {
         this.state.selectedDm = null;
         this.state.jobs = [];
+        this.state.recentActivity = [];
+    }
+
+    formatQty(value) {
+        const amount = Number(value) || 0;
+        return String(parseFloat(amount.toFixed(6)));
+    }
+
+    formatUpdated(value) {
+        if (!value) return "—";
+        return String(value).replace("T", " ").slice(0, 16);
     }
 
     async fetchDmJobs() {
@@ -179,11 +193,61 @@ export class DeliveryManPerformance extends Component {
                 fieldState: job.field_state || "",
                 isWalkIn: !!job.is_walk_in,
             }));
+            await this.fetchRecentActivity();
         } catch (error) {
             this.notification.add("Failed to load deliveries: " + (error.data?.message || error.message), { type: "danger" });
             this.state.jobs = [];
         } finally {
             this.state.isLoading = false;
+        }
+    }
+
+    async fetchRecentActivity() {
+        if (!this.state.selectedDm) return;
+        try {
+            const jobs = await this.orm.searchRead(
+                "shahtaj.dm.delivery",
+                [["delivery_man_id", "=", this.state.selectedDm.id]],
+                ["id", "write_date", "sale_order_id", "partner_id", "state"],
+                { order: "write_date desc, id desc", limit: 30 },
+            );
+            if (!jobs.length) {
+                this.state.recentActivity = [];
+                return;
+            }
+            const lines = await this.orm.searchRead(
+                "shahtaj.dm.delivery.line",
+                [["delivery_id", "in", jobs.map((job) => job.id)]],
+                ["delivery_id", "qty_picked", "qty_delivered"],
+                { limit: 5000 },
+            );
+            const totals = {};
+            for (const line of lines) {
+                const jobId = Array.isArray(line.delivery_id) ? line.delivery_id[0] : line.delivery_id;
+                if (!totals[jobId]) totals[jobId] = { picked: 0, delivered: 0 };
+                totals[jobId].picked += line.qty_picked || 0;
+                totals[jobId].delivered += line.qty_delivered || 0;
+            }
+            const rows = [];
+            for (const job of jobs) {
+                const bucket = totals[job.id] || { picked: 0, delivered: 0 };
+                if (bucket.picked <= 0 && bucket.delivered <= 0) continue;
+                rows.push({
+                    id: job.id,
+                    updated: this.formatUpdated(job.write_date),
+                    order: job.sale_order_id ? job.sale_order_id[1] : "—",
+                    shop: job.partner_id ? job.partner_id[1] : "—",
+                    picked: bucket.picked,
+                    delivered: bucket.delivered,
+                    onVan: Math.max(bucket.picked - bucket.delivered, 0),
+                    state: job.state || "",
+                });
+                if (rows.length >= 12) break;
+            }
+            this.state.recentActivity = rows;
+        } catch (error) {
+            console.error("Failed to load recent pick and deliver", error);
+            this.state.recentActivity = [];
         }
     }
 

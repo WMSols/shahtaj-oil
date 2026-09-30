@@ -45,6 +45,8 @@ export class StaffManagement extends Component {
                 onVanForShops: 0,
                 pickedToday: 0,
                 deliveredToday: 0,
+                locationName: "",
+                lines: [],
             },
 
             loading: {
@@ -342,6 +344,11 @@ export class StaffManagement extends Component {
         return amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     }
 
+    formatQty(value) {
+        const amount = Number(value) || 0;
+        return String(parseFloat(amount.toFixed(6)));
+    }
+
     async openDetails(staff) {
         this.state.selectedStaff = staff;
         this.state.viewMode = "detail";
@@ -415,6 +422,7 @@ export class StaffManagement extends Component {
             "res.users",
             [userId],
             [
+                "shahtaj_van_location_id",
                 "shahtaj_van_qty_on_hand",
                 "shahtaj_van_sku_count",
                 "shahtaj_dm_on_van_for_shops",
@@ -426,12 +434,35 @@ export class StaffManagement extends Component {
             ],
         );
         if (!rec) return;
+        const location = rec.shahtaj_van_location_id;
+        const locationId = Array.isArray(location) ? location[0] : location;
+        let lines = [];
+        if (locationId) {
+            try {
+                const quants = await this.orm.searchRead(
+                    "stock.quant",
+                    [["location_id", "=", locationId], ["quantity", ">", 0]],
+                    ["product_id", "quantity", "product_uom_id"],
+                    { order: "product_id asc", limit: 200 },
+                );
+                lines = quants.map((quant) => ({
+                    id: quant.id,
+                    product: quant.product_id ? quant.product_id[1] : "—",
+                    qty: quant.quantity || 0,
+                    uom: quant.product_uom_id ? quant.product_uom_id[1] : "",
+                }));
+            } catch (error) {
+                console.error("Failed to load van stock", error);
+            }
+        }
         this.state.vanSnapshot = {
             qtyOnHand: rec.shahtaj_van_qty_on_hand || 0,
             skuCount: rec.shahtaj_van_sku_count || 0,
             onVanForShops: rec.shahtaj_dm_on_van_for_shops || 0,
             pickedToday: rec.shahtaj_dm_picked_today || 0,
             deliveredToday: rec.shahtaj_dm_delivered_today || 0,
+            locationName: Array.isArray(location) ? location[1] : "",
+            lines,
         };
         if (this.state.selectedStaff) {
             this.state.selectedStaff.wallet = rec.shahtaj_dm_wallet_balance || 0;

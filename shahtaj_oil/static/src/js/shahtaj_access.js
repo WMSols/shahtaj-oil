@@ -45,6 +45,7 @@ const ROLE_ACCESS = {
             ["operations", "deliveries", "recovery"],
             ["operations", "deliveries", "settlements"],
             ["financials", "invoices"],
+            ["financials", "credit"],
         ],
         cards: ["orders", "invoices"],
         canMutate: false,

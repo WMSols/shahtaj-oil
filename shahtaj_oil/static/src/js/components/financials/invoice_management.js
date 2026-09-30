@@ -2,7 +2,7 @@
 
 import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { canMutate, canSee, hasFinancialAccess, loadPortalAccess, notifyPortalBusy } from "../../shahtaj_access";
+import { canMutate, canSee, hasFinancialAccess, loadPortalAccess, notifyPortalBusy, portalAccessState } from "../../shahtaj_access";
 import { printFilter, printListPdf } from "../../shahtaj_list_export";
 import { ConfirmModal } from "../confirm_modal";
 import {
@@ -142,6 +142,10 @@ export class InvoiceManagement extends Component {
 
     get canMutate() {
         return canMutate();
+    }
+
+    get isKpo() {
+        return portalAccessState.role === "kpo";
     }
 
     async reloadFromRefresh() {

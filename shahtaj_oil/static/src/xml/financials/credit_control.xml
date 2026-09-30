@@ -95,7 +95,7 @@
                                             <tr><td colspan="6" class="text-center py-5 text-muted fw-bold"><i class="fa fa-balance-scale fs-1 mb-3 opacity-50"></i><p class="mb-1 fs-5 text-dark">No shops found.</p></td></tr>
                                         </t>
                                         <t t-foreach="this.sortedShopBalances" t-as="bal" t-key="bal.id">
-                                            <tr style="cursor:pointer;" t-on-click="() => this.viewShopBalance(bal)">
+                                            <tr t-att-style="this.canMutate ? 'cursor:pointer;' : ''" t-on-click="() => this.viewShopBalance(bal)">
                                                 <td class="ps-4 fw-bold text-dark"><t t-esc="bal.shop"/><small class="d-block text-muted fw-normal">ID: <t t-esc="bal.shopId"/></small></td>
                                                 <td><t t-esc="bal.owner"/></td>
                                                 <td class="text-end fw-bold">Rs. <t t-esc="bal.limit"/></td>
@@ -105,7 +105,7 @@
                                                     <t t-else="">Rs. <t t-esc="bal.available"/></t>
                                                 </td>
                                                 <td class="text-end pe-4">
-                                                    <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click.stop="() => this.viewShopBalance(bal)">
+                                                    <button t-if="this.canMutate" class="btn btn-sm btn-outline-dark fw-bold" t-on-click.stop="() => this.viewShopBalance(bal)">
                                                         <i class="fa fa-pencil me-1"></i> Edit Limit
                                                     </button>
                                                 </td>

@@ -1654,6 +1654,12 @@ export class TerritoryBase extends Component {
             this.notification.add("Shop name is required.", { type: "warning" });
             return;
         }
+        const isCreditShop = (this.state.shopForm.shopCategory || 'cash') === 'credit';
+        const creditLimit = parseFloat(this.state.shopForm.creditLimit);
+        if (isCreditShop && !(creditLimit > 0)) {
+            this.notification.add("Credit limit must be greater than 0 for a credit shop.", { type: "warning" });
+            return;
+        }
 
         this.state.isLoading = true;
         
@@ -1668,9 +1674,7 @@ export class TerritoryBase extends Component {
                 phone: phone || false,
                 owner_cnic_number: cnic || false,
                 shop_license_number: this.state.shopForm.shop_license_number || false,
-                credit_limit: this.state.shopForm.shopCategory === 'credit'
-                    ? (parseFloat(this.state.shopForm.creditLimit) || 0.0)
-                    : 0.0,
+                credit_limit: isCreditShop ? creditLimit : 0.0,
                 legacy_balance: parseFloat(this.state.shopForm.legacyBalance) || 0.0,
             };
 

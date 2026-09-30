@@ -148,7 +148,7 @@
                             <option value="">All Order Statuses</option>
                             <option value="Draft">Draft</option>
                             <option value="To Invoice">To Invoice</option>
-                            <option value="Delivered">Delivered</option>
+                            <option value="Invoiced">Invoiced</option>
                             <option value="Cancelled">Cancelled</option>
                         </select>
                         <div class="form-check form-switch mb-0 d-flex align-items-center">

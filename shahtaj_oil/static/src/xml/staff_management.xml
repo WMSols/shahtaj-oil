@@ -400,6 +400,39 @@
                         </div>
                     </div>
 
+                    <h6 class="fw-bold text-muted text-uppercase small mb-3">Van Stock</h6>
+                    <div class="bg-white rounded-3 shadow-sm border mb-4">
+                        <div class="px-4 py-3 border-bottom">
+                            <t t-if="this.state.vanSnapshot.lines.length">
+                                <span class="fw-bold"><t t-esc="this.state.vanSnapshot.locationName"/></span>
+                                <span class="text-muted"> — <t t-esc="this.state.vanSnapshot.skuCount"/> product(s), <t t-esc="this.formatQty(this.state.vanSnapshot.qtyOnHand)"/> total units on van.</span>
+                            </t>
+                            <t t-else="">
+                                <span class="text-muted">No van stock yet.</span>
+                            </t>
+                        </div>
+                        <div class="table-responsive" t-if="this.state.vanSnapshot.lines.length">
+                            <table class="table table-hover table-striped mb-0 align-middle">
+                                <thead class="bg-light text-uppercase small fw-bold text-muted">
+                                    <tr>
+                                        <th class="ps-4 border-top-0">Product</th>
+                                        <th class="text-end border-top-0">On Van</th>
+                                        <th class="pe-4 border-top-0">UoM</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="this.state.vanSnapshot.lines" t-as="line" t-key="line.id">
+                                        <tr>
+                                            <td class="ps-4"><t t-esc="line.product"/></td>
+                                            <td class="text-end fw-bold"><t t-esc="this.formatQty(line.qty)"/></td>
+                                            <td class="pe-4 text-muted"><t t-esc="line.uom"/></td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <h6 class="fw-bold text-muted text-uppercase small mb-3">Assigned Jobs</h6>
                     <div class="table-responsive bg-white rounded-3 shadow-sm border">
                             <table class="table table-hover mb-0">

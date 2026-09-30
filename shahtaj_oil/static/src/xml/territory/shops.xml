@@ -583,7 +583,7 @@
             <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
                 <h6 class="fw-bold text-primary mb-0">1. Basic Information</h6>
                 <small class="text-muted d-block mt-1">
-                    Only <b>Shop Name</b> is required. Owner details and photos are optional.
+                    <b>Shop Name</b> is required. A credit shop also needs a credit limit greater than 0. Owner details and photos are optional.
                     Assign zones/routes later from the route checklist.
                 </small>
             </div>
@@ -630,8 +630,8 @@
                         </select>
                     </div>
                     <div class="col-md-4 mb-3" t-if="this.hasFinancialAccess and this.state.shopForm.shopCategory === 'credit'">
-                        <label class="small fw-bold">Approved Credit Limit (Rs.)</label>
-                        <input type="number" class="form-control" t-model="this.state.shopForm.creditLimit" placeholder="e.g. 150000"/>
+                        <label class="small fw-bold">Approved Credit Limit (Rs.) <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" min="0.01" step="any" t-model="this.state.shopForm.creditLimit" placeholder="e.g. 150000"/>
                     </div>
                     <div class="col-md-4 mb-3" t-if="this.hasFinancialAccess">
                         <label class="small fw-bold">Legacy Balance Brought Forward</label>

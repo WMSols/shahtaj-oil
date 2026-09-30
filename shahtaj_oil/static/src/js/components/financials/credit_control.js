@@ -2,7 +2,7 @@
 
 import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { hasFinancialAccess, notifyPortalBusy } from "../../shahtaj_access";
+import { canMutate, canSee, hasFinancialAccess, notifyPortalBusy } from "../../shahtaj_access";
 import { printFilter, printListPdf } from "../../shahtaj_list_export";
 import { invalidateFinancialStats } from "./financials_cache";
 
@@ -50,7 +50,7 @@ export class CreditControl extends Component {
             }
         });
         onWillStart(async () => {
-            if (!hasFinancialAccess()) {
+            if (!hasFinancialAccess() && !canSee("financials", "credit")) {
                 return;
             }
             await this.fetchActiveList();
@@ -339,11 +339,21 @@ export class CreditControl extends Component {
         this.fetchActiveList();
     }
 
+    get canMutate() {
+        return canMutate();
+    }
+
     viewShopBalance(bal) {
+        if (!this.canMutate) {
+            return;
+        }
         this.state.selectedShopBalance = { ...bal };
     }
 
     async saveShopBalanceLimit() {
+        if (!this.canMutate) {
+            return;
+        }
         try {
             const shop = this.state.selectedShopBalance;
             await this.orm.write("res.partner", [shop.id], { credit_limit: parseFloat(shop.rawLimit) });

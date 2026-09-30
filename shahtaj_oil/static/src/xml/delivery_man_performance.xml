@@ -133,6 +133,40 @@
                         </tbody>
                     </table>
                 </div>
+
+                <h6 class="fw-bold text-muted text-uppercase small mt-4 mb-3">Recent Pick &amp; Deliver</h6>
+                <div class="table-responsive bg-white rounded-3 border">
+                    <table class="table table-hover table-striped mb-0 align-middle">
+                        <thead class="bg-light text-uppercase small fw-bold text-muted">
+                            <tr>
+                                <th class="ps-3 border-top-0">Updated</th>
+                                <th class="border-top-0">Order</th>
+                                <th class="border-top-0">Shop</th>
+                                <th class="text-end border-top-0">Picked</th>
+                                <th class="text-end border-top-0">Delivered</th>
+                                <th class="text-end border-top-0">On Van</th>
+                                <th class="pe-3 border-top-0">Stock</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-if="!this.state.recentActivity.length and !this.state.isLoading">
+                                <tr><td colspan="7" class="text-center py-4 text-muted">No pick or deliver activity yet.</td></tr>
+                            </t>
+                            <t t-foreach="this.state.recentActivity" t-as="row" t-key="row.id">
+                                <tr>
+                                    <td class="ps-3 text-nowrap"><t t-esc="row.updated"/></td>
+                                    <td class="fw-bold"><t t-esc="row.order"/></td>
+                                    <td><t t-esc="row.shop"/></td>
+                                    <td class="text-end"><t t-esc="this.formatQty(row.picked)"/></td>
+                                    <td class="text-end"><t t-esc="this.formatQty(row.delivered)"/></td>
+                                    <td class="text-end fw-bold"><t t-esc="this.formatQty(row.onVan)"/></td>
+                                    <td class="pe-3"><span t-attf-class="badge #{this.stockClass(row.state)}"><t t-esc="this.stockLabel(row.state)"/></span></td>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2 mb-0">Shows the latest jobs with pick or deliver quantities. <b>On Van</b> = picked minus delivered for that stop.</p>
             </t>
         </div>
     </t>

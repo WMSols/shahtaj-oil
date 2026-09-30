@@ -172,6 +172,13 @@
                             <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.dispatch.dateFrom" t-on-change="() => this.onFilterChange('dispatch')" title="From date"/>
                             <span class="text-muted small">to</span>
                             <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.dispatch.dateTo" t-on-change="() => this.onFilterChange('dispatch')" title="To date"/>
+                            <select class="form-select form-select-sm" style="max-width: 200px;" t-model="this.state.filters.dispatch.deliveryStatus" t-on-change="() => this.onFilterChange('dispatch')">
+                                <option value="all">All delivery statuses</option>
+                                <option value="pending">To Deliver</option>
+                                <option value="partial">Partially Delivered</option>
+                                <option value="done">Fully Delivered</option>
+                                <option value="no_stock">No Stock Moves</option>
+                            </select>
                         </div>
                     </div>
                     <div class="position-relative">
@@ -188,6 +195,7 @@
                                         <th class="border-top-0">Shop &amp; Booker</th>
                                         <th class="border-top-0">Delivery Status</th>
                                         <th class="text-end border-top-0">Qty Still to Deliver</th>
+                                        <th class="text-end border-top-0">Unassigned Qty</th>
                                         <th class="border-top-0">Invoice</th>
                                         <th class="border-top-0">DM Jobs</th>
                                         <th class="text-end pe-4 border-top-0">Action</th>
@@ -195,7 +203,7 @@
                                 </thead>
                                 <tbody>
                                     <t t-if="this.state.tableDispatch.length === 0 and !this.state.isLoadingList">
-                                        <tr><td colspan="7" class="text-center py-5 text-muted fw-bold">No orders waiting to dispatch.</td></tr>
+                                        <tr><td colspan="8" class="text-center py-5 text-muted fw-bold">No orders waiting to dispatch.</td></tr>
                                     </t>
                                     <t t-foreach="this.state.tableDispatch" t-as="row" t-key="row.odoo_id">
                                         <tr>
@@ -210,13 +218,19 @@
                                                 </span>
                                             </td>
                                             <td class="text-end"><t t-esc="this._formatQty(row.qtyToDeliver)"/></td>
+                                            <td t-attf-class="text-end #{row.qtyUnassigned > 0 ? 'fw-bold' : ''}"><t t-esc="this._formatQty(row.qtyUnassigned)"/></td>
                                             <td>
                                                 <span t-if="row.hasPostedInvoice" class="badge bg-success text-white">Posted</span>
+                                                <span t-elif="row.draftInvoiceId" class="badge bg-warning text-dark">Confirm first</span>
                                                 <span t-else="" class="badge bg-warning text-dark">Invoice first</span>
                                             </td>
                                             <td><t t-esc="row.dmJobCount"/></td>
                                             <td class="text-end pe-4">
                                                 <button t-if="this.canMutate and this.canCreateInvoice(row)" class="btn btn-sm btn-success text-white fw-bold me-1" t-on-click="() => this.createInvoiceFromDispatch(row)" t-att-disabled="this.state.isCreatingInvoice">Invoice</button>
+                                                <button t-if="this.canConfirmDraftInvoice(row)" class="btn btn-sm btn-success text-white fw-bold me-1" t-on-click="() => this.confirmDraftInvoiceFromDispatch(row)" t-att-disabled="this.state.isConfirmingInvoice" title="Post this draft invoice so the order can be dispatched.">
+                                                    <t t-if="this.state.confirmingInvoiceOrderId === row.odoo_id">Confirming...</t>
+                                                    <t t-else="">Confirm</t>
+                                                </button>
                                                 <button t-if="this.canMutate and this.canAssignDeliveryMan(row)" class="btn btn-sm btn-dark text-white fw-bold me-1" t-on-click="() => this.openAssignModal(row.odoo_id)">Assign / Split</button>
                                                 <button t-if="this.canMutate and !row.dmJobCount and row.hasPostedInvoice and row.status !== 'Cancelled'" class="btn btn-sm btn-outline-primary fw-bold me-1" t-on-click="() => this.openDeliveryCustom(row.odoo_id)">Mark Delivery</button>
                                                 <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewDelivery(row)">View</button>
@@ -281,6 +295,12 @@
                             <option value="overdue">Overdue / Not Done</option>
                             <option value="unscheduled">Unscheduled</option>
                         </select>
+                        <div class="form-check form-switch mb-0 d-flex align-items-center">
+                            <input class="form-check-input mt-0" type="checkbox" role="switch" id="dmJobsWalkIn"
+                                   t-att-checked="this.state.filters.dm_jobs.walkIn"
+                                   t-on-change="onDmJobsWalkInToggle"/>
+                            <label class="form-check-label small fw-bold text-nowrap ms-2" for="dmJobsWalkIn">Walk In</label>
+                        </div>
                         <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printDmJobs" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                             <i class="fa fa-print me-1"/> Print
                         </button>
@@ -431,6 +451,16 @@
                         <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.collections.dateFrom" t-on-change="() => this.onFilterChange('collections')"/>
                         <span class="text-muted small align-self-center">to</span>
                         <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.collections.dateTo" t-on-change="() => this.onFilterChange('collections')"/>
+                        <select class="form-select form-select-sm" style="max-width: 160px;" t-model="this.state.filters.collections.state" t-on-change="() => this.onFilterChange('collections')">
+                            <option value="all">All states</option>
+                            <option value="draft">Draft</option>
+                            <option value="in_process">In Process</option>
+                            <option value="paid">Paid</option>
+                            <option value="canceled">Canceled</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="posted">Posted</option>
+                            <option value="reconciled">Reconciled</option>
+                        </select>
                         <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printRecovery" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                             <i class="fa fa-print me-1"/> Print
                         </button>
@@ -450,12 +480,13 @@
                                         <th class="border-top-0">Shop</th>
                                         <th class="border-top-0">Delivery man</th>
                                         <th class="text-end border-top-0">Amount</th>
+                                        <th class="border-top-0">State</th>
                                         <th class="text-end pe-4 border-top-0">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <t t-if="!this.state.tableCollections.length and !this.state.isLoadingList">
-                                        <tr><td colspan="6" class="text-center py-5 text-muted fw-bold">No wallet collections for these filters.</td></tr>
+                                        <tr><td colspan="7" class="text-center py-5 text-muted fw-bold">No wallet collections for these filters.</td></tr>
                                     </t>
                                     <t t-foreach="this.state.tableCollections" t-as="pay" t-key="pay.id">
                                         <tr>
@@ -464,6 +495,7 @@
                                             <td><t t-esc="pay.shop"/></td>
                                             <td><t t-esc="pay.dm"/></td>
                                             <td class="text-end">Rs. <t t-esc="this.formatMoney(pay.amount)"/></td>
+                                            <td><span t-attf-class="badge #{this.recoveryStateBadgeClass(pay.state)}"><t t-esc="this.recoveryStateLabel(pay.state)"/></span></td>
                                             <td class="text-end pe-4">
                                                 <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewRecovery(pay)">View</button>
                                             </td>
@@ -499,6 +531,12 @@
                             <option value="all">All delivery men</option>
                             <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="'set-' + dm.id">
                                 <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
+                            </t>
+                        </select>
+                        <select class="form-select form-select-sm" style="max-width: 220px;" t-model="this.state.filters.settlements.journal" t-on-change="() => this.onFilterChange('settlements')">
+                            <option value="all">All journals</option>
+                            <t t-foreach="this.state.lookupJournals" t-as="journal" t-key="'set-j-' + journal.id">
+                                <option t-att-value="journal.id"><t t-esc="journal.name"/></option>
                             </t>
                         </select>
                         <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.settlements.dateFrom" t-on-change="() => this.onFilterChange('settlements')"/>
@@ -539,7 +577,7 @@
                                             <td class="text-end">Rs. <t t-esc="this.formatMoney(setl.amount)"/></td>
                                             <td><t t-esc="setl.journal"/></td>
                                             <td><t t-esc="setl.settledBy"/></td>
-                                            <td><span class="badge bg-light text-dark text-capitalize"><t t-esc="setl.state"/></span></td>
+                                            <td><span t-attf-class="badge #{this.settlementStateBadgeClass(setl.state)}"><t t-esc="this.settlementStateLabel(setl.state)"/></span></td>
                                             <td class="text-end pe-4">
                                                 <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewSettlement(setl)">View</button>
                                             </td>
@@ -581,7 +619,7 @@
                                 <div class="col-md-6"><span class="text-muted small d-block">Date</span><span class="fw-bold"><t t-esc="this.state.selectedRecovery.date"/></span></div>
                                 <div class="col-md-6"><span class="text-muted small d-block">Amount</span><span class="fw-bold text-success">Rs. <t t-esc="this.formatMoney(this.state.selectedRecovery.amount)"/></span></div>
                                 <div class="col-md-6"><span class="text-muted small d-block">Payment method</span><span><t t-esc="this.state.selectedRecovery.channelLabel"/></span></div>
-                                <div class="col-md-6"><span class="text-muted small d-block">State</span><span class="text-capitalize"><t t-esc="this.state.selectedRecovery.state"/></span></div>
+                                <div class="col-md-6"><span class="text-muted small d-block">State</span><span t-attf-class="badge #{this.recoveryStateBadgeClass(this.state.selectedRecovery.state)}"><t t-esc="this.recoveryStateLabel(this.state.selectedRecovery.state)"/></span></div>
                                 <div class="col-md-6"><span class="text-muted small d-block">Journal</span><span><t t-esc="this.state.selectedRecovery.journal || '—'"/></span></div>
                                 <div class="col-md-6"><span class="text-muted small d-block">Journal entry</span><span><t t-esc="this.state.selectedRecovery.move || '—'"/></span></div>
                                 <div class="col-md-6" t-if="this.state.selectedRecovery.job">
@@ -629,7 +667,7 @@
                                 <div class="col-md-6"><span class="text-muted small d-block">Deposit journal</span><span><t t-esc="this.state.selectedSettlement.journal"/></span></div>
                                 <div class="col-md-6"><span class="text-muted small d-block">Journal entry</span><span><t t-esc="this.state.selectedSettlement.move"/></span></div>
                                 <div class="col-md-6"><span class="text-muted small d-block">Settled by</span><span><t t-esc="this.state.selectedSettlement.settledBy"/></span></div>
-                                <div class="col-md-6"><span class="text-muted small d-block">State</span><span class="text-capitalize"><t t-esc="this.state.selectedSettlement.state"/></span></div>
+                                <div class="col-md-6"><span class="text-muted small d-block">State</span><span t-attf-class="badge #{this.settlementStateBadgeClass(this.state.selectedSettlement.state)}"><t t-esc="this.settlementStateLabel(this.state.selectedSettlement.state)"/></span></div>
                                 <div class="col-12"><span class="text-muted small d-block">Notes</span><span><t t-esc="this.state.selectedSettlement.notes || '—'"/></span></div>
                             </div>
                         </div>
@@ -661,6 +699,12 @@
  Working...
                                         </t>
                                         <t t-else="">Create Invoice</t>
+                                    </button>
+                                </t>
+                                <t t-if="this.state.deliveriesSubTab === 'dispatch' and this.canConfirmDraftInvoice(this.state.selectedDelivery)">
+                                    <button class="btn btn-sm btn-success text-white shadow-sm fw-bold px-3" t-on-click="() => this.confirmDraftInvoiceFromDispatch(this.state.selectedDelivery)" t-att-disabled="this.state.isConfirmingInvoice" title="Post this draft invoice so the order can be dispatched.">
+                                        <t t-if="this.state.confirmingInvoiceOrderId === this.state.selectedDelivery.odoo_id">Confirming...</t>
+                                        <t t-else="">Confirm Invoice</t>
                                     </button>
                                 </t>
 
@@ -1033,12 +1077,11 @@
                                         </t>
                                     </tbody>
                                 </table>
-                                <t t-if="this.state.assignModal.readOnly">
-                                    <hr class="my-3"/>
-                                    <p class="mb-2 small">
-                                        <b>Delivery progress</b>
-                                        <span class="text-muted"> (read-only — from saved DM jobs)</span>
-                                    </p>
+                                <hr class="my-3"/>
+                                <p class="mb-2 small">
+                                    <b>Delivery progress</b>
+                                    <span class="text-muted"> (read-only — from saved DM jobs)</span>
+                                </p>
                                     <t t-if="this.assignDeliveryProgress.empty">
                                         <p class="mb-0 small text-muted">No DM jobs yet. Save assignments first.</p>
                                     </t>
@@ -1061,7 +1104,10 @@
                                                         <td class="text-end"><t t-esc="prow.assigned"/></td>
                                                         <td class="text-end"><t t-esc="prow.picked"/></td>
                                                         <td class="text-end"><t t-esc="prow.delivered"/></td>
-                                                        <td><t t-esc="prow.stock"/></td>
+                                                        <td>
+                                                            <span t-if="prow.stockState" t-attf-class="badge #{this.stockStateBadgeClass(prow.stockState)}"><t t-esc="prow.stock"/></span>
+                                                            <t t-else="">—</t>
+                                                        </td>
                                                         <td><t t-esc="prow.stop"/></td>
                                                     </tr>
                                                 </t>
@@ -1095,7 +1141,6 @@
                                             </tbody>
                                         </table>
                                     </t>
-                                </t>
                             </div>
                             <div class="mb-3" style="max-width: 240px;">
                                 <label class="small fw-bold">Planned Delivery Date</label>
@@ -1103,9 +1148,12 @@
                             </div>
                             <t t-foreach="this.state.assignModal.jobs" t-as="job" t-key="job.id">
                                 <div class="border rounded-3 p-3 mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="small fw-bold">Delivery man</span>
+                                        <span t-if="job.stockState" t-attf-class="badge #{this.stockStateBadgeClass(job.stockState)}"><t t-esc="this._stockProgressLabel(job.stockState)"/></span>
+                                    </div>
                                     <div class="row g-2 mb-2">
                                         <div t-attf-class="#{this.state.assignModal.readOnly ? 'col-12' : 'col-md-10'}">
-                                            <label class="small fw-bold">Delivery man</label>
                                             <select class="form-select form-select-sm" t-att-disabled="this.state.assignModal.readOnly" t-on-change="(ev) => this.setAssignDeliveryMan(job, ev.target.value)">
                                                 <option value="" t-att-selected="this.isSelectedId(job.deliveryManId, '')">Select</option>
                                                 <t t-foreach="this.assignDmOptions(job)" t-as="dm" t-key="dm.id">

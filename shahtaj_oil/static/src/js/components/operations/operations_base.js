@@ -21,6 +21,18 @@ import {
     getOperationsTaxCatalog,
 } from "./operations_cache";
 
+let pendingCheckinOrder = null;
+
+function queueCheckinOrder(order) {
+    pendingCheckinOrder = order;
+}
+
+function takeCheckinOrder() {
+    const order = pendingCheckinOrder;
+    pendingCheckinOrder = null;
+    return order;
+}
+
 export class OperationsBase extends Component {
      static components = { ConfirmModal };
      static props = {
@@ -68,6 +80,7 @@ export class OperationsBase extends Component {
             tableCollections: [],
             tableSettlements: [],
             lookupDeliveryMen: [],
+            lookupJournals: [],
             dmJobSections: { delivery: true, order: true, shop: false, gps: false, products: true },
             settleModal: {
                 open: false,
@@ -101,6 +114,8 @@ export class OperationsBase extends Component {
             },
 
             isCreatingInvoice: false,
+            isConfirmingInvoice: false,
+            confirmingInvoiceOrderId: false,
             isConfirmingOrder: false,
             isCancellingOrder: false,
             confirmModal: { isOpen: false, title: '', message: '', onConfirm: null },
@@ -169,8 +184,8 @@ export class OperationsBase extends Component {
                 dispatch: this._defaultDispatchFilters(),
                 dm_jobs: this._defaultDmJobsFilters(),
                 sessions: { dm: 'all', dateFrom: '', dateTo: '' },
-                collections: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
-                settlements: { search: '', dm: 'all', dateFrom: '', dateTo: '' },
+                collections: { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all' },
+                settlements: { search: '', dm: 'all', journal: 'all', dateFrom: '', dateTo: '' },
                                 checkins: this._defaultCheckinFilters(),
                 orders: this._defaultOrdersFilters(),
                 verification: { search: '', booker: 'all', reason: 'all' },
@@ -219,10 +234,14 @@ export class OperationsBase extends Component {
                 this.state.ordersSubTab = "live";
             }
             // Catalogs are large on production; do not block Live Orders on them.
+            const pendingOrder = this.state.activeSubTab === "orders" ? takeCheckinOrder() : null;
             await Promise.all([
                 this.loadDropdownData(),
                 this.fetchActiveList(),
             ]);
+            if (pendingOrder) {
+                await this.viewOrder(pendingOrder);
+            }
             this.loadSaleOrderCatalog();
             if (hasFinancialAccess()) this.loadTaxAndProductData();
         });
@@ -354,6 +373,11 @@ export class OperationsBase extends Component {
     onOrdersWalkInToggle(ev) {
         this.state.filters.orders.walkIn = ev.target.checked;
         this.onFilterChange('orders');
+    }
+
+    onDmJobsWalkInToggle(ev) {
+        this.state.filters.dm_jobs.walkIn = ev.target.checked;
+        this.onFilterChange('dm_jobs');
     }
 
     changePage(tabName, direction) {
@@ -1079,6 +1103,22 @@ export class OperationsBase extends Component {
    async loadDropdownData() {
         const data = await getOperationsLookups(this.orm);
         applyOperationsLookupsToState(this.state, data);
+        await this._ensureSettlementJournals();
+    }
+
+    async _ensureSettlementJournals() {
+        if (this.state.lookupJournals.length) return;
+        try {
+            const journals = await this.orm.searchRead(
+                "account.journal",
+                [],
+                ["id", "name"],
+                { order: "name asc" },
+            );
+            this.state.lookupJournals = journals || [];
+        } catch (error) {
+            this.state.lookupJournals = [];
+        }
     }
 
     async loadSaleOrderCatalog() {
@@ -1311,22 +1351,36 @@ export class OperationsBase extends Component {
         }
     }
 
-    async _ordersWithPostedInvoices(records) {
+    async _customerInvoiceStates(records) {
         const invoiceIds = [...new Set((records || []).flatMap((o) => o.invoice_ids || []))];
-        if (!invoiceIds.length) return new Set();
-        const posted = await this.orm.searchRead(
+        const postedOrderIds = new Set();
+        const draftInvoiceByOrder = new Map();
+        if (!invoiceIds.length) {
+            return { postedOrderIds, draftInvoiceByOrder };
+        }
+        const moves = await this.orm.searchRead(
             "account.move",
-            [["id", "in", invoiceIds], ["state", "=", "posted"], ["move_type", "=", "out_invoice"]],
-            ["id"],
+            [["id", "in", invoiceIds], ["state", "in", ["posted", "draft"]], ["move_type", "=", "out_invoice"]],
+            ["id", "state"],
         );
-        const postedIds = new Set(posted.map((m) => m.id));
-        const orderIds = new Set();
+        const stateById = new Map(moves.map((m) => [m.id, m.state]));
         for (const order of records) {
-            if ((order.invoice_ids || []).some((id) => postedIds.has(id))) {
-                orderIds.add(order.id);
+            const ids = order.invoice_ids || [];
+            if (ids.some((id) => stateById.get(id) === "posted")) {
+                postedOrderIds.add(order.id);
+            } else {
+                const draftId = ids.find((id) => stateById.get(id) === "draft");
+                if (draftId) {
+                    draftInvoiceByOrder.set(order.id, draftId);
+                }
             }
         }
-        return orderIds;
+        return { postedOrderIds, draftInvoiceByOrder };
+    }
+
+    _applyCustomerInvoiceFlags(row, orderId, flags) {
+        row.hasPostedInvoice = flags.postedOrderIds.has(orderId);
+        row.draftInvoiceId = flags.draftInvoiceByOrder.get(orderId) || false;
     }
 
     async _refreshPostedInvoiceFlag(row, orderId) {
@@ -1336,8 +1390,8 @@ export class OperationsBase extends Component {
         row.invoiceIds = so.invoice_ids || [];
         row.invoice_status = so.invoice_status;
         row.orderState = so.state;
-        const posted = await this._ordersWithPostedInvoices([so]);
-        row.hasPostedInvoice = posted.has(orderId);
+        const flags = await this._customerInvoiceStates([so]);
+        this._applyCustomerInvoiceFlags(row, orderId, flags);
         if (so.invoice_status === "invoiced") {
             row.status = "Invoiced";
         } else if (so.state === "sale") {
@@ -1349,8 +1403,13 @@ export class OperationsBase extends Component {
         if (!this.hasFinancialAccess || !row) return false;
         if (["Draft", "Needs Verification", "Rejected", "Cancelled"].includes(row.status)) return false;
         if (row.orderState === "cancel") return false;
+        if (row.draftInvoiceId) return false;
         if (row.invoice_status === "invoiced") return false;
         return true;
+    }
+
+    canConfirmDraftInvoice(row) {
+        return !!(this.canMutate && this.hasFinancialAccess && row && row.draftInvoiceId && !row.hasPostedInvoice);
     }
 
     canAssignDeliveryMan(row) {
@@ -1420,6 +1479,7 @@ export class OperationsBase extends Component {
             invoice_status: o.invoice_status,
             orderState: o.state,
             hasPostedInvoice: false,
+            draftInvoiceId: false,
             invoiceIds: o.invoice_ids || [],
             is_fully_delivered: totalOrd > 0 && totalDel >= totalOrd, line_ids: o.order_line, lines: []
         };
@@ -1429,6 +1489,45 @@ export class OperationsBase extends Component {
         if (!row || row.is_fully_delivered) return false;
         if (row.deliveryStatus === "done" || row.deliveryStatus === "no_stock") return false;
         return Number(row.qtyToDeliver) > 0;
+    }
+
+    async _dispatchUnassignedByOrder(orderIds) {
+        const result = {};
+        if (!orderIds.length) return result;
+        // No stored unassigned qty. Assigned qty is on DM jobs; leftover is ordered minus that.
+        const [lines, jobs] = await Promise.all([
+            this.orm.searchRead(
+                "sale.order.line",
+                [
+                    ["order_id", "in", orderIds],
+                    ["display_type", "=", false],
+                    ["product_id.type", "=", "consu"],
+                ],
+                ["order_id", "product_uom_qty"],
+            ),
+            this.orm.searchRead(
+                "shahtaj.dm.delivery",
+                [["sale_order_id", "in", orderIds]],
+                ["sale_order_id", "qty_assigned_total"],
+            ),
+        ]);
+        const ordered = {};
+        for (const line of lines) {
+            const orderId = line.order_id && line.order_id[0];
+            if (!orderId) continue;
+            ordered[orderId] = (ordered[orderId] || 0) + (Number(line.product_uom_qty) || 0);
+        }
+        const assigned = {};
+        for (const job of jobs) {
+            const orderId = job.sale_order_id && job.sale_order_id[0];
+            if (!orderId) continue;
+            assigned[orderId] = (assigned[orderId] || 0) + (Number(job.qty_assigned_total) || 0);
+        }
+        for (const orderId of orderIds) {
+            const left = (ordered[orderId] || 0) - (assigned[orderId] || 0);
+            result[orderId] = left > 0 ? left : 0;
+        }
+        return result;
     }
 
     _operationsListQuery(tab, filters) {
@@ -1467,8 +1566,16 @@ export class OperationsBase extends Component {
             if (tab === 'deliveries') domain.push(['state', 'in', ['sale', 'done']]);
             if (tab === 'dispatch') {
                 domain.push(['state', 'in', ['sale', 'done']]);
-                domain.push(['shahtaj_delivery_status', 'in', ['pending', 'partial']]);
-                domain.push(['shahtaj_qty_to_deliver', '>', 0]);
+                const deliveryStatus = filters.deliveryStatus || 'all';
+                if (deliveryStatus === 'all') {
+                    domain.push(['shahtaj_delivery_status', 'in', ['pending', 'partial']]);
+                    domain.push(['shahtaj_qty_to_deliver', '>', 0]);
+                } else if (deliveryStatus === 'pending' || deliveryStatus === 'partial') {
+                    domain.push(['shahtaj_delivery_status', '=', deliveryStatus]);
+                    domain.push(['shahtaj_qty_to_deliver', '>', 0]);
+                } else {
+                    domain.push(['shahtaj_delivery_status', '=', deliveryStatus]);
+                }
                 if (filters.dateFrom) domain.push(['date_order', '>=', this._pktDateToUtcBounds(filters.dateFrom).start]);
                 if (filters.dateTo) domain.push(['date_order', '<=', this._pktDateToUtcBounds(filters.dateTo).end]);
             }
@@ -1495,7 +1602,6 @@ export class OperationsBase extends Component {
             }
             if (tab === 'orders' && filters.status) {
                 if (filters.status === 'Draft') domain.push(['state', '=', 'draft']);
-                else if (filters.status === 'Delivered') domain.push(['state', '=', 'done']);
                 else if (filters.status === 'To Invoice') domain.push(['state', '=', 'sale'], ['invoice_status', '!=', 'invoiced']);
                 else if (filters.status === 'Invoiced') domain.push(['invoice_status', '=', 'invoiced']);
                 else if (filters.status === 'Cancelled') domain.push(['state', '=', 'cancel']);
@@ -1526,6 +1632,7 @@ export class OperationsBase extends Component {
             if (filters.state === 'except_not_ready') domain.push(['state', '!=', 'not_ready']);
             else if (filters.state && filters.state !== 'all') domain.push(['state', '=', filters.state]);
             if (filters.field_state && filters.field_state !== 'all') domain.push(['field_state', '=', filters.field_state]);
+            if (filters.walkIn) domain.push(['is_walk_in', '=', true]);
             domain.push(...this._dmJobsScheduleDomain(filters.schedule));
         } else if (tab === 'sessions') {
             model = 'shahtaj.dm.day.session';
@@ -1548,6 +1655,13 @@ export class OperationsBase extends Component {
                 );
             }
             if (filters.dm && filters.dm !== 'all') domain.push(['shahtaj_collected_by_dm_id', '=', parseInt(filters.dm)]);
+            if (filters.state && filters.state !== 'all') {
+                if (filters.state === 'canceled') {
+                    domain.push(['state', 'in', ['canceled', 'cancelled', 'cancel']]);
+                } else {
+                    domain.push(['state', '=', filters.state]);
+                }
+            }
             domain.push(...this._dateRangeDomain(filters, 'date'));
         } else if (tab === 'settlements') {
             model = 'shahtaj.dm.wallet.settlement';
@@ -1562,6 +1676,7 @@ export class OperationsBase extends Component {
                 );
             }
             if (filters.dm && filters.dm !== 'all') domain.push(['delivery_man_id', '=', parseInt(filters.dm)]);
+            if (filters.journal && filters.journal !== 'all') domain.push(['bank_journal_id', '=', parseInt(filters.journal)]);
             domain.push(...this._dateRangeDomain(filters, 'settlement_date'));
         } else if (tab === 'checkins') {
             model = 'shahtaj.gps.attempt';
@@ -1699,22 +1814,27 @@ export class OperationsBase extends Component {
             // 3. MAP RESULTS
             if (tab === 'deliveries' || tab === 'dispatch' || tab === 'orders' || tab === 'verification') {
                 const orderIds = records.map(o => o.id);
-                const [lines, postedOrderIds] = await Promise.all([
+                const [lines, invoiceFlags, unassignedByOrder] = await Promise.all([
                     orderIds.length ? this.orm.searchRead("sale.order.line", [["order_id", "in", orderIds]], ["order_id", "product_uom_qty", "qty_delivered"]) : Promise.resolve([]),
-                    this._ordersWithPostedInvoices(records),
+                    this._customerInvoiceStates(records),
+                    tab === "dispatch" ? this._dispatchUnassignedByOrder(orderIds) : Promise.resolve({}),
                 ]);
                 this.state[targetState] = records.map(o => {
                     const row = this._mapSaleOrderRow(o, lines);
-                    row.hasPostedInvoice = postedOrderIds.has(o.id);
+                    this._applyCustomerInvoiceFlags(row, o.id, invoiceFlags);
                     if (tab === 'dispatch') {
                         row.deliveryStatus = o.shahtaj_delivery_status || '';
                         row.qtyToDeliver = o.shahtaj_qty_to_deliver || 0;
+                        row.qtyUnassigned = unassignedByOrder[o.id] || 0;
                         row.dmJobCount = o.shahtaj_dm_delivery_count || 0;
                     }
                     return row;
                 });
                 if (tab === 'dispatch') {
-                    const visible = this.state[targetState].filter((row) => this._dispatchOrderStillOpen(row));
+                    const deliveryStatus = filters.deliveryStatus || 'all';
+                    const visible = (deliveryStatus === 'done' || deliveryStatus === 'no_stock')
+                        ? this.state[targetState]
+                        : this.state[targetState].filter((row) => this._dispatchOrderStillOpen(row));
                     const hidden = this.state[targetState].length - visible.length;
                     this.state[targetState] = visible;
                     if (hidden) {
@@ -1972,6 +2092,25 @@ export class OperationsBase extends Component {
         }
     }
 
+    async confirmDraftInvoiceFromDispatch(row) {
+        if (!this.canConfirmDraftInvoice(row) || this.state.isConfirmingInvoice) return;
+        this.state.isConfirmingInvoice = true;
+        this.state.confirmingInvoiceOrderId = row.odoo_id;
+        try {
+            await this.orm.call("account.move", "action_post", [[row.draftInvoiceId]]);
+            this.notification.add("Invoice confirmed. You can assign a delivery man.", { type: "success" });
+            if (this.state.selectedDelivery && this.state.selectedDelivery.odoo_id === row.odoo_id) {
+                await this._refreshPostedInvoiceFlag(this.state.selectedDelivery, row.odoo_id);
+            }
+            await this.fetchActiveList();
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message, { type: "danger" });
+        } finally {
+            this.state.isConfirmingInvoice = false;
+            this.state.confirmingInvoiceOrderId = false;
+        }
+    }
+
    async loadTaxAndProductData() {
         if (!hasFinancialAccess()) {
             return;
@@ -2043,8 +2182,8 @@ export class OperationsBase extends Component {
                 dlv.invoice_status = orderData[0].invoice_status;
                 dlv.invoiceIds = orderData[0].invoice_ids || [];
                 dlv.orderState = orderData[0].state;
-                const posted = await this._ordersWithPostedInvoices(orderData);
-                dlv.hasPostedInvoice = posted.has(dlv.odoo_id);
+                const flags = await this._customerInvoiceStates(orderData);
+                this._applyCustomerInvoiceFlags(dlv, dlv.odoo_id, flags);
                 this._applyShopSnapshot(orderData[0], dlv);
             }
         } catch (error) {
@@ -2289,6 +2428,50 @@ export class OperationsBase extends Component {
         return map[state] || "bg-secondary text-white";
     }
 
+    recoveryStateLabel(state) {
+        const map = {
+            draft: "Draft",
+            in_process: "In Process",
+            paid: "Paid",
+            canceled: "Canceled",
+            cancelled: "Canceled",
+            rejected: "Rejected",
+            posted: "Posted",
+            reconciled: "Reconciled",
+        };
+        return map[state] || (state ? String(state).replace(/_/g, " ") : "—");
+    }
+
+    recoveryStateBadgeClass(state) {
+        const map = {
+            draft: "bg-secondary text-white",
+            in_process: "bg-warning text-dark",
+            paid: "bg-success text-white",
+            canceled: "bg-dark text-white",
+            cancelled: "bg-dark text-white",
+            rejected: "bg-danger text-white",
+            posted: "bg-info text-white",
+            reconciled: "bg-success text-white",
+        };
+        return map[state] || "bg-light text-dark border";
+    }
+
+    settlementStateLabel(state) {
+        const map = {
+            posted: "Posted",
+            cancelled: "Cancelled",
+        };
+        return map[state] || (state ? String(state).replace(/_/g, " ") : "—");
+    }
+
+    settlementStateBadgeClass(state) {
+        const map = {
+            posted: "bg-success text-white",
+            cancelled: "bg-danger text-white",
+        };
+        return map[state] || "bg-light text-dark border";
+    }
+
     _formatAssignQty(value) {
         const n = Number(value) || 0;
         return Number.isInteger(n) ? String(n) : String(parseFloat(n.toFixed(6)));
@@ -2374,6 +2557,7 @@ export class OperationsBase extends Component {
                 assigned: this._formatAssignQty(lines.reduce((sum, line) => sum + (Number(line.qtyAssigned) || 0), 0)),
                 picked: this._formatAssignQty(lines.reduce((sum, line) => sum + (Number(line.qtyPicked) || 0), 0)),
                 delivered: this._formatAssignQty(lines.reduce((sum, line) => sum + (Number(line.qtyDelivered) || 0), 0)),
+                stockState: job.stockState || "",
                 stock: this._stockProgressLabel(job.stockState),
                 stop: this._stopProgressLabel(job.fieldState),
             };
@@ -3116,7 +3300,7 @@ export class OperationsBase extends Component {
 
     _defaultDispatchFilters() {
         const date = this._navSource().requestedDispatchDate || '';
-        return { search: '', dateFrom: date, dateTo: date };
+        return { search: '', dateFrom: date, dateTo: date, deliveryStatus: 'all' };
     }
 
     _defaultDmJobsFilters() {
@@ -3129,6 +3313,7 @@ export class OperationsBase extends Component {
             state: props.requestedDmState || 'all',
             field_state: props.requestedDmFieldState || 'all',
             schedule: 'all',
+            walkIn: false,
         };
     }
 
@@ -3214,8 +3399,8 @@ export class OperationsBase extends Component {
             dispatch:   this._defaultDispatchFilters(),
             dm_jobs:    this._defaultDmJobsFilters(),
             sessions:   { dm: 'all', dateFrom: '', dateTo: '' },
-            collections:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
-            settlements:{ search: '', dm: 'all', dateFrom: '', dateTo: '' },
+            collections:{ search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all' },
+            settlements:{ search: '', dm: 'all', journal: 'all', dateFrom: '', dateTo: '' },
                         checkins:   this._defaultCheckinFilters(),
             orders:     this._defaultOrdersFilters(),
             verification: { search: '', booker: 'all', reason: 'all' },
@@ -3247,8 +3432,8 @@ export class OperationsBase extends Component {
             this.state.filters.dispatch = this._defaultDispatchFilters();
             this.state.filters.dm_jobs = this._defaultDmJobsFilters();
             this.state.filters.sessions = { dm: 'all', dateFrom: '', dateTo: '' };
-            this.state.filters.collections = { search: '', dm: 'all', dateFrom: '', dateTo: '' };
-            this.state.filters.settlements = { search: '', dm: 'all', dateFrom: '', dateTo: '' };
+            this.state.filters.collections = { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all' };
+            this.state.filters.settlements = { search: '', dm: 'all', journal: 'all', dateFrom: '', dateTo: '' };
             this.state.pagination.dispatch.page = 1;
             this.state.pagination.dm_jobs.page = 1;
             this.state.pagination.sessions.page = 1;
@@ -3663,6 +3848,16 @@ export class OperationsBase extends Component {
             endTime: log.endTime || '',
             visitOutcome: log.orderLabel || '',
         };
+        if (log.purpose === 'walk_in' && !this._m2oId(this.state.selectedCheckin.sale_order_id)) {
+            try {
+                const linkedOrder = await this._resolveWalkInSaleOrder(log);
+                if (linkedOrder && this.state.selectedCheckin && this.state.selectedCheckin.id === log.id) {
+                    this.state.selectedCheckin.sale_order_id = linkedOrder;
+                }
+            } catch (error) {
+                console.error("Failed to resolve walk-in sales order", error);
+            }
+        }
         let visitId = this._m2oId(log.visit_id);
         const taskId = this._m2oId(log.visit_task_id);
         const dmId = this._m2oId(log.dm_delivery_id);
@@ -3747,6 +3942,72 @@ export class OperationsBase extends Component {
         this.state.shopSnapshotOpen = false;
     }
 
+    async _resolveWalkInSaleOrder(log) {
+        const dmId = log.bookerId || this._m2oId(log.user_id);
+        const shopId = log.shopId || this._m2oId(log.shop_id);
+        if (!shopId) return false;
+        const target = this._parseOdooUtc(log.createdAt);
+        const candidates = [];
+        const remember = (order, stamp, walkIn, userId) => {
+            if (!order || !order[0]) return;
+            candidates.push({
+                order,
+                delta: target && stamp ? Math.abs(stamp - target) : Infinity,
+                walkIn: !!walkIn,
+                sameUser: !!(dmId && userId === dmId),
+            });
+        };
+
+        try {
+            const jobs = await this.orm.searchRead(
+                "shahtaj.dm.delivery",
+                [["partner_id", "=", shopId], ["sale_order_id", "!=", false]],
+                ["sale_order_id", "delivery_man_id", "is_walk_in", "delivered_at", "create_date"],
+                { order: "id desc", limit: 80 },
+            );
+            for (const job of jobs) {
+                remember(
+                    job.sale_order_id,
+                    this._parseOdooUtc(job.delivered_at || job.create_date),
+                    job.is_walk_in,
+                    this._m2oId(job.delivery_man_id),
+                );
+            }
+        } catch (error) {
+            console.error("Failed to match walk-in delivery job", error);
+        }
+
+        try {
+            const orders = await this.orm.searchRead(
+                "sale.order",
+                [["partner_id", "=", shopId]],
+                ["id", "name", "date_order", "create_date", "user_id", "shahtaj_is_walk_in"],
+                { order: "id desc", limit: 80 },
+            );
+            for (const order of orders) {
+                remember(
+                    [order.id, order.name],
+                    this._parseOdooUtc(order.create_date || order.date_order),
+                    order.shahtaj_is_walk_in,
+                    this._m2oId(order.user_id),
+                );
+            }
+        } catch (error) {
+            console.error("Failed to match walk-in sales order", error);
+        }
+        if (!candidates.length) return false;
+
+        const windowMs = 12 * 60 * 60 * 1000;
+        const near = candidates.filter((row) => row.delta <= windowMs);
+        const onlyWalkIn = candidates.filter((row) => row.walkIn);
+        const pool = near.length
+            ? near
+            : (onlyWalkIn.length === 1 ? onlyWalkIn : (candidates.length === 1 ? candidates : []));
+        const preferred = pool.filter((row) => row.walkIn || row.sameUser);
+        const ranked = (preferred.length ? preferred : pool).sort((a, b) => a.delta - b.delta);
+        return ranked.length ? ranked[0].order : false;
+    }
+
     async viewOrderFromCheckin(log) {
         if (!log.sale_order_id) return;
         
@@ -3776,16 +4037,10 @@ export class OperationsBase extends Component {
                     is_fully_delivered: totalOrd > 0 && totalDel >= totalOrd, line_ids: o.order_line, lines: [] 
                 };
 
-                // 1. Activate the protection flag so data isn't wiped by the incoming sub-tab change
-                this._preserveDetailsOnSwitch = true;
-
-                // 2. Dispatch event to update parent sidebar smoothly
+                queueCheckinOrder(targetOrder);
                 window.dispatchEvent(new CustomEvent('shahtaj-dashboard-switch', {
                     detail: { tab: 'operations', subTab: 'orders' }
                 }));
-
-                // 3. Open the specific order details directly
-                await this.viewOrder(targetOrder);
             }
         } catch (error) {
             this.notification.add("Failed to load order: " + (error.data?.message || error.message), { type: "danger" });
@@ -3973,12 +4228,42 @@ export class OperationsBase extends Component {
         }
     }
 
+    async _loadLiveOrderSkuLines(orders) {
+        const orderIds = (orders || []).map((order) => order.odoo_id).filter(Boolean);
+        if (!orderIds.length) return {};
+        const lineRecords = await this.orm.searchRead(
+            "sale.order.line",
+            [
+                ["order_id", "in", orderIds],
+                ["display_type", "=", false],
+                ["product_id", "!=", false],
+            ],
+            ["order_id", "product_id", "product_uom_qty", "sequence"],
+            { order: "sequence asc, id asc" },
+        );
+        const productIds = [...new Set(lineRecords.map((line) => line.product_id[0]))];
+        const products = productIds.length
+            ? await this.orm.read("product.product", productIds, ["name"])
+            : [];
+        const productById = new Map(products.map((product) => [product.id, product]));
+        const linesByOrder = {};
+        for (const line of lineRecords) {
+            const orderId = line.order_id[0];
+            const product = productById.get(line.product_id[0]);
+            const name = (product && product.name) || line.product_id[1] || "Product";
+            if (!linesByOrder[orderId]) linesByOrder[orderId] = [];
+            linesByOrder[orderId].push([name, this._formatQty(line.product_uom_qty)]);
+        }
+        return linesByOrder;
+    }
+
     async printLiveOrders() {
         if (this.state.isPrintingList) return;
         this.state.isPrintingList = true;
         try {
             const filters = this.state.filters.orders || {};
             const rows = await this._loadMappedPrintRows("orders");
+            const skuLinesByOrder = await this._loadLiveOrderSkuLines(rows);
             const financial = this.hasFinancialAccess;
             const columns = ["Order Ref", "Shop", "Walk-in", "Shop ID", "Booker ID", "Booker", "Date", financial ? "Order Value" : "Units", "Status"];
             await this._openListPrint(
@@ -3992,17 +4277,20 @@ export class OperationsBase extends Component {
                     filters.walkIn ? "Walk In: Yes" : "",
                 ],
                 columns,
-                rows.map((order) => [
-                    order.id || "",
-                    order.shop || "",
-                    order.isWalkIn ? "Yes" : "No",
-                    order.shopId || "",
-                    order.bookerId || "",
-                    order.booker || "",
-                    order.date || "",
-                    financial ? (order.total || "") : `${order.items || 0} units`,
-                    order.status || "",
-                ]),
+                rows.map((order) => ({
+                    cells: [
+                        order.id || "",
+                        order.shop || "",
+                        order.isWalkIn ? "Yes" : "No",
+                        order.shopId || "",
+                        order.bookerId || "",
+                        order.booker || "",
+                        order.date || "",
+                        financial ? (order.total || "") : `${order.items || 0} units`,
+                        order.status || "",
+                    ],
+                    lines: skuLinesByOrder[order.odoo_id] || [],
+                })),
             );
         } catch (error) {
             this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
@@ -4099,6 +4387,7 @@ export class OperationsBase extends Component {
                     this._printFilter("Stock", stockLabels[filters.state]),
                     this._printFilter("Field", fieldLabels[filters.field_state]),
                     this._printFilter("Schedule", scheduleLabels[filters.schedule]),
+                    filters.walkIn ? "Walk In: Yes" : "",
                 ],
                 columns,
                 rows.map((job) => {
@@ -4128,9 +4417,10 @@ export class OperationsBase extends Component {
                     this._printFilter("Delivery man", filters.dm !== "all" ? this._lookupName(this.state.lookupDeliveryMen, filters.dm) : ""),
                     this._printFilter("From", filters.dateFrom),
                     this._printFilter("To", filters.dateTo),
+                    this._printFilter("State", filters.state && filters.state !== "all" ? this.recoveryStateLabel(filters.state) : ""),
                 ],
-                ["Payment", "Date", "Shop", "Delivery Man", "Amount"],
-                rows.map((pay) => [pay.name || "", pay.date || "", pay.shop || "", pay.dm || "", this.formatMoney(pay.amount)]),
+                ["Payment", "Date", "Shop", "Delivery Man", "Amount", "State"],
+                rows.map((pay) => [pay.name || "", pay.date || "", pay.shop || "", pay.dm || "", this.formatMoney(pay.amount), this.recoveryStateLabel(pay.state)]),
             );
         } catch (error) {
             this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
@@ -4150,11 +4440,12 @@ export class OperationsBase extends Component {
                 [
                     this._printFilter("Search", filters.search),
                     this._printFilter("Delivery man", filters.dm !== "all" ? this._lookupName(this.state.lookupDeliveryMen, filters.dm) : ""),
+                    this._printFilter("Journal", filters.journal !== "all" ? this._lookupName(this.state.lookupJournals, filters.journal) : ""),
                     this._printFilter("From", filters.dateFrom),
                     this._printFilter("To", filters.dateTo),
                 ],
                 ["Date", "Delivery Man", "Amount", "Journal", "Settled By", "State"],
-                rows.map((row) => [row.date || "", row.dm || "", this.formatMoney(row.amount), row.journal || "", row.settledBy || "", row.state || ""]),
+                rows.map((row) => [row.date || "", row.dm || "", this.formatMoney(row.amount), row.journal || "", row.settledBy || "", this.settlementStateLabel(row.state)]),
             );
         } catch (error) {
             this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
