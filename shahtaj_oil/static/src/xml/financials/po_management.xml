@@ -805,7 +805,7 @@
                                                         <button class="btn btn-sm btn-success fw-bold text-white me-1" t-on-click="() => this.toggleArchiveVendor(vendor, true)" title="Restore Vendor">
                                                             <i class="fa fa-undo me-1"></i> Restore
                                                         </button>
-                                                        <button class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.deleteVendor(vendor)" title="Delete Vendor">
+                                                        <button t-if="!this.isKpo" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.deleteVendor(vendor)" title="Delete Vendor">
                                                             <i class="fa fa-trash"></i>
                                                         </button>
                                                     </t>
@@ -813,7 +813,7 @@
                                                         <button class="btn btn-sm btn-outline-warning text-dark fw-bold me-1" t-on-click="() => this.toggleArchiveVendor(vendor, false)" title="Archive Vendor">
                                                             <i class="fa fa-archive me-1"></i> Archive
                                                         </button>
-                                                        <button class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.deleteVendor(vendor)" title="Delete Vendor">
+                                                        <button t-if="!this.isKpo" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.deleteVendor(vendor)" title="Delete Vendor">
                                                             <i class="fa fa-trash"></i>
                                                         </button>
                                                     </t>
@@ -863,7 +863,7 @@
                                             <i class="fa fa-undo me-1"></i> Restore Vendor
                                         </button>
                                     </t>
-                                    <button class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.deleteVendor(this.state.selectedVendor)">
+                                    <button t-if="!this.isKpo" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.deleteVendor(this.state.selectedVendor)">
                                         <i class="fa fa-trash me-1"></i> Delete Vendor
                                     </button>
                                 </div>

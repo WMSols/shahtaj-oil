@@ -169,7 +169,7 @@ export class WarehouseInventory extends Component {
 
             if (tab === 'inventory' || tab === 'management') {
                 model = 'product.template';
-                fields = ["id", "name", "categ_id", "qty_available", "uom_name", "type", "is_storable", "list_price", "standard_price", "shahtaj_vendor_id", "shahtaj_vendor_name", "barcode", "weight", "volume", "invoice_policy", "image_1920", "shahtaj_qty_bookable", "virtual_available", "shahtaj_sale_uom", "shahtaj_kg_per_unit", "taxes_id", "active"];
+                fields = ["id", "name", "categ_id", "qty_available", "uom_name", "type", "is_storable", "list_price", "standard_price", "shahtaj_vendor_id", "shahtaj_vendor_name", "barcode", "weight", "volume", "invoice_policy", "image_1920", "shahtaj_qty_bookable", "shahtaj_qty_received", "shahtaj_qty_sold", "virtual_available", "shahtaj_sale_uom", "shahtaj_kg_per_unit", "taxes_id", "active"];
                 domain = [['sale_ok', '=', true], ['default_code', '!=', 'SHAHTAJ-LEGACY'], ['active', '=', true]];
                 
                 if (filters.search) domain.push(['name', 'ilike', filters.search]);
@@ -222,6 +222,13 @@ export class WarehouseInventory extends Component {
 
     get showPrices() {
         return showPrices();
+    }
+
+    formatStockQty(value) {
+        return (Number(value) || 0).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
     }
 
     get productListColspan() {

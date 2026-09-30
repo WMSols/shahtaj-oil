@@ -463,10 +463,14 @@ class ProductTemplate(models.Model):
         if float_compare(qty, 0.0, precision_rounding=self.uom_id.rounding) <= 0:
             return
         variant = self.product_variant_id
-        # Receipt ACL is on the financial group; stock add is allowed for all
-        # distributors via portal, so log with elevated rights only here.
+        # Receipt ACL stays on the financial group. Distributors and KPO still
+        # receive stock from the portal, so log with elevated rights only here.
         Receipt = self.env['shahtaj.stock.receipt']
-        if self.env.user.has_group('shahtaj_oil.group_shahtaj_office_ops'):
+        user = self.env.user
+        if (
+            user.has_group('shahtaj_oil.group_shahtaj_office_ops')
+            or user.has_group('shahtaj_oil.group_shahtaj_kpo')
+        ):
             Receipt = Receipt.sudo()
         Receipt.create({
             'product_id': variant.id,

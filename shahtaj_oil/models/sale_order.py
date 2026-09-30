@@ -801,28 +801,37 @@ class SaleOrder(models.Model):
         self.ensure_one()
         self._shahtaj_assert_not_cancelled()
         user = self.env.user
+        warehouse_only = user.has_group('shahtaj_oil.group_shahtaj_warehouse') and not (
+            user.has_group('shahtaj_oil.group_shahtaj_distributor_financial')
+            or user.has_group('account.group_account_invoice')
+            or user.has_group('base.group_system')
+        )
         if not (
             user.has_group('shahtaj_oil.group_shahtaj_distributor_financial')
             or user.has_group('account.group_account_invoice')
             or user.has_group('base.group_system')
+            or user.has_group('shahtaj_oil.group_shahtaj_warehouse')
         ):
             raise AccessError(_('You need financial access to create invoices.'))
         if self.state not in ('sale', 'done'):
             raise UserError(_('Confirm the sales order before invoicing.'))
 
-        posted = self._shahtaj_posted_customer_invoices()
+        # Warehouse can dispatch and invoice, but has no accounting write ACL.
+        order = self.sudo() if warehouse_only else self
+
+        posted = order._shahtaj_posted_customer_invoices()
         if posted:
             return posted.ids
 
-        drafts = self.invoice_ids.filtered(
+        drafts = order.invoice_ids.filtered(
             lambda move: move.state == 'draft' and move.move_type == 'out_invoice'
         )
         if drafts:
             drafts.action_post()
             return drafts.ids
 
-        self._shahtaj_prepare_lines_for_order_invoice()
-        invoices = self._create_invoices(final=False)
+        order._shahtaj_prepare_lines_for_order_invoice()
+        invoices = order._create_invoices(final=False)
         if not invoices:
             raise UserError(_(
                 'No invoiceable quantity on %(order)s after switching to ordered quantities.',
@@ -1119,6 +1128,7 @@ class SaleOrder(models.Model):
         return (
             user.has_group('shahtaj_oil.group_shahtaj_office_ops')
             or user.has_group('shahtaj_oil.group_shahtaj_kpo')
+            or user.has_group('shahtaj_oil.group_shahtaj_warehouse')
         )
 
     def _compute_delivery_status(self):

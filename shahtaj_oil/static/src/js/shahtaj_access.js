@@ -46,19 +46,24 @@ const ROLE_ACCESS = {
             ["operations", "deliveries", "settlements"],
             ["financials", "invoices"],
             ["financials", "credit"],
+            ["financials", "po_management"],
         ],
         cards: ["orders", "invoices"],
         canMutate: false,
+        canSettleWallet: true,
     },
     warehouse: {
         allow: [
             ["staff", "delivery_man"],
+            ["operations", "deliveries", "dispatch"],
             ["operations", "deliveries", "jobs"],
+            ["operations", "deliveries", "sessions"],
             ["warehouse", "inventory"],
             ["warehouse", "management"],
         ],
         cards: ["deliveryMen", "deliveryJobs", "warehouse"],
         canMutate: false,
+        canDispatchOrders: true,
         showPrices: false,
     },
 };
@@ -279,6 +284,22 @@ export function defaultHome() {
 
 export function canMutate() {
     return currentConfig().canMutate !== false;
+}
+
+export function canSettleWallet() {
+    const config = currentConfig();
+    if (config.canSettleWallet !== undefined) {
+        return config.canSettleWallet;
+    }
+    return canMutate();
+}
+
+export function canDispatchOrders() {
+    const config = currentConfig();
+    if (config.canDispatchOrders !== undefined) {
+        return config.canDispatchOrders;
+    }
+    return canMutate();
 }
 
 export function showPrices() {

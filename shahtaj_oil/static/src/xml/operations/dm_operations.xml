@@ -226,12 +226,12 @@
                                             </td>
                                             <td><t t-esc="row.dmJobCount"/></td>
                                             <td class="text-end pe-4">
-                                                <button t-if="this.canMutate and this.canCreateInvoice(row)" class="btn btn-sm btn-success text-white fw-bold me-1" t-on-click="() => this.createInvoiceFromDispatch(row)" t-att-disabled="this.state.isCreatingInvoice">Invoice</button>
+                                                <button t-if="this.canDispatchOrders and this.canCreateInvoice(row)" class="btn btn-sm btn-success text-white fw-bold me-1" t-on-click="() => this.createInvoiceFromDispatch(row)" t-att-disabled="this.state.isCreatingInvoice">Invoice</button>
                                                 <button t-if="this.canConfirmDraftInvoice(row)" class="btn btn-sm btn-success text-white fw-bold me-1" t-on-click="() => this.confirmDraftInvoiceFromDispatch(row)" t-att-disabled="this.state.isConfirmingInvoice" title="Post this draft invoice so the order can be dispatched.">
                                                     <t t-if="this.state.confirmingInvoiceOrderId === row.odoo_id">Confirming...</t>
                                                     <t t-else="">Confirm</t>
                                                 </button>
-                                                <button t-if="this.canMutate and this.canAssignDeliveryMan(row)" class="btn btn-sm btn-dark text-white fw-bold me-1" t-on-click="() => this.openAssignModal(row.odoo_id)">Assign / Split</button>
+                                                <button t-if="this.canDispatchOrders and this.canAssignDeliveryMan(row)" class="btn btn-sm btn-dark text-white fw-bold me-1" t-on-click="() => this.openAssignModal(row.odoo_id)">Assign / Split</button>
                                                 <button t-if="this.canMutate and !row.dmJobCount and row.hasPostedInvoice and row.status !== 'Cancelled'" class="btn btn-sm btn-outline-primary fw-bold me-1" t-on-click="() => this.openDeliveryCustom(row.odoo_id)">Mark Delivery</button>
                                                 <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewDelivery(row)">View</button>
                                             </td>
@@ -545,7 +545,7 @@
                         <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printSettlements" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                             <i class="fa fa-print me-1"/> Print
                         </button>
-                        <button t-if="this.canMutate" class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openSettleModal()">Settle Wallet</button>
+                        <button t-if="this.canSettleWallet" class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openSettleModal()">Settle Wallet</button>
                     </div>
                     <div class="position-relative">
                         <t t-if="this.state.isLoadingList">
@@ -605,7 +605,7 @@
                     <div class="p-4">
                         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                             <button class="btn btn-sm btn-light border fw-bold" t-on-click="closeRecovery">← Back to Recovery</button>
-                            <button t-if="this.canMutate" class="btn btn-sm btn-dark text-white fw-bold"
+                            <button t-if="this.canSettleWallet" class="btn btn-sm btn-dark text-white fw-bold"
                                     t-on-click="openRecoverySettle"
                                     t-att-disabled="!this.state.selectedRecovery.dmId">
                                 Settle Wallet
@@ -689,10 +689,10 @@
 
                         <div class="d-flex align-items-center gap-2">
                             <t t-if="!this.state.isEditingDelivery">
-                                <button t-if="this.canMutate and this.state.deliveriesSubTab === 'dispatch' and this.canAssignDeliveryMan(this.state.selectedDelivery)" class="btn btn-sm btn-dark text-white shadow-sm fw-bold px-3" t-on-click="() => this.openAssignModal(this.state.selectedDelivery.odoo_id)">Assign / Split</button>
+                                <button t-if="this.canDispatchOrders and this.state.deliveriesSubTab === 'dispatch' and this.canAssignDeliveryMan(this.state.selectedDelivery)" class="btn btn-sm btn-dark text-white shadow-sm fw-bold px-3" t-on-click="() => this.openAssignModal(this.state.selectedDelivery.odoo_id)">Assign / Split</button>
 
                                     <!-- Create Invoice Button -->
-                                <t t-if="this.canMutate and this.canCreateInvoice(this.state.selectedDelivery)">
+                                <t t-if="this.canDispatchOrders and this.canCreateInvoice(this.state.selectedDelivery)">
                                     <button class="btn btn-sm btn-success text-white shadow-sm fw-bold px-3" t-on-click="createInvoiceFromDelivery" t-att-disabled="this.state.isCreatingInvoice" title="Invoice ordered quantities, then post. Required before assigning a delivery man.">
                                         <t t-if="this.state.isCreatingInvoice">
                                             <span class="spinner-border spinner-border-sm me-1"/>
@@ -1256,7 +1256,7 @@
                         </div>
                         <div class="p-4 pt-0 d-flex justify-content-end gap-2">
                             <button class="btn btn-outline-secondary fw-bold" t-on-click="closeSettle">Cancel</button>
-                            <button t-if="this.canMutate" class="btn btn-dark text-white fw-bold" t-on-click="confirmSettle" t-att-disabled="this.state.settleModal.saving">Confirm</button>
+                            <button t-if="this.canSettleWallet" class="btn btn-dark text-white fw-bold" t-on-click="confirmSettle" t-att-disabled="this.state.settleModal.saving">Confirm</button>
                         </div>
                     </div>
                 </div>

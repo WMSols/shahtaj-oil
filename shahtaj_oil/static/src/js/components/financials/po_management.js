@@ -2,7 +2,7 @@
 
 import { Component, useState, onWillStart, onWillUpdateProps, onWillUnmount } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { hasFinancialAccess, notifyPortalBusy } from "../../shahtaj_access";
+import { canSee, hasFinancialAccess, notifyPortalBusy, portalAccessState } from "../../shahtaj_access";
 import { printFilter, printListPdf } from "../../shahtaj_list_export";
 import { ConfirmModal } from "../confirm_modal";
 import {
@@ -130,7 +130,7 @@ export class PoManagement extends Component {
             await this._consumePendingPoPrefill();
         });
         onWillStart(async () => {
-            if (!hasFinancialAccess()) {
+            if (!hasFinancialAccess() && !canSee("financials", "po_management")) {
                 return;
             }
             await this.loadLookups();
@@ -614,7 +614,14 @@ export class PoManagement extends Component {
         });
     }
 
+    get isKpo() {
+        return portalAccessState.role === "kpo";
+    }
+
     async deleteVendor(vendor) {
+        if (this.isKpo) {
+            return;
+        }
         this.showConfirm(
             "Delete Vendor",
             `Are you sure you want to permanently delete vendor "${vendor.name}"?\n\nNote: If this vendor has existing purchase orders or invoices, they cannot be deleted and should be archived instead.`,

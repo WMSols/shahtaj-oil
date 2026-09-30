@@ -330,6 +330,19 @@ class ResUsers(models.Model):
             or self.has_group('shahtaj_oil.group_shahtaj_native_distributor_ui')
         )
 
+    def _shahtaj_can_manage_dm_ops(self):
+        """Office desks that may plan/assign/load/return DM jobs (not wallet).
+
+        Dist/Manager (office_ops / native_distributor_ui) and Warehouse Incharge.
+        KPO is intentionally excluded — wallet/print only.
+        """
+        self.ensure_one()
+        return (
+            self.has_group('shahtaj_oil.group_shahtaj_office_ops')
+            or self.has_group('shahtaj_oil.group_shahtaj_warehouse')
+            or self.has_group('shahtaj_oil.group_shahtaj_native_distributor_ui')
+        )
+
     _SHAHTAJ_USER_FORM_FIELDS = (
         'shahtaj_custom_frontend',
         'shahtaj_distributor_financial_access',
@@ -728,6 +741,13 @@ class ResUsers(models.Model):
                 )
                 if kpo_acl:
                     commands.append((4, kpo_acl.id))
+                # Needed for vendor bill form fields (groups=account_invoice|readonly).
+                account_invoice = self.env.ref(
+                    'account.group_account_invoice',
+                    raise_if_not_found=False,
+                )
+                if account_invoice:
+                    commands.append((4, account_invoice.id))
             elif is_warehouse and native_warehouse_ui:
                 commands = [
                     (3, custom_group.id),
@@ -895,6 +915,15 @@ class ResUsers(models.Model):
                     desired.discard(warehouse_acl.id)
                 if kpo_acl:
                     desired.add(kpo_acl.id)
+                # Vendor bills / Pay need invoice-group fields on account.move
+                # (invoice_has_outstanding, payment widgets, …). Keep this without
+                # Dist native_apps (Purchase/Sales/Stock managers stay stripped).
+                account_invoice = self.env.ref(
+                    'account.group_account_invoice',
+                    raise_if_not_found=False,
+                )
+                if account_invoice:
+                    desired.add(account_invoice.id)
             if is_warehouse:
                 if office_ops:
                     desired.discard(office_ops.id)

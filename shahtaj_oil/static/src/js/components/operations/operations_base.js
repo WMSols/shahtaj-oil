@@ -3,7 +3,9 @@
 import { Component, useState, onWillStart, onWillUpdateProps, useEffect, useRef } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import {
+    canDispatchOrders,
     canMutate,
+    canSettleWallet,
     canSee,
     defaultDeliveriesSub,
     hasFinancialAccess,
@@ -1400,7 +1402,7 @@ export class OperationsBase extends Component {
     }
 
     canCreateInvoice(row) {
-        if (!this.hasFinancialAccess || !row) return false;
+        if (!this.canDispatchOrders || !row) return false;
         if (["Draft", "Needs Verification", "Rejected", "Cancelled"].includes(row.status)) return false;
         if (row.orderState === "cancel") return false;
         if (row.draftInvoiceId) return false;
@@ -1409,7 +1411,7 @@ export class OperationsBase extends Component {
     }
 
     canConfirmDraftInvoice(row) {
-        return !!(this.canMutate && this.hasFinancialAccess && row && row.draftInvoiceId && !row.hasPostedInvoice);
+        return !!(this.canDispatchOrders && row && row.draftInvoiceId && !row.hasPostedInvoice);
     }
 
     canAssignDeliveryMan(row) {
@@ -1962,6 +1964,14 @@ export class OperationsBase extends Component {
         return canMutate();
     }
 
+    get canSettleWallet() {
+        return canSettleWallet();
+    }
+
+    get canDispatchOrders() {
+        return canDispatchOrders();
+    }
+
     get showPrices() {
         return showPrices();
     }
@@ -2061,7 +2071,7 @@ export class OperationsBase extends Component {
     }
 
     async createInvoiceFromDelivery() {
-        if (!hasFinancialAccess()) {
+        if (!this.canDispatchOrders) {
             return;
         }
         if (!this.state.selectedDelivery || this.state.isCreatingInvoice) return;
@@ -2097,7 +2107,7 @@ export class OperationsBase extends Component {
         this.state.isConfirmingInvoice = true;
         this.state.confirmingInvoiceOrderId = row.odoo_id;
         try {
-            await this.orm.call("account.move", "action_post", [[row.draftInvoiceId]]);
+            await this.invoiceSaleOrder(row.odoo_id);
             this.notification.add("Invoice confirmed. You can assign a delivery man.", { type: "success" });
             if (this.state.selectedDelivery && this.state.selectedDelivery.odoo_id === row.odoo_id) {
                 await this._refreshPostedInvoiceFlag(this.state.selectedDelivery, row.odoo_id);
@@ -2164,17 +2174,23 @@ export class OperationsBase extends Component {
                 };
             });
 
-            const orderData = await this.orm.read("sale.order", [dlv.odoo_id], [
+            const orderFields = [
                 "amount_untaxed", "amount_tax", "amount_total", "invoice_status", "invoice_ids", "state",
-                "shahtaj_shop_category", "shahtaj_shop_credit_limit", "shahtaj_shop_outstanding",
-                "shahtaj_shop_pending_exposure", "shahtaj_shop_uninvoiced_exposure",
-                "shahtaj_shop_effective_outstanding", "shahtaj_shop_credit_remaining",
-                "shahtaj_shop_credit_would_exceed", "shahtaj_shop_credit_shortfall",
-                "shahtaj_shop_lifetime_sales", "shahtaj_shop_confirmed_order_count",
-                "shahtaj_shop_past_discount_total", "shahtaj_shop_past_discount_count",
-                "shahtaj_shop_last_discount_date", "shahtaj_shop_last_discount_amount",
-                "payment_term_id", "shahtaj_approval_state",
-            ]);
+                "shahtaj_shop_category", "shahtaj_approval_state",
+            ];
+            if (this.hasFinancialAccess) {
+                orderFields.push(
+                    "shahtaj_shop_credit_limit", "shahtaj_shop_outstanding",
+                    "shahtaj_shop_pending_exposure", "shahtaj_shop_uninvoiced_exposure",
+                    "shahtaj_shop_effective_outstanding", "shahtaj_shop_credit_remaining",
+                    "shahtaj_shop_credit_would_exceed", "shahtaj_shop_credit_shortfall",
+                    "shahtaj_shop_lifetime_sales", "shahtaj_shop_confirmed_order_count",
+                    "shahtaj_shop_past_discount_total", "shahtaj_shop_past_discount_count",
+                    "shahtaj_shop_last_discount_date", "shahtaj_shop_last_discount_amount",
+                    "payment_term_id",
+                );
+            }
+            const orderData = await this.orm.read("sale.order", [dlv.odoo_id], orderFields);
             if (orderData.length > 0) {
                 dlv.amount_untaxed = orderData[0].amount_untaxed;
                 dlv.amount_tax = orderData[0].amount_tax;
@@ -3166,6 +3182,9 @@ export class OperationsBase extends Component {
     }
 
     async openSettleModal(dmId = "", dmName = "") {
+        if (!this.canSettleWallet) {
+            return;
+        }
         this.state.settleModal.saving = true;
         try {
             const journals = await this._ensureSettleJournals();
@@ -3220,6 +3239,9 @@ export class OperationsBase extends Component {
     }
 
     async confirmSettle() {
+        if (!this.canSettleWallet) {
+            return;
+        }
         const dmId = parseInt(this.state.settleModal.dmId, 10);
         if (!dmId) {
             this.notification.add("Select a delivery man to settle.", { type: "warning" });

@@ -339,6 +339,8 @@
                     <thead class="bg-light text-uppercase small fw-bold text-muted">
                         <tr>
                             <th class="border-top-0 ps-4 py-3">Product Name</th>
+                            <th class="border-top-0 py-3 text-end" title="Total stock received into the warehouse">Received</th>
+                            <th class="border-top-0 py-3 text-end" title="Quantity delivered to shops from confirmed sales orders">Sold</th>
                             <th class="border-top-0 py-3 text-end" title="Total physical units located in the warehouse">On-Hand Qty</th>
                             <th class="border-top-0 py-3 text-end" title="Units bookers can still sell: On-Hand minus open visit carts and undelivered confirmed sales orders">Available to Book</th>
                             <!-- <th class="border-top-0 py-3 text-end" title="Predicted future stock based on incoming/outgoing orders">Forecast</th> -->
@@ -348,7 +350,7 @@
                     <tbody>
                         <t t-if="this.state.tableStock.length === 0 and !this.state.isLoadingList">
                                 <tr>
-                                    <td t-att-colspan="this.showPrices ? 4 : 3" class="text-center py-5 text-muted fw-bold">No stock matches your search or filter criteria.</td>
+                                    <td t-att-colspan="this.showPrices ? 6 : 5" class="text-center py-5 text-muted fw-bold">No stock matches your search or filter criteria.</td>
                                 </tr>
                             </t>
                         <t t-foreach="this.state.tableStock" t-as="item" t-key="item.id">
@@ -360,15 +362,23 @@
                                     </t>
                                 </td>
                                 <td class="text-end fw-bold">
+                                    <t t-esc="this.formatStockQty(item.shahtaj_qty_received)"/>
+                                    <span class="text-muted small ms-1"><t t-esc="item.uom_name"/></span>
+                                </td>
+                                <td class="text-end fw-bold">
+                                    <t t-esc="this.formatStockQty(item.shahtaj_qty_sold)"/>
+                                    <span class="text-muted small ms-1"><t t-esc="item.uom_name"/></span>
+                                </td>
+                                <td class="text-end fw-bold">
                                     <span t-attf-class="#{item.qty_available &lt;= 0 ? 'text-danger' : 'text-dark'}">
-                                        <t t-esc="item.qty_available || 0"/>
+                                        <t t-esc="this.formatStockQty(item.qty_available)"/>
                                     </span>
                                     <span class="text-muted small ms-1">
                                         <t t-esc="item.uom_name"/>
                                     </span>
                                 </td>
                                 <td class="text-end text-primary fw-bold">
-                                    <t t-esc="item.shahtaj_qty_bookable || 0"/>
+                                    <t t-esc="this.formatStockQty(item.shahtaj_qty_bookable)"/>
                                     <span class="text-muted small ms-1">
                                         <t t-esc="item.uom_name"/>
                                     </span>
