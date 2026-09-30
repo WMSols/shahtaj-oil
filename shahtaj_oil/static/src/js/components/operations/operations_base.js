@@ -2,7 +2,15 @@
 
 import { Component, useState, onWillStart, onWillUpdateProps, useEffect, useRef } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { hasFinancialAccess, notifyPortalBusy } from "../../shahtaj_access";
+import {
+    canMutate,
+    canSee,
+    defaultDeliveriesSub,
+    hasFinancialAccess,
+    loadPortalAccess,
+    notifyPortalBusy,
+    showPrices,
+} from "../../shahtaj_access";
 import { ConfirmModal } from "../confirm_modal";
 import { printListPdf } from "../../shahtaj_list_export";
 import {
@@ -49,7 +57,7 @@ export class OperationsBase extends Component {
             
             
             selectedDelivery: null,
-            deliveriesSubTab: this.props.requestedDeliveriesSubTab === 'manual' ? 'dispatch' : (this.props.requestedDeliveriesSubTab || 'dispatch'),
+            deliveriesSubTab: this._initialDeliveriesSub(),
             selectedDmJob: null,
             selectedSettlement: null,
             selectedRecovery: null,
@@ -203,6 +211,13 @@ export class OperationsBase extends Component {
         this.debouncedFetchActiveList = this.debounceSearch(() => this.fetchActiveList(), 400);
 
         onWillStart(async () => {
+            await loadPortalAccess();
+            if (!canSee("operations", "deliveries", this.state.deliveriesSubTab)) {
+                this.state.deliveriesSubTab = defaultDeliveriesSub();
+            }
+            if (!canMutate() && this.state.ordersSubTab === "verification") {
+                this.state.ordersSubTab = "live";
+            }
             // Catalogs are large on production; do not block Live Orders on them.
             await Promise.all([
                 this.loadDropdownData(),
@@ -1491,8 +1506,13 @@ export class OperationsBase extends Component {
             fields = [
                 'id', 'display_name', 'delivery_man_id', 'partner_id', 'sale_order_id',
                 'order_booker_id', 'scheduled_date', 'state', 'field_state',
-                'amount_total', 'shop_outstanding_balance', 'assignment_mode', 'gps_verified',
+                'assignment_mode', 'gps_verified',
             ];
+            // Shop balance compute writes shop_invoice_ids (account.move). Warehouse
+            // cannot read journal entries, so skip it unless this user has financial access.
+            if (this.hasFinancialAccess) {
+                fields.push('amount_total', 'shop_outstanding_balance');
+            }
             if (filters.search) {
                 domain.push('|', '|', '|',
                     ['display_name', 'ilike', filters.search],
@@ -1616,7 +1636,12 @@ export class OperationsBase extends Component {
             const targetState = listQuery.targetState;
 
 
-            if ((tab === 'collections' || tab === 'settlements') && !this.hasFinancialAccess) {
+            if (tab === 'collections' && !this.canSeeDelivery('recovery')) {
+                this.state.isLoadingList = false;
+                notifyPortalBusy(false);
+                return;
+            }
+            if (tab === 'settlements' && !this.canSeeDelivery('settlements')) {
                 this.state.isLoadingList = false;
                 notifyPortalBusy(false);
                 return;
@@ -1811,6 +1836,28 @@ export class OperationsBase extends Component {
 
     get hasFinancialAccess() {
         return hasFinancialAccess();
+    }
+
+    get canMutate() {
+        return canMutate();
+    }
+
+    get showPrices() {
+        return showPrices();
+    }
+
+    canSeeDelivery(inner) {
+        return canSee("operations", "deliveries", inner);
+    }
+
+    _initialDeliveriesSub() {
+        const requested = this.props.requestedDeliveriesSubTab === "manual"
+            ? "dispatch"
+            : (this.props.requestedDeliveriesSubTab || "");
+        if (requested && canSee("operations", "deliveries", requested)) {
+            return requested;
+        }
+        return defaultDeliveriesSub();
     }
 
     /**
@@ -2171,6 +2218,9 @@ export class OperationsBase extends Component {
 
     setDeliveriesSubTab(tabName) {
         if (tabName === 'manual') tabName = 'dispatch';
+        if (!canSee("operations", "deliveries", tabName)) {
+            tabName = defaultDeliveriesSub();
+        }
         this.state.deliveriesSubTab = tabName;
         this.state.selectedDelivery = null;
         this.state.selectedDmJob = null;
@@ -2598,17 +2648,23 @@ export class OperationsBase extends Component {
 
     async viewDmJob(job) {
         this.state.dmJobSections = { delivery: true, order: true, shop: false, gps: false, products: true };
-        const [detail, lines] = await Promise.all([
-            this.orm.read("shahtaj.dm.delivery", [job.id], [
-                "display_name", "delivery_man_id", "scheduled_date", "scheduled_time",
-                "picked_at", "delivered_at", "state", "field_state", "assignment_mode",
-                "assigned_by_id", "amount_total", "qty_assigned_total", "invoice_status",
-                "sale_order_id", "partner_id", "order_booker_id", "order_date", "notes",
-                "shop_category", "shop_outstanding_balance", "shop_unpaid_invoice_amount",
+        const detailFields = [
+            "display_name", "delivery_man_id", "scheduled_date", "scheduled_time",
+            "picked_at", "delivered_at", "state", "field_state", "assignment_mode",
+            "assigned_by_id", "qty_assigned_total",
+            "sale_order_id", "partner_id", "order_booker_id", "order_date", "notes",
+            "gps_verified", "check_in_distance_m", "receiver_name",
+            "check_in_latitude", "check_in_longitude", "has_delivery_proof", "delivery_proof_image",
+        ];
+        if (this.hasFinancialAccess) {
+            detailFields.push(
+                "amount_total", "invoice_status", "shop_category",
+                "shop_outstanding_balance", "shop_unpaid_invoice_amount",
                 "shop_credit_limit", "shop_unpaid_invoice_count", "shop_invoice_count",
-                "gps_verified", "check_in_distance_m", "receiver_name",
-                "check_in_latitude", "check_in_longitude", "has_delivery_proof", "delivery_proof_image",
-            ]),
+            );
+        }
+        const [detail, lines] = await Promise.all([
+            this.orm.read("shahtaj.dm.delivery", [job.id], detailFields),
             this.orm.searchRead(
                 "shahtaj.dm.delivery.line",
                 [["delivery_id", "=", job.id]],
@@ -3207,6 +3263,9 @@ export class OperationsBase extends Component {
     }
 
     setOrdersSubTab(tabName) {
+        if (tabName === "verification" && !canMutate()) {
+            return;
+        }
         this.state.ordersSubTab = tabName;
         this.state.selectedOrder = null;
         this.state.shopSnapshotOpen = false;
@@ -4028,8 +4087,8 @@ export class OperationsBase extends Component {
             const rows = await this._loadMappedPrintRows("dm_jobs");
             const financial = this.hasFinancialAccess;
             const columns = ["Job", "Date", "Order", "Shop", "Delivery Man", "Booker"];
-            if (financial) columns.push("Amount");
-            columns.push("Shop Due", "Stock", "Field");
+            if (financial) columns.push("Amount", "Shop Due");
+            columns.push("Stock", "Field");
             await this._openListPrint(
                 "Delivery Jobs",
                 [
@@ -4044,8 +4103,8 @@ export class OperationsBase extends Component {
                 columns,
                 rows.map((job) => {
                     const cells = [job.name || "", job.date || "", job.order || "", job.shop || "", job.dm || "", job.booker || ""];
-                    if (financial) cells.push(this.formatMoney(job.amount));
-                    cells.push(this.formatMoney(job.shopDue), this.stockStateLabel(job.state), this.fieldStateLabel(job.fieldState));
+                    if (financial) cells.push(this.formatMoney(job.amount), this.formatMoney(job.shopDue));
+                    cells.push(this.stockStateLabel(job.state), this.fieldStateLabel(job.fieldState));
                     return cells;
                 }),
             );
@@ -4057,7 +4116,7 @@ export class OperationsBase extends Component {
     }
 
     async printRecovery() {
-        if (this.state.isPrintingList || !this.hasFinancialAccess) return;
+        if (this.state.isPrintingList || !this.canSeeDelivery("recovery")) return;
         this.state.isPrintingList = true;
         try {
             const filters = this.state.filters.collections || {};
@@ -4081,7 +4140,7 @@ export class OperationsBase extends Component {
     }
 
     async printSettlements() {
-        if (this.state.isPrintingList || !this.hasFinancialAccess) return;
+        if (this.state.isPrintingList || !this.canSeeDelivery("settlements")) return;
         this.state.isPrintingList = true;
         try {
             const filters = this.state.filters.settlements || {};

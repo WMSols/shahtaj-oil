@@ -11,7 +11,7 @@
                 Live Orders
             </button>
         </li>
-        <li class="nav-item">
+        <li class="nav-item" t-if="this.canMutate">
             <button t-on-click="() => this.setOrdersSubTab('verification')" t-attf-class="nav-link bg-transparent border-0 fw-bold pb-2 fs-6 d-inline-flex align-items-center #{this.state.ordersSubTab === 'verification' ? 'text-warning border-bottom border-warning border-3 rounded-0' : 'text-muted'}">
                 Needs Verification
                 <span t-if="this.state.verificationCount &gt; 0" class="ms-2 fw-bold text-white" style="background-color: #ea580c; border-radius: 999px; min-width: 1.4rem; height: 1.4rem; padding: 0 0.4rem; font-size: 0.75rem; line-height: 1.4rem; display: inline-block; text-align: center;"><t t-esc="this.state.verificationCount"/></span>
@@ -46,7 +46,7 @@
                 <input type="date" class="form-control" t-model="this.state.saleOrderForm.date_order"/>
             </div>
             <div class="col-md-4 d-flex align-items-end">
-                <button class="btn btn-success fw-bold text-white" t-on-click="saveSaleOrder" t-att-disabled="this.state.isSavingSaleOrder">
+                <button t-if="this.canMutate" class="btn btn-success fw-bold text-white" t-on-click="saveSaleOrder" t-att-disabled="this.state.isSavingSaleOrder">
                     <t t-if="this.state.isSavingSaleOrder">
                         <span class="spinner-border spinner-border-sm me-2"/> Saving...
                     </t>
@@ -103,13 +103,13 @@
                                 </select>
                             </td>
                             <td class="text-end pe-3">
-                                <button class="btn btn-sm btn-outline-danger" t-on-click="() => this.removeSaleOrderLine(line.id)">Remove</button>
+                                <button t-if="this.canMutate" class="btn btn-sm btn-outline-danger" t-on-click="() => this.removeSaleOrderLine(line.id)">Remove</button>
                             </td>
                         </tr>
                     </t>
                     <tr>
                         <td t-att-colspan="this.hasFinancialAccess ? 6 : 4" class="ps-3 py-3">
-                            <button class="btn btn-sm btn-outline-primary fw-bold" t-on-click="addSaleOrderLine">
+                            <button t-if="this.canMutate" class="btn btn-sm btn-outline-primary fw-bold" t-on-click="addSaleOrderLine">
                                 <i class="fa fa-plus me-1"></i> Add Product Line
                             </button>
                         </td>
@@ -160,7 +160,7 @@
                         <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printLiveOrders" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                             <i class="fa fa-print me-1"/> Print
                         </button>
-                        <button class="btn btn-sm btn-dark fw-bold text-white shadow-sm ms-auto" t-on-click="openSaleOrderForm">
+                        <button t-if="this.canMutate" class="btn btn-sm btn-dark fw-bold text-white shadow-sm ms-auto" t-on-click="openSaleOrderForm">
                             <i class="fa fa-plus me-1"></i> New Sales Order
                         </button>
                     </div>
@@ -213,7 +213,7 @@
                                             </td>
                                             <td class="align-middle text-end pe-4">
                                                 <button class="btn btn-sm btn-outline-dark fw-bold me-1" t-on-click="() => this.viewOrder(ord)">View Details →</button>
-                                                <button t-if="this.canCancelOrder(ord)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click.stop="() => this.requestCancelOrder(ord)" t-att-disabled="this.state.isCancellingOrder">Cancel</button>
+                                                <button t-if="this.canMutate and this.canCancelOrder(ord)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click.stop="() => this.requestCancelOrder(ord)" t-att-disabled="this.state.isCancellingOrder">Cancel</button>
                                             </td>
                                         </tr>
                                     </t>
@@ -251,7 +251,7 @@
 </div>
 <div class="d-flex align-items-center">
     <t t-if="this.state.selectedOrder.status === 'Draft'">
-        <button class="btn btn-sm btn-primary text-white shadow-sm fw-bold px-3 d-flex align-items-center me-2" t-on-click="confirmSelectedOrder" t-att-disabled="this.state.isConfirmingOrder" title="Confirm this draft sales order">
+        <button t-if="this.canMutate" class="btn btn-sm btn-primary text-white shadow-sm fw-bold px-3 d-flex align-items-center me-2" t-on-click="confirmSelectedOrder" t-att-disabled="this.state.isConfirmingOrder" title="Confirm this draft sales order">
             <t t-if="this.state.isConfirmingOrder">
                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                                             Confirming...
@@ -260,7 +260,7 @@
         </button>
     </t>
     <t t-if="this.canCreateInvoice(this.state.selectedOrder)">
-        <button class="btn btn-sm btn-success text-white shadow-sm fw-bold px-3 d-flex align-items-center" t-on-click="createInvoice" t-att-disabled="this.state.isCreatingInvoice" title="Invoice ordered quantities and post. Required before assigning a delivery man.">
+        <button t-if="this.canMutate" class="btn btn-sm btn-success text-white shadow-sm fw-bold px-3 d-flex align-items-center" t-on-click="createInvoice" t-att-disabled="this.state.isCreatingInvoice" title="Invoice ordered quantities and post. Required before assigning a delivery man.">
             <t t-if="this.state.isCreatingInvoice">
                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                                             Generating...
@@ -276,7 +276,7 @@
         </button>
     </t>
     <t t-if="this.canCancelOrder(this.state.selectedOrder)">
-        <button class="btn btn-sm btn-outline-danger fw-bold px-3 d-flex align-items-center ms-2" t-on-click="() => this.requestCancelOrder(this.state.selectedOrder)" t-att-disabled="this.state.isCancellingOrder" title="Cancel this order. Cancelled orders cannot be invoiced or delivered.">
+        <button t-if="this.canMutate" class="btn btn-sm btn-outline-danger fw-bold px-3 d-flex align-items-center ms-2" t-on-click="() => this.requestCancelOrder(this.state.selectedOrder)" t-att-disabled="this.state.isCancellingOrder" title="Cancel this order. Cancelled orders cannot be invoiced or delivered.">
             <t t-if="this.state.isCancellingOrder">
                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                                             Cancelling...
@@ -645,8 +645,8 @@
                     Back to Verification Queue
                 </button>
                 <div class="d-flex align-items-center gap-2">
-                    <button class="btn btn-sm btn-outline-danger fw-bold" t-on-click="openRejectModal" t-att-disabled="this.state.isApprovingOrder or this.state.isRejectingOrder">Reject</button>
-                    <button class="btn btn-sm btn-success text-white fw-bold" t-on-click="approveSelectedOrder" t-att-disabled="this.state.isApprovingOrder or this.state.isRejectingOrder">
+                    <button t-if="this.canMutate" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="openRejectModal" t-att-disabled="this.state.isApprovingOrder or this.state.isRejectingOrder">Reject</button>
+                    <button t-if="this.canMutate" class="btn btn-sm btn-success text-white fw-bold" t-on-click="approveSelectedOrder" t-att-disabled="this.state.isApprovingOrder or this.state.isRejectingOrder">
                         <t t-if="this.state.isApprovingOrder"><span class="spinner-border spinner-border-sm me-1"/> Approving...</t>
                         <t t-else="">Approve Order</t>
                     </button>
@@ -734,7 +734,7 @@
             <textarea class="form-control mb-3" rows="4" t-model="this.state.rejectReason" placeholder="Explain why this order or discount is rejected..."></textarea>
             <div class="d-flex justify-content-end gap-2">
                 <button class="btn btn-light border fw-bold" t-on-click="closeRejectModal">Cancel</button>
-                <button class="btn btn-danger fw-bold text-white" t-on-click="rejectSelectedOrder" t-att-disabled="this.state.isRejectingOrder">
+                <button t-if="this.canMutate" class="btn btn-danger fw-bold text-white" t-on-click="rejectSelectedOrder" t-att-disabled="this.state.isRejectingOrder">
                     <t t-if="this.state.isRejectingOrder">Rejecting...</t>
                     <t t-else="">Confirm Rejection</t>
                 </button>
@@ -764,7 +764,7 @@
             <textarea class="form-control mb-3" rows="3" t-model="this.state.creditOverride.note" placeholder="Reason for approving above the credit limit"></textarea>
             <div class="d-flex justify-content-end gap-2">
                 <button class="btn btn-light border fw-bold" t-on-click="closeCreditOverride">Cancel</button>
-                <button class="btn btn-danger fw-bold text-white" t-on-click="proceedCreditOverride" t-att-disabled="this.state.isProcessingOverride">
+                <button t-if="this.canMutate" class="btn btn-danger fw-bold text-white" t-on-click="proceedCreditOverride" t-att-disabled="this.state.isProcessingOverride">
                     <t t-if="this.state.isProcessingOverride">Processing...</t>
                     <t t-else="">Proceed Anyway</t>
                 </button>

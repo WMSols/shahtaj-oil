@@ -2,7 +2,7 @@
 
 import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { hasFinancialAccess } from "../../shahtaj_access";
+import { canSee, hasFinancialAccess, loadPortalAccess } from "../../shahtaj_access";
 import { MoneyOverview } from "./money_overview";
 import { CashActivity } from "./cash_activity";
 import { InvoiceManagement } from "./invoice_management";
@@ -79,10 +79,15 @@ export class FinancialsInvoicing extends Component {
         });
 
         onWillStart(async () => {
-            if (!hasFinancialAccess()) {
+            await loadPortalAccess();
+            if (!hasFinancialAccess() && !canSee("financials", "invoices")) {
                 return;
             }
-            this.state.stats = await getFinancialStats(this.orm);
+            try {
+                this.state.stats = await getFinancialStats(this.orm);
+            } catch (error) {
+                console.error("Failed to load financial stats", error);
+            }
         });
     }
 
@@ -104,14 +109,22 @@ export class FinancialsInvoicing extends Component {
     }
 
     async onStatsRefresh() {
-        this.state.stats = await getFinancialStats(this.orm, { force: true });
+        try {
+            this.state.stats = await getFinancialStats(this.orm, { force: true });
+        } catch (error) {
+            console.error("Failed to refresh financial stats", error);
+        }
     }
 
     async refreshData() {
         this.state.isRefreshing = true;
         try {
             invalidateFinancialCache();
-            this.state.stats = await getFinancialStats(this.orm, { force: true });
+            try {
+                this.state.stats = await getFinancialStats(this.orm, { force: true });
+            } catch (error) {
+                console.error("Failed to refresh financial stats", error);
+            }
             this.state.refreshNonce += 1;
         } finally {
             this.state.isRefreshing = false;

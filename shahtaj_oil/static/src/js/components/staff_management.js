@@ -3,7 +3,14 @@
 import { Component, useState, onWillStart, onWillUpdateProps, onMounted, onWillUnmount } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { ConfirmModal } from "./confirm_modal";
-import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
+import {
+    canMutate,
+    canSee,
+    defaultStaffRole,
+    hasFinancialAccess,
+    loadPortalAccess,
+    notifyPortalBusy,
+} from "../shahtaj_access";
 
 export class StaffManagement extends Component {
     static components = { ConfirmModal };
@@ -94,6 +101,10 @@ export class StaffManagement extends Component {
         this.debouncedFetchStaffData = this.debounceSearch(() => this.fetchStaffData(), 400);
 
         onWillStart(async () => {
+            await loadPortalAccess();
+            if (!canSee("staff", this.state.activeTab)) {
+                this.state.activeTab = defaultStaffRole();
+            }
             await this.fetchStaffData();
         });
 
@@ -128,6 +139,14 @@ export class StaffManagement extends Component {
 
     get hasFinancialAccess() {
         return hasFinancialAccess();
+    }
+
+    get canMutate() {
+        return canMutate();
+    }
+
+    canSeeStaffRole(role) {
+        return canSee("staff", role);
     }
 
     get isDeliveryManTab() {
@@ -423,6 +442,9 @@ export class StaffManagement extends Component {
     }
 
     switchTab(tabName) {
+        if (!canSee("staff", tabName)) {
+            return;
+        }
         this.state.activeTab = tabName;
         this.state.viewMode = "list";
         this.state.showForm = false;
@@ -438,6 +460,9 @@ export class StaffManagement extends Component {
     }
 
     openForm() {
+        if (!canMutate()) {
+            return;
+        }
         this.state.formData = {
             name: "",
             employee_code: "",
@@ -463,6 +488,9 @@ export class StaffManagement extends Component {
     }
 
     editStaff(staff) {
+        if (!canMutate()) {
+            return;
+        }
         this.state.formData = {
             name: staff.name,
             employee_code: staff.employee_code || "",
@@ -475,6 +503,9 @@ export class StaffManagement extends Component {
     }
 
     async saveStaff() {
+        if (!canMutate()) {
+            return;
+        }
         this.state.loading.save = true;
         try {
             const role = this.state.formData.role || this.state.activeTab;
@@ -517,6 +548,9 @@ export class StaffManagement extends Component {
     }
 
     toggleActiveStatus(staffId, currentStatus) {
+        if (!canMutate()) {
+            return;
+        }
         const newStatus = !currentStatus;
         const actionTitle = newStatus ? "Restore Account" : "Deactivate & Archive Account";
         const actionMessage = newStatus

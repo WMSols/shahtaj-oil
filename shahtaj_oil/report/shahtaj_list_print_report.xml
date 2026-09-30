@@ -25,10 +25,26 @@
         <field name="paperformat_id" ref="paperformat_shahtaj_list_print"/>
     </record>
 
+    <template id="external_layout_shahtaj_list_print">
+        <t t-if="not o" t-set="o" t-value="doc"/>
+        <t t-if="not company">
+            <t t-set="company" t-value="res_company"/>
+        </t>
+        <div class="header">
+            <div style="text-align: right;">
+                <img t-if="company.logo" t-att-src="image_data_uri(company.logo)" style="max-height: 58px; max-width: 180px;" alt="Company"/>
+                <div style="font-weight: 700; font-size: 14px; margin-top: 4px;" t-esc="company.name"/>
+            </div>
+        </div>
+        <div class="article" t-att-data-oe-model="o and o._name" t-att-data-oe-id="o and o.id">
+            <t t-out="0"/>
+        </div>
+    </template>
+
     <template id="report_shahtaj_list_print">
         <t t-call="web.html_container">
             <t t-foreach="docs" t-as="doc">
-                <t t-call="web.external_layout">
+                <t t-call="shahtaj_oil.external_layout_shahtaj_list_print">
                     <div class="page">
                         <h2 t-esc="doc.title"/>
                         <t t-if="doc.filter_lines()">
@@ -44,13 +60,13 @@
                         <table class="table table-sm table-bordered" style="font-size: 9px;">
                             <thead>
                                 <tr>
-                                    <th>Sr</th>
+                                    <th style="text-align: center;">Sr</th>
                                     <th t-foreach="doc.column_list()" t-as="col" t-esc="col"/>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr t-foreach="doc.row_list()" t-as="row">
-                                    <td t-esc="row_index + 1"/>
+                                    <td style="text-align: center;" t-esc="row_index + 1"/>
                                     <td t-foreach="row" t-as="cell" t-esc="cell"/>
                                 </tr>
                             </tbody>

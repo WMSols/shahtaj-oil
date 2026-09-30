@@ -4,7 +4,21 @@ import { Component, useState, onWillStart, onWillUnmount, useRef, useEffect } fr
 import { useService } from "@web/core/utils/hooks";
 import { registry } from "@web/core/registry";
 import { loadBundle, loadJS } from "@web/core/assets";
-import { hasFinancialAccess, notifyPortalBusy, resetPortalBusy } from "../shahtaj_access";
+import {
+    canMutate,
+    canSee,
+    canSeeCard,
+    defaultDeliveriesSub,
+    defaultHome,
+    defaultStaffRole,
+    firstAllowedSub,
+    hasFinancialAccess,
+    loadPortalAccess,
+    notifyPortalBusy,
+    portalTitle,
+    resetPortalBusy,
+    showPrices,
+} from "../shahtaj_access";
 import { StaffManagement } from "./staff_management";
 import { OperationsTracking } from "./operations/operations_tracking";
 import { DeliveryManPerformance } from "./delivery_man_performance";
@@ -125,7 +139,10 @@ export class ShahtajDashboard extends Component {
             this.switchTab(ev.detail.tab, ev.detail.subTab, { filters });
         });
         onWillStart(async () => {
-            const chartPromise = this.hasFinancialAccess ? this.ensureChartJs() : Promise.resolve();
+            await loadPortalAccess();
+            this.state.staffRole = defaultStaffRole();
+            this.state.deliveriesSubTab = defaultDeliveriesSub();
+            const chartPromise = this.canSeeCard("financials") ? this.ensureChartJs() : Promise.resolve();
             await Promise.all([this.fetchMasterKPIs(), chartPromise]);
         });
         useEffect(
@@ -227,6 +244,15 @@ export class ShahtajDashboard extends Component {
         return amount < 0 ? `Rs. -${abs}` : `Rs. ${abs}`;
     }
     
+    async _count(model, domain) {
+        try {
+            return await this.orm.searchCount(model, domain);
+        } catch (error) {
+            console.error("KPI count failed", model, error);
+            return 0;
+        }
+    }
+
     async fetchMasterKPIs() {
         this.state.isLoadingKpis = true;
         notifyPortalBusy(true);
@@ -236,95 +262,114 @@ export class ShahtajDashboard extends Component {
             ["default_code", "!=", "SHAHTAJ-LEGACY"],
             ["active", "=", true],
         ];
+        const next = {};
 
         try {
-            const coreCountsPromise = Promise.all([
-                this.orm.searchCount("shahtaj.zone", [["active", "=", true]]),
-                this.orm.searchCount("shahtaj.route", [["active", "=", true]]),
-                this.orm.searchCount("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", true]]),
-                this.orm.searchCount("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", true], ["shop_approval_state", "=", "pending"]]),
-                this.orm.searchCount("res.partner", this._shopRegDomain(this.state.shopRegDate)),
-                this.orm.searchCount("res.users", [["shahtaj_is_order_booker", "=", true], ["active", "=", true]]),
-                this.orm.searchCount("res.users", [["shahtaj_is_order_booker", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
-                this.orm.searchCount("shahtaj.gps.attempt", [
-                    ["purpose", "=", "check_in"],
-                    ["create_date", ">=", opsBounds.start],
-                    ["create_date", "<=", opsBounds.end],
-                ]),
-                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]),
-                this.orm.searchCount("sale.order", this._toDispatchDomain(this.state.opsDate)),
-                this.orm.searchCount("product.template", productBaseDomain),
-                this.orm.searchCount("product.template", [...productBaseDomain, ["qty_available", "<=", 0]]),
-                this.orm.searchCount("shahtaj.weekly.schedule", [["active", "=", true]]),
-                this.orm.searchCount("shahtaj.visit.target", [["active", "=", true]]),
-                this.orm.searchCount("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true]]),
-                this.orm.searchCount("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
-                this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["state", "!=", "not_ready"]]),
-                this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["field_state", "=", "in_transit"]]),
-                this.orm.searchCount("shahtaj.dm.delivery", [["field_state", "=", "pending"]]),
-                this.orm.searchCount("shahtaj.dm.delivery", [["state", "in", ["ready", "picked", "partial"]]]),
-                this.orm.searchCount("shahtaj.dm.delivery", [["field_state", "=", "in_transit"]]),
-                this.orm.searchCount("sale.order", [
-                    ["state", "in", ["sale", "done"]],
-                    ["shahtaj_delivery_status", "in", ["pending", "partial"]],
-                    ["shahtaj_qty_to_deliver", ">", 0],
-                    ["shahtaj_dm_delivery_ids", "=", false],
-                ]),
-            ]);
-
-            const financialPromise = this.hasFinancialAccess
-                ? this.fetchFinancialOverview()
-                : Promise.resolve({
-                    totalOrders: 0,
-                    toInvoice: 0,
-                    openInvoices: 0,
-                    creditNotes: 0,
-                    vendorBills: 0,
-                    cashIn: 0,
-                    cashOut: 0,
-                    netCash: 0,
-                    stillOwed: 0,
-                    cashTrend: { labels: [], cashIn: [], cashOut: [] },
-                });
-
-            const [coreCounts, financial] = await Promise.all([coreCountsPromise, financialPromise]);
-
-            const [
-                zones, routes, shops, pendingShops, shopsRegisteredByOb,
-                totalBookers, onlineBookers,
-                todayCheckins, todayOrders, todayDeliveries,
-                totalProducts, outOfStockProducts,
-                activeSchedules, activeTargets,
-                totalDeliveryMen, onlineDeliveryMen,
-                dmJobsToday, todayInTransit,
-                pendingDeliveries, dmJobsActive, dmInTransit, ordersToDispatch,
-            ] = coreCounts;
-
-            Object.assign(this.state.kpis, {
-                totalZones: zones,
-                totalRoutes: routes,
-                totalShops: shops,
-                pendingShops: pendingShops,
-                shopsRegisteredByOb,
-                totalBookers,
-                onlineBookers,
-                todayCheckins,
-                todayOrders,
-                todayDeliveries,
-                todayInTransit,
-                pendingDeliveries,
-                totalProducts,
-                outOfStockProducts,
-                activeSchedules,
-                activeTargets,
-                totalDeliveryMen,
-                onlineDeliveryMen,
-                dmJobsToday,
-                dmJobsActive,
-                dmInTransit,
-                ordersToDispatch,
-                ...financial,
-            });
+            const jobs = [];
+            if (this.canSeeCard("territory")) {
+                jobs.push((async () => {
+                    const [zones, routes, shops, pendingShops, shopsRegisteredByOb] = await Promise.all([
+                        this._count("shahtaj.zone", [["active", "=", true]]),
+                        this._count("shahtaj.route", [["active", "=", true]]),
+                        this._count("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", true]]),
+                        this._count("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", true], ["shop_approval_state", "=", "pending"]]),
+                        this._count("res.partner", this._shopRegDomain(this.state.shopRegDate)),
+                    ]);
+                    Object.assign(next, { totalZones: zones, totalRoutes: routes, totalShops: shops, pendingShops, shopsRegisteredByOb });
+                })());
+            }
+            if (this.canSeeCard("staffBookers")) {
+                jobs.push((async () => {
+                    const [totalBookers, onlineBookers] = await Promise.all([
+                        this._count("res.users", [["shahtaj_is_order_booker", "=", true], ["active", "=", true]]),
+                        this._count("res.users", [["shahtaj_is_order_booker", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
+                    ]);
+                    Object.assign(next, { totalBookers, onlineBookers });
+                })());
+            }
+            if (this.canSeeCard("checkins")) {
+                jobs.push((async () => {
+                    next.todayCheckins = await this._count("shahtaj.gps.attempt", [
+                        ["purpose", "=", "check_in"],
+                        ["create_date", ">=", opsBounds.start],
+                        ["create_date", "<=", opsBounds.end],
+                    ]);
+                })());
+            }
+            if (this.canSeeCard("orders")) {
+                jobs.push((async () => {
+                    next.todayOrders = await this._count("sale.order", [
+                        ["shahtaj_visit_id", "!=", false],
+                        ["date_order", ">=", opsBounds.start],
+                        ["date_order", "<=", opsBounds.end],
+                    ]);
+                })());
+            }
+            if (this.canSeeCard("dispatch")) {
+                jobs.push((async () => {
+                    const [todayDeliveries, ordersToDispatch] = await Promise.all([
+                        this._count("sale.order", this._toDispatchDomain(this.state.opsDate)),
+                        this._count("sale.order", [
+                            ["state", "in", ["sale", "done"]],
+                            ["shahtaj_delivery_status", "in", ["pending", "partial"]],
+                            ["shahtaj_qty_to_deliver", ">", 0],
+                            ["shahtaj_dm_delivery_ids", "=", false],
+                        ]),
+                    ]);
+                    Object.assign(next, { todayDeliveries, ordersToDispatch });
+                })());
+            }
+            if (this.canSeeCard("warehouse")) {
+                jobs.push((async () => {
+                    const [totalProducts, outOfStockProducts] = await Promise.all([
+                        this._count("product.template", productBaseDomain),
+                        this._count("product.template", [...productBaseDomain, ["qty_available", "<=", 0]]),
+                    ]);
+                    Object.assign(next, { totalProducts, outOfStockProducts });
+                })());
+            }
+            if (this.canSeeCard("schedules")) {
+                jobs.push((async () => {
+                    const [activeSchedules, activeTargets] = await Promise.all([
+                        this._count("shahtaj.weekly.schedule", [["active", "=", true]]),
+                        this._count("shahtaj.visit.target", [["active", "=", true]]),
+                    ]);
+                    Object.assign(next, { activeSchedules, activeTargets });
+                })());
+            }
+            if (this.canSeeCard("deliveryMen")) {
+                jobs.push((async () => {
+                    const [totalDeliveryMen, onlineDeliveryMen] = await Promise.all([
+                        this._count("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true]]),
+                        this._count("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
+                    ]);
+                    Object.assign(next, { totalDeliveryMen, onlineDeliveryMen });
+                })());
+            }
+            if (this.canSeeCard("deliveryJobs")) {
+                jobs.push((async () => {
+                    const [dmJobsToday, todayInTransit, pendingDeliveries, dmJobsActive, dmInTransit] = await Promise.all([
+                        this._count("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["state", "!=", "not_ready"]]),
+                        this._count("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["field_state", "=", "in_transit"]]),
+                        this._count("shahtaj.dm.delivery", [["field_state", "=", "pending"]]),
+                        this._count("shahtaj.dm.delivery", [["state", "in", ["ready", "picked", "partial"]]]),
+                        this._count("shahtaj.dm.delivery", [["field_state", "=", "in_transit"]]),
+                    ]);
+                    Object.assign(next, { dmJobsToday, todayInTransit, pendingDeliveries, dmJobsActive, dmInTransit });
+                })());
+            }
+            if (this.canSeeCard("invoices")) {
+                jobs.push((async () => {
+                    Object.assign(next, await this.fetchInvoiceOverview());
+                })());
+            }
+            if (this.canSeeCard("financials")) {
+                jobs.push((async () => {
+                    Object.assign(next, await this.fetchCashOverview());
+                })());
+            }
+            await Promise.all(jobs);
+            Object.assign(this.state.kpis, next);
         } catch (error) {
             console.error("Failed to fetch Master KPIs", error);
         } finally {
@@ -333,7 +378,20 @@ export class ShahtajDashboard extends Component {
         }
     }
 
-    async fetchFinancialOverview() {
+    async fetchInvoiceOverview() {
+        const [totalOrders, toInvoice, openInvoices, creditNotes, vendorBills] = await Promise.all([
+            this._count("sale.order", [["shahtaj_visit_id", "!=", false]]),
+            this._count("sale.order", [["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]]),
+            this._count("account.move", [["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true], ["state", "=", "posted"], ["payment_state", "in", ["not_paid", "partial"]]]),
+            this._count("account.move", [["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]]),
+            this.canSee("financials", "vendor_bills")
+                ? this._count("account.move", [["move_type", "in", ["in_invoice", "in_refund"]], ["state", "in", ["draft", "posted"]]])
+                : Promise.resolve(0),
+        ]);
+        return { totalOrders, toInvoice, openInvoices, creditNotes, vendorBills };
+    }
+
+    async fetchCashOverview() {
         const { from, to } = this._getCashDateRange();
         const dayKeys = this._buildDayKeys(from, to);
         const byDay = {};
@@ -348,23 +406,16 @@ export class ShahtajDashboard extends Component {
             ["state", "in", ["paid", "in_process", "posted", "reconciled"]],
         ];
 
-        const [
-            totalOrders,
-            toInvoice,
-            openInvoices,
-            creditNotes,
-            vendorBills,
-            payments,
-            shopsData,
-        ] = await Promise.all([
-            this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false]]),
-            this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]]),
-            this.orm.searchCount("account.move", [["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true], ["state", "=", "posted"], ["payment_state", "in", ["not_paid", "partial"]]]),
-            this.orm.searchCount("account.move", [["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]]),
-            this.orm.searchCount("account.move", [["move_type", "in", ["in_invoice", "in_refund"]], ["state", "in", ["draft", "posted"]]]),
-            this.orm.searchRead("account.payment", paymentDomain, ["date", "amount", "amount_signed", "payment_type"], { limit: 10000 }),
-            this.orm.searchRead("res.partner", [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]], ["outstanding_balance"], { limit: 10000 }),
-        ]);
+        let payments = [];
+        let shopsData = [];
+        try {
+            [payments, shopsData] = await Promise.all([
+                this.orm.searchRead("account.payment", paymentDomain, ["date", "amount", "amount_signed", "payment_type"], { limit: 10000 }),
+                this.orm.searchRead("res.partner", [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]], ["outstanding_balance"], { limit: 10000 }),
+            ]);
+        } catch (error) {
+            console.error("Failed to fetch cash overview", error);
+        }
 
         let cashIn = 0;
         let cashOut = 0;
@@ -387,11 +438,6 @@ export class ShahtajDashboard extends Component {
         const stillOwed = (shopsData || []).reduce((sum, shop) => sum + (shop.outstanding_balance || 0), 0);
 
         return {
-            totalOrders,
-            toInvoice,
-            openInvoices,
-            creditNotes,
-            vendorBills,
             cashIn,
             cashOut,
             netCash: cashIn - cashOut,
@@ -415,15 +461,15 @@ export class ShahtajDashboard extends Component {
         const opsBounds = this._pktDateToUtcBounds(dateStr);
         try {
             const [todayCheckins, todayOrders, todayDeliveries, dmJobsToday, todayInTransit] = await Promise.all([
-                this.orm.searchCount("shahtaj.gps.attempt", [
+                this.canSeeCard("checkins") ? this._count("shahtaj.gps.attempt", [
                     ["purpose", "=", "check_in"],
                     ["create_date", ">=", opsBounds.start],
                     ["create_date", "<=", opsBounds.end],
-                ]),
-                this.orm.searchCount("sale.order", [["shahtaj_visit_id", "!=", false], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]),
-                this.orm.searchCount("sale.order", this._toDispatchDomain(dateStr)),
-                this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["state", "!=", "not_ready"]]),
-                this.orm.searchCount("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["field_state", "=", "in_transit"]]),
+                ]) : Promise.resolve(this.state.kpis.todayCheckins),
+                this.canSeeCard("orders") ? this._count("sale.order", [["shahtaj_visit_id", "!=", false], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]) : Promise.resolve(this.state.kpis.todayOrders),
+                this.canSeeCard("dispatch") ? this._count("sale.order", this._toDispatchDomain(dateStr)) : Promise.resolve(this.state.kpis.todayDeliveries),
+                this.canSeeCard("deliveryJobs") ? this._count("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["state", "!=", "not_ready"]]) : Promise.resolve(this.state.kpis.dmJobsToday),
+                this.canSeeCard("deliveryJobs") ? this._count("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["field_state", "=", "in_transit"]]) : Promise.resolve(this.state.kpis.todayInTransit),
             ]);
             if (token !== this._opsLoadToken) {
                 return;
@@ -468,7 +514,7 @@ export class ShahtajDashboard extends Component {
         const token = ++this._cashLoadToken;
         this.state.isLoadingCash = true;
         try {
-            const financial = await this.fetchFinancialOverview();
+            const financial = await this.fetchCashOverview();
             if (token !== this._cashLoadToken) {
                 return;
             }
@@ -509,7 +555,7 @@ export class ShahtajDashboard extends Component {
     }
 
     async renderCashChart() {
-        if (!this.hasFinancialAccess || this.state.activeTab !== "overview" || this.state.isSwitchingTab) {
+        if (!this.canSeeCard("financials") || this.state.activeTab !== "overview" || this.state.isSwitchingTab) {
             this.destroyCashChart();
             return;
         }
@@ -590,6 +636,116 @@ export class ShahtajDashboard extends Component {
         return hasFinancialAccess();
     }
 
+    get canMutate() {
+        return canMutate();
+    }
+
+    get showPrices() {
+        return showPrices();
+    }
+
+    get portalTitle() {
+        return portalTitle();
+    }
+
+    canSee(tab, subTab = "", inner = "") {
+        return canSee(tab, subTab, inner);
+    }
+
+    canSeeMenu(tab) {
+        return canSee(tab);
+    }
+
+    canSeeCard(card) {
+        return canSeeCard(card);
+    }
+
+    get showFieldCard() {
+        return this.canSeeCard("checkins")
+            || this.canSeeCard("orders")
+            || this.canSeeCard("dispatch")
+            || this.canSeeCard("deliveryJobs");
+    }
+
+    get showStaffCard() {
+        return this.canSeeCard("staffBookers") || this.canSeeCard("deliveryMen");
+    }
+
+    get showMidRow() {
+        return this.showStaffCard || this.canSeeCard("warehouse") || this.canSeeCard("schedules");
+    }
+
+    get showFinanceRow() {
+        return this.canSeeCard("financials") || this.canSeeCard("invoices");
+    }
+
+    get overviewSpans() {
+        const has = (card) => this.canSeeCard(card);
+        const spans = {};
+        if (has("territory") && this.showFieldCard) {
+            spans.territory = 7;
+            spans.field = 5;
+        } else if (has("territory")) {
+            spans.territory = 12;
+        }
+
+        const mid = ["staff", "warehouse", "schedules"].filter((card) => {
+            if (card === "staff") return this.showStaffCard;
+            return has(card);
+        });
+        if (mid.length === 3) {
+            mid.forEach((card) => { spans[card] = 4; });
+        } else if (mid.length === 2) {
+            mid.forEach((card) => { spans[card] = 6; });
+        } else if (mid.length === 1) {
+            spans[mid[0]] = 12;
+        }
+
+        if (has("financials") && has("invoices")) {
+            spans.financials = 8;
+            spans.invoices = 4;
+        } else if (has("financials")) {
+            spans.financials = 12;
+        } else if (has("invoices")) {
+            spans.invoices = 12;
+        }
+
+        if (this.showFieldCard && !spans.field) {
+            const row = ["field"];
+            if (mid.length && mid.length < 3) {
+                row.push(...mid);
+            } else if (!mid.length && has("invoices") && !has("financials")) {
+                row.push("invoices");
+            }
+            const span = Math.floor(12 / row.length);
+            const remainder = 12 - span * row.length;
+            row.forEach((card, index) => {
+                spans[card] = span + (index === row.length - 1 ? remainder : 0);
+            });
+        }
+        return spans;
+    }
+
+    overviewSpanClass(card) {
+        return `so-ov-span-${this.overviewSpans[card] || 12}`;
+    }
+
+    get obMetricColClass() {
+        const count = (this.canSeeCard("checkins") ? 1 : 0) + (this.canSeeCard("orders") ? 1 : 0);
+        return count <= 1 ? "col-12" : "col-6";
+    }
+
+    get dmMetricColClass() {
+        const count = (this.canSeeCard("dispatch") ? 1 : 0) + (this.canSeeCard("deliveryJobs") ? 2 : 0);
+        if (count <= 1) return "col-12";
+        if (count === 2) return "col-6";
+        return "col-6 col-sm-4";
+    }
+
+    get invoiceMetricColClass() {
+        return (this.overviewSpans.invoices || 12) >= 12 ? "col-6 col-xl-3" : "col-6";
+    }
+
     get overviewDateLabel() {
         return new Date().toLocaleDateString("en-GB", {
             weekday: "long",
@@ -637,12 +793,12 @@ export class ShahtajDashboard extends Component {
 
     get hasAttentionItems() {
         const kpis = this.state.kpis;
-        return kpis.pendingShops > 0
-            || kpis.pendingDeliveries > 0
-            || kpis.ordersToDispatch > 0
-            || kpis.dmInTransit > 0
-            || kpis.outOfStockProducts > 0
-            || (this.hasFinancialAccess && kpis.toInvoice > 0);
+        return (this.canSeeCard("territory") && kpis.pendingShops > 0)
+            || (this.canSeeCard("deliveryJobs") && kpis.pendingDeliveries > 0)
+            || (this.canSeeCard("dispatch") && kpis.ordersToDispatch > 0)
+            || (this.canSeeCard("deliveryJobs") && kpis.dmInTransit > 0)
+            || (this.canSeeCard("warehouse") && kpis.outOfStockProducts > 0)
+            || (this.canSeeCard("invoices") && kpis.toInvoice > 0);
     }
 
     _applyNavFilters(filters = {}) {
@@ -716,6 +872,13 @@ export class ShahtajDashboard extends Component {
         this.switchTab('operations', 'deliveries', { forceBusy, filters });
     }
 
+    openDmOperations() {
+        const inner = canSee("operations", "deliveries", "dispatch")
+            ? "dispatch"
+            : defaultDeliveriesSub();
+        this.openDeliveries(inner);
+    }
+
     openToDispatch() {
         this.openDeliveries('dispatch', { dispatchDate: this._opsDay() });
     }
@@ -768,32 +931,48 @@ export class ShahtajDashboard extends Component {
         this.state.expandedMenus[menuName] = !isCurrentlyOpen;
         
         // 3. If opening, yield to the browser instantly so the accordion animation starts, THEN switch tabs
+        const sub = (defaultSubTab && canSee(menuName, defaultSubTab))
+            ? defaultSubTab
+            : firstAllowedSub(menuName);
         if (this.state.expandedMenus[menuName]) {
             await new Promise(resolve => setTimeout(resolve, 10));
-            await this.switchTab(menuName, defaultSubTab); 
+            await this.switchTab(menuName, sub);
         }
+    }
+    _guardNavigation(tabName, subTabName) {
+        if (tabName === 'staff') {
+            const role = canSee('staff', this.state.staffRole) ? this.state.staffRole : defaultStaffRole();
+            this.state.staffRole = role || defaultStaffRole();
+        }
+        if (tabName === 'operations' && subTabName === 'all_deliveries') {
+            subTabName = 'deliveries';
+            this.state.deliveriesSubTab = 'jobs';
+        }
+        if (tabName === 'operations' && subTabName === 'deliveries') {
+            const inner = this.state.deliveriesSubTab || defaultDeliveriesSub();
+            this.state.deliveriesSubTab = canSee('operations', 'deliveries', inner)
+                ? inner
+                : defaultDeliveriesSub();
+        }
+        const inner = tabName === 'operations' && subTabName === 'deliveries'
+            ? this.state.deliveriesSubTab
+            : '';
+        if (!canSee(tabName, subTabName, inner)) {
+            const home = defaultHome();
+            return { tabName: home.tab, subTabName: home.sub || '' };
+        }
+        return { tabName, subTabName };
     }
     async switchTab(tabName, subTabName = '', options = {}) {
         if (this.state.isSwitchingTab) {
             return;
         }
         if (tabName === 'staff' && !this.state.staffRole) {
-            this.state.staffRole = 'order_booker';
+            this.state.staffRole = defaultStaffRole();
         }
-        if (tabName === 'operations' && subTabName === 'all_deliveries') {
-            subTabName = 'deliveries';
-            this.state.deliveriesSubTab = 'jobs';
-        }
-        if (tabName === 'operations' && subTabName === 'deliveries' && !this.state.deliveriesSubTab) {
-            this.state.deliveriesSubTab = 'dispatch';
-        }
-        if (!this.hasFinancialAccess && (tabName === 'financials' || tabName === 'transactions' || tabName === 'accounting')) {
-            tabName = 'operations';
-            subTabName = 'checkins';
-        }
-        if (!this.hasFinancialAccess && tabName === 'warehouse' && ['inventory', 'taxes'].includes(subTabName)) {
-            subTabName = 'management';
-        }
+        const guarded = this._guardNavigation(tabName, subTabName);
+        tabName = guarded.tabName;
+        subTabName = guarded.subTabName;
 
         this._applyNavFilters(options.filters);
 

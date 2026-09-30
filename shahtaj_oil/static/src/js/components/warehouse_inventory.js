@@ -3,7 +3,15 @@
 import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { ConfirmModal } from "./confirm_modal";
-import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
+import {
+    canMutate,
+    canSee,
+    firstAllowedSub,
+    hasFinancialAccess,
+    loadPortalAccess,
+    notifyPortalBusy,
+    showPrices,
+} from "../shahtaj_access";
 
 export class WarehouseInventory extends Component {
     static props = {
@@ -68,14 +76,16 @@ export class WarehouseInventory extends Component {
         this.debouncedFetchActiveList = this.debounceSearch(() => this.fetchActiveList(), 400);
 
         onWillStart(async () => {
+            await loadPortalAccess();
             this.state.activeSubTab = this._normalizeSubTab(this.state.activeSubTab);
-            if (hasFinancialAccess()) {
-                await this.loadSaleTaxes();
+            const extras = [];
+            if (canMutate() && hasFinancialAccess()) {
+                extras.push(this.loadSaleTaxes());
             }
-            await Promise.all([
-                this.loadVendors(),
-                this.loadArchivedData(),
-            ]);
+            if (canMutate()) {
+                extras.push(this.loadVendors(), this.loadArchivedData());
+            }
+            await Promise.all(extras);
             await this.fetchActiveList();
         });
         onWillUpdateProps((nextProps) => {
@@ -206,11 +216,31 @@ export class WarehouseInventory extends Component {
         return hasFinancialAccess();
     }
 
-    _normalizeSubTab(tabName) {
-        if (!hasFinancialAccess() && ['inventory', 'taxes', 'archive'].includes(tabName)) {
-            return 'management';
+    get canMutate() {
+        return canMutate();
+    }
+
+    get showPrices() {
+        return showPrices();
+    }
+
+    get productListColspan() {
+        let columns = 2;
+        if (this.showPrices) {
+            columns += 1;
         }
-        return tabName || 'management';
+        if (this.canMutate) {
+            columns += 1;
+        }
+        return columns;
+    }
+
+    _normalizeSubTab(tabName) {
+        const tab = tabName || "management";
+        if (canSee("warehouse", tab)) {
+            return tab;
+        }
+        return firstAllowedSub("warehouse") || "management";
     }
    
     // --- Modal & Archive Handlers ---
@@ -331,12 +361,14 @@ export class WarehouseInventory extends Component {
     async refreshData() {
         this.state.isLoading = true;
         try {
-            if (hasFinancialAccess()) await this.loadSaleTaxes();
-            await Promise.all([
-                this.loadVendors(),
-                this.loadArchivedData(),
-                this.fetchActiveList()
-            ]);
+            const extras = [this.fetchActiveList()];
+            if (canMutate() && hasFinancialAccess()) {
+                extras.push(this.loadSaleTaxes());
+            }
+            if (canMutate()) {
+                extras.push(this.loadVendors(), this.loadArchivedData());
+            }
+            await Promise.all(extras);
         } finally {
             this.state.isLoading = false;
         }

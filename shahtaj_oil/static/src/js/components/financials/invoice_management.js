@@ -2,7 +2,7 @@
 
 import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { hasFinancialAccess, notifyPortalBusy } from "../../shahtaj_access";
+import { canMutate, canSee, hasFinancialAccess, loadPortalAccess, notifyPortalBusy } from "../../shahtaj_access";
 import { printFilter, printListPdf } from "../../shahtaj_list_export";
 import { ConfirmModal } from "../confirm_modal";
 import {
@@ -124,10 +124,13 @@ export class InvoiceManagement extends Component {
             }
         });
         onWillStart(async () => {
-            if (!hasFinancialAccess()) {
+            await loadPortalAccess();
+            if (!hasFinancialAccess() && !canSee("financials", "invoices")) {
                 return;
             }
-            await this.loadLookups();
+            if (canMutate()) {
+                await this.loadLookups();
+            }
             await this.fetchActiveList();
         });
     }
@@ -137,8 +140,14 @@ export class InvoiceManagement extends Component {
         applyLookupsToState(this.state, lookups);
     }
 
+    get canMutate() {
+        return canMutate();
+    }
+
     async reloadFromRefresh() {
-        await this.loadLookups();
+        if (canMutate()) {
+            await this.loadLookups();
+        }
         await this.fetchActiveList();
     }
 

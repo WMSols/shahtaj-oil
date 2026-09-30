@@ -12,11 +12,11 @@
                     <button class="btn btn-outline-secondary fw-bold d-flex align-items-center justify-content-center shadow-sm" t-on-click="() => this.fetchStaffData(false)" t-att-disabled="this.state.loading.fetch" title="Refresh Data">
                         <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.loading.fetch}"></i> Refresh
                     </button>
-                    <button class="btn btn-outline-danger fw-bold d-flex align-items-center justify-content-center shadow-sm" t-on-click="openArchive" title="View Archived Staff">
+                    <button t-if="this.canMutate" class="btn btn-outline-danger fw-bold d-flex align-items-center justify-content-center shadow-sm" t-on-click="openArchive" title="View Archived Staff">
                         <i class="fa fa-archive me-2"></i> Archive
                     </button>
 
-                    <button class="btn btn-dark fw-bold d-flex align-items-center justify-content-center text-white" t-on-click="openForm">
+                    <button t-if="this.canMutate" class="btn btn-dark fw-bold d-flex align-items-center justify-content-center text-white" t-on-click="openForm">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus me-1">
                             <path d="M5 12h14"/><path d="M12 5v14"/>
                         </svg>
@@ -113,10 +113,10 @@
             <t t-if="!this.state.showForm and this.state.viewMode === 'list'">
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 border-bottom pb-3 gap-3">
                     <ul class="nav nav-pills flex-column flex-sm-row gap-2 mb-0 w-100 w-md-auto">
-                        <li class="nav-item">
+                        <li class="nav-item" t-if="this.canSeeStaffRole('order_booker')">
                             <button t-on-click="() => this.switchTab('order_booker')" t-attf-class="nav-link rounded-pill fw-bold px-4 py-2 border-0 w-100 #{this.state.activeTab === 'order_booker' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-light'}">Order Bookers</button>
                         </li>
-                        <li class="nav-item">
+                        <li class="nav-item" t-if="this.canSeeStaffRole('delivery_man')">
                             <button t-on-click="() => this.switchTab('delivery_man')" t-attf-class="nav-link rounded-pill fw-bold px-4 py-2 border-0 w-100 #{this.state.activeTab === 'delivery_man' ? 'active bg-dark text-white shadow-sm' : 'text-muted bg-light'}">Delivery Men</button>
                         </li>
                     </ul>
@@ -198,8 +198,8 @@
                                         <td t-if="this.isDeliveryManTab" class="text-center"><t t-esc="staff.vanQty"/></td>
                                         <td t-if="this.isDeliveryManTab and this.hasFinancialAccess" class="text-end fw-bold">Rs. <t t-esc="this.formatMoney(staff.wallet)"/></td>
                                         <td class="text-end pe-4 text-nowrap">
-                                            <button class="btn btn-sm btn-outline-danger fw-bold d-inline-flex align-items-center me-2 shadow-sm" t-on-click="() => this.toggleActiveStatus(staff.id, staff.active)" title="Move to Archive" t-att-disabled="this.state.loading.toggle">Archive</button>
-                                            <button class="btn btn-sm btn-outline-secondary fw-bold d-inline-flex align-items-center me-2" t-on-click="() => this.editStaff(staff)" t-att-disabled="this.state.loading.toggle">
+                                            <button t-if="this.canMutate" class="btn btn-sm btn-outline-danger fw-bold d-inline-flex align-items-center me-2 shadow-sm" t-on-click="() => this.toggleActiveStatus(staff.id, staff.active)" title="Move to Archive" t-att-disabled="this.state.loading.toggle">Archive</button>
+                                            <button t-if="this.canMutate" class="btn btn-sm btn-outline-secondary fw-bold d-inline-flex align-items-center me-2" t-on-click="() => this.editStaff(staff)" t-att-disabled="this.state.loading.toggle">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil me-1"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> Edit
                                             </button>
                                             <button class="btn btn-sm btn-outline-dark fw-bold d-inline-flex align-items-center" t-on-click="() => this.openDetails(staff)" t-att-disabled="this.state.loading.toggle">
@@ -284,7 +284,7 @@
                                             <span class="badge shadow-sm bg-secondary text-dark"><t t-esc="staff.role"/></span>
                                         </td>
                                         <td class="text-end pe-4 text-nowrap">
-                                            <button class="btn btn-sm btn-success fw-bold d-inline-flex align-items-center shadow-sm" t-on-click="() => this.toggleActiveStatus(staff.id, staff.active)" t-att-disabled="this.state.loading.toggle">
+                                            <button t-if="this.canMutate" class="btn btn-sm btn-success fw-bold d-inline-flex align-items-center shadow-sm" t-on-click="() => this.toggleActiveStatus(staff.id, staff.active)" t-att-disabled="this.state.loading.toggle">
                                                 <t t-if="this.state.loading.toggle"><i class="fa fa-circle-o-notch fa-spin me-1"></i></t>
                                                 Restore Account
                                             </button>
@@ -341,7 +341,7 @@
                                 </span>
                             </div>
                         </div>
-                        <button t-attf-class="btn fw-bold shadow-sm w-100 w-md-auto d-flex justify-content-center align-items-center #{this.state.selectedStaff.active ? 'btn-outline-danger' : 'btn-success text-white'}" t-on-click="() => this.toggleActiveStatus(this.state.selectedStaff.id, this.state.selectedStaff.active)" t-att-disabled="this.state.loading.toggle">
+                        <button t-if="this.canMutate" t-attf-class="btn fw-bold shadow-sm w-100 w-md-auto d-flex justify-content-center align-items-center #{this.state.selectedStaff.active ? 'btn-outline-danger' : 'btn-success text-white'}" t-on-click="() => this.toggleActiveStatus(this.state.selectedStaff.id, this.state.selectedStaff.active)" t-att-disabled="this.state.loading.toggle">
                             <t t-if="this.state.loading.toggle">
                                 <i class="fa fa-circle-o-notch fa-spin me-2"></i> Processing...
                             </t>
@@ -361,7 +361,7 @@
                             </t>
                         </button>
                     </div>
-                    <div t-if="this.state.selectedStaff.roleKey === 'delivery_man' and this.hasFinancialAccess" class="d-flex flex-wrap gap-2 mt-3">
+                    <div t-if="this.canMutate and this.state.selectedStaff.roleKey === 'delivery_man' and this.hasFinancialAccess" class="d-flex flex-wrap gap-2 mt-3">
                         <button class="btn btn-sm btn-dark fw-bold text-white" t-on-click="openSettleModal" t-att-disabled="this.state.loading.wallet">Settle Wallet</button>
                     </div>
                 </div>
