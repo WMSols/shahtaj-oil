@@ -5,9 +5,16 @@ import { session } from "@web/session";
 import { user } from "@web/core/user";
 
 /**
- * True when the logged-in distributor may view financials, pricing, and invoices.
+ * True when this user may see prices, amounts, and other financial fields
+ * on screens they can already open.
+ * KPO and Warehouse get this on their allowed tabs. Distributor still follows
+ * the financial-access session flag.
  */
 export function hasFinancialAccess() {
+    const role = portalAccessState.role;
+    if (role === "kpo" || role === "warehouse") {
+        return true;
+    }
     return Boolean(session.shahtaj_financial_access);
 }
 
@@ -22,6 +29,7 @@ export function hasFinancialAccess() {
  * cards: overview cards to show. Omit to show every card except hideCards.
  * hideCards: overview cards to remove (the cash "Financials" card is "financials").
  * canMutate: false means view and print only.
+ * KPO and Warehouse can mutate every tab they are allowed to open.
  * showPrices: false hides product and stock price columns.
  */
 const ROLE_ACCESS = {
@@ -49,8 +57,9 @@ const ROLE_ACCESS = {
             ["financials", "po_management"],
         ],
         cards: ["orders", "invoices"],
-        canMutate: false,
+        canMutate: true,
         canSettleWallet: true,
+        showPrices: true,
     },
     warehouse: {
         allow: [
@@ -62,8 +71,11 @@ const ROLE_ACCESS = {
             ["warehouse", "management"],
         ],
         cards: ["deliveryMen", "deliveryJobs", "warehouse"],
-        canMutate: false,
+        canMutate: true,
         canDispatchOrders: true,
+        canManageProducts: false,
+        canManageStaff: false,
+        canEditDispatchDetails: false,
         showPrices: false,
     },
 };
@@ -298,6 +310,30 @@ export function canDispatchOrders() {
     const config = currentConfig();
     if (config.canDispatchOrders !== undefined) {
         return config.canDispatchOrders;
+    }
+    return canMutate();
+}
+
+export function canEditDispatchDetails() {
+    const config = currentConfig();
+    if (config.canEditDispatchDetails !== undefined) {
+        return config.canEditDispatchDetails;
+    }
+    return canMutate();
+}
+
+export function canManageStaff() {
+    const config = currentConfig();
+    if (config.canManageStaff !== undefined) {
+        return config.canManageStaff;
+    }
+    return canMutate();
+}
+
+export function canManageProducts() {
+    const config = currentConfig();
+    if (config.canManageProducts !== undefined) {
+        return config.canManageProducts;
     }
     return canMutate();
 }

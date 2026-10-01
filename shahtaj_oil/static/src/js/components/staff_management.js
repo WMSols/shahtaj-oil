@@ -4,6 +4,7 @@ import { Component, useState, onWillStart, onWillUpdateProps, onMounted, onWillU
 import { useService } from "@web/core/utils/hooks";
 import { ConfirmModal } from "./confirm_modal";
 import {
+    canManageStaff,
     canMutate,
     canSee,
     defaultStaffRole,
@@ -145,6 +146,10 @@ export class StaffManagement extends Component {
 
     get canMutate() {
         return canMutate();
+    }
+
+    get canManageStaff() {
+        return canManageStaff();
     }
 
     canSeeStaffRole(role) {
@@ -317,6 +322,9 @@ export class StaffManagement extends Component {
     }
 
     openArchive() {
+        if (!canManageStaff()) {
+            return;
+        }
         this.state.viewMode = "archive";
         this.state.pagination.archive.page = 1;
         this.fetchStaffData();
@@ -491,7 +499,7 @@ export class StaffManagement extends Component {
     }
 
     openForm() {
-        if (!canMutate()) {
+        if (!canManageStaff()) {
             return;
         }
         this.state.formData = {
@@ -519,7 +527,7 @@ export class StaffManagement extends Component {
     }
 
     editStaff(staff) {
-        if (!canMutate()) {
+        if (!canManageStaff()) {
             return;
         }
         this.state.formData = {
@@ -534,7 +542,7 @@ export class StaffManagement extends Component {
     }
 
     async saveStaff() {
-        if (!canMutate()) {
+        if (!canManageStaff()) {
             return;
         }
         this.state.loading.save = true;
@@ -579,7 +587,7 @@ export class StaffManagement extends Component {
     }
 
     toggleActiveStatus(staffId, currentStatus) {
-        if (!canMutate()) {
+        if (!canManageStaff()) {
             return;
         }
         const newStatus = !currentStatus;
@@ -611,7 +619,7 @@ export class StaffManagement extends Component {
     }
 
     async openSettleModal() {
-        if (!this.state.selectedStaff) return;
+        if (!canManageStaff() || !this.state.selectedStaff) return;
         this.state.loading.wallet = true;
         try {
             const wizardIds = await this.orm.create(

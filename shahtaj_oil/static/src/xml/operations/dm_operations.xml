@@ -24,7 +24,7 @@
                         </div>
 
                         <div class="card border-0 shadow-sm rounded-3 mb-3 overflow-hidden">
-                            <button type="button" class="btn w-100 text-start d-flex align-items-center justify-content-between p-3 bg-white border-0" t-on-click="() => this.toggleDmJobSection('delivery')">
+                            <button type="button" class="btn shahtaj-accordion-toggle w-100 text-start d-flex align-items-center justify-content-between p-3" t-on-click="() => this.toggleDmJobSection('delivery')">
                                 <h6 class="mb-0 fw-bold text-dark text-uppercase small">Delivery Details</h6>
                                 <i t-attf-class="fa #{this.state.dmJobSections.delivery ? 'fa-chevron-up' : 'fa-chevron-down'} text-muted"/>
                             </button>
@@ -46,7 +46,7 @@
                         </div>
 
                         <div class="card border-0 shadow-sm rounded-3 mb-3 overflow-hidden">
-                            <button type="button" class="btn w-100 text-start d-flex align-items-center justify-content-between p-3 bg-white border-0" t-on-click="() => this.toggleDmJobSection('order')">
+                            <button type="button" class="btn shahtaj-accordion-toggle w-100 text-start d-flex align-items-center justify-content-between p-3" t-on-click="() => this.toggleDmJobSection('order')">
                                 <h6 class="mb-0 fw-bold text-dark text-uppercase small">Order Details</h6>
                                 <i t-attf-class="fa #{this.state.dmJobSections.order ? 'fa-chevron-up' : 'fa-chevron-down'} text-muted"/>
                             </button>
@@ -61,7 +61,7 @@
                         </div>
 
                         <div t-if="this.hasFinancialAccess" class="card border-0 shadow-sm rounded-3 mb-3 overflow-hidden">
-                            <button type="button" class="btn w-100 text-start d-flex align-items-center justify-content-between p-3 bg-white border-0" t-on-click="() => this.toggleDmJobSection('shop')">
+                            <button type="button" class="btn shahtaj-accordion-toggle w-100 text-start d-flex align-items-center justify-content-between p-3" t-on-click="() => this.toggleDmJobSection('shop')">
                                 <h6 class="mb-0 fw-bold text-dark text-uppercase small">Shop Balance</h6>
                                 <i t-attf-class="fa #{this.state.dmJobSections.shop ? 'fa-chevron-up' : 'fa-chevron-down'} text-muted"/>
                             </button>
@@ -77,7 +77,7 @@
                         </div>
 
                         <div class="card border-0 shadow-sm rounded-3 mb-3 overflow-hidden" t-if="this.state.selectedDmJob.gpsVerified">
-                            <button type="button" class="btn w-100 text-start d-flex align-items-center justify-content-between p-3 bg-white border-0" t-on-click="() => this.toggleDmJobSection('gps')">
+                            <button type="button" class="btn shahtaj-accordion-toggle w-100 text-start d-flex align-items-center justify-content-between p-3" t-on-click="() => this.toggleDmJobSection('gps')">
                                 <h6 class="mb-0 fw-bold text-dark text-uppercase small">Last GPS</h6>
                                 <i t-attf-class="fa #{this.state.dmJobSections.gps ? 'fa-chevron-up' : 'fa-chevron-down'} text-muted"/>
                             </button>
@@ -104,7 +104,7 @@
                         </div>
 
                         <div class="card border-0 shadow-sm rounded-3 mb-3 overflow-hidden">
-                            <button type="button" class="btn w-100 text-start d-flex align-items-center justify-content-between p-3 bg-white border-0" t-on-click="() => this.toggleDmJobSection('products')">
+                            <button type="button" class="btn shahtaj-accordion-toggle w-100 text-start d-flex align-items-center justify-content-between p-3" t-on-click="() => this.toggleDmJobSection('products')">
                                 <h6 class="mb-0 fw-bold text-dark text-uppercase small">Products</h6>
                                 <i t-attf-class="fa #{this.state.dmJobSections.products ? 'fa-chevron-up' : 'fa-chevron-down'} text-muted"/>
                             </button>
@@ -142,19 +142,19 @@
                     <div class="px-3 pt-3 border-bottom bg-white">
                         <ul class="nav nav-pills gap-2 mb-3 flex-wrap">
                             <li class="nav-item" t-if="this.canSeeDelivery('dispatch')">
-                                <button t-on-click="() => this.setDeliveriesSubTab('dispatch')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.deliveriesSubTab === 'dispatch' ? 'active bg-dark text-white' : 'text-muted bg-light'}">To Dispatch</button>
+                                <button t-on-click="() => this.setDeliveriesSubTab('dispatch')" t-attf-class="nav-link shahtaj-pill-tab rounded-pill fw-bold px-3 py-2 #{this.state.deliveriesSubTab === 'dispatch' ? 'active bg-dark text-white' : 'text-muted bg-light'}">To Dispatch</button>
                             </li>
                             <li class="nav-item" t-if="this.canSeeDelivery('jobs')">
-                                <button t-on-click="() => this.setDeliveriesSubTab('jobs')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.deliveriesSubTab === 'jobs' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Delivery Jobs</button>
+                                <button t-on-click="() => this.setDeliveriesSubTab('jobs')" t-attf-class="nav-link shahtaj-pill-tab rounded-pill fw-bold px-3 py-2 #{this.state.deliveriesSubTab === 'jobs' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Delivery Jobs</button>
                             </li>
                             <li class="nav-item" t-if="this.canSeeDelivery('sessions')">
-                                <button t-on-click="() => this.setDeliveriesSubTab('sessions')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.deliveriesSubTab === 'sessions' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Day Sessions</button>
+                                <button t-on-click="() => this.setDeliveriesSubTab('sessions')" t-attf-class="nav-link shahtaj-pill-tab rounded-pill fw-bold px-3 py-2 #{this.state.deliveriesSubTab === 'sessions' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Day Sessions</button>
                             </li>
                             <li class="nav-item" t-if="this.canSeeDelivery('recovery')">
-                                <button t-on-click="() => this.setDeliveriesSubTab('recovery')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.deliveriesSubTab === 'recovery' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Recovery</button>
+                                <button t-on-click="() => this.setDeliveriesSubTab('recovery')" t-attf-class="nav-link shahtaj-pill-tab rounded-pill fw-bold px-3 py-2 #{this.state.deliveriesSubTab === 'recovery' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Recovery</button>
                             </li>
                             <li class="nav-item" t-if="this.canSeeDelivery('settlements')">
-                                <button t-on-click="() => this.setDeliveriesSubTab('settlements')" t-attf-class="nav-link rounded-pill fw-bold px-3 py-2 border-0 #{this.state.deliveriesSubTab === 'settlements' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Wallet Settlements</button>
+                                <button t-on-click="() => this.setDeliveriesSubTab('settlements')" t-attf-class="nav-link shahtaj-pill-tab rounded-pill fw-bold px-3 py-2 #{this.state.deliveriesSubTab === 'settlements' ? 'active bg-dark text-white' : 'text-muted bg-light'}">Wallet Settlements</button>
                             </li>
                         </ul>
                     </div>
@@ -723,7 +723,7 @@
                                 </t>
 
                                     <!-- Edit Details Button -->
-                                <button t-if="this.canMutate and this.hasFinancialAccess" class="btn btn-sm btn-dark shadow-sm fw-bold px-3 d-flex align-items-center" t-on-click="toggleEditDelivery">
+                                <button t-if="this.canEditDispatchDetails and this.hasFinancialAccess" class="btn btn-sm btn-dark shadow-sm fw-bold px-3 d-flex align-items-center" t-on-click="toggleEditDelivery">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil me-1">
                                         <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
                                         <path d="m15 5 4 4"/>
@@ -735,7 +735,7 @@
                                 <button class="btn btn-sm btn-outline-secondary shadow-sm fw-bold px-3" t-on-click="toggleEditDelivery">
                                         Discard
                                 </button>
-                                <button t-if="this.canMutate" class="btn btn-sm btn-success shadow-sm fw-bold px-4 text-white d-flex align-items-center" t-on-click="saveDeliveryChanges">
+                                <button t-if="this.canEditDispatchDetails" class="btn btn-sm btn-success shadow-sm fw-bold px-4 text-white d-flex align-items-center" t-on-click="saveDeliveryChanges">
                                     <i class="fa fa-save me-2"></i> Save Changes
                                 </button>
                             </t>
@@ -785,7 +785,7 @@
                         </div>
 
                         <div class="border-top">
-                            <button type="button" class="btn w-100 text-start d-flex align-items-center justify-content-between p-3 bg-white border-0"
+                            <button type="button" class="btn shahtaj-accordion-toggle w-100 text-start d-flex align-items-center justify-content-between p-3"
                                     t-on-click="toggleShopSnapshot" title="Show or hide shop credit and sales history">
                                 <div class="d-flex align-items-center flex-wrap gap-2">
                                     <h6 class="mb-0 fw-bold text-dark text-uppercase small">Shop Snapshot</h6>

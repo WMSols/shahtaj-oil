@@ -10,9 +10,6 @@
                 </div>
                 <div class="text-end">
                     <span class="badge bg-dark px-3 py-2 fs-6 text-white">Admin</span>
-                    <div t-if="this.state.appVersion" class="small text-muted mt-2">
-                        <span class="fw-semibold text-dark ms-1" t-esc="this.state.appVersion"/>
-                    </div>
                 </div>
             </div>
 
@@ -35,22 +32,23 @@
                                         </small>
                                     </div>
                                 </div>
-                                <div class="row g-3 align-items-end">
+                                <div class="row g-3 align-items-start">
                                     <div class="col-md-3">
-                                        <label class="small fw-bold text-muted mb-1">Min distance (metres)</label>
+                                        <label class="small fw-bold text-muted mb-1 d-block">Min distance (metres)</label>
                                         <input type="number" class="form-control" min="0" step="1"
                                                t-model="this.state.gpsForm.min_m"
                                                t-att-disabled="this.state.isSavingGps"/>
                                         <small class="text-muted">Use 0 for no minimum</small>
                                     </div>
                                     <div class="col-md-3">
-                                        <label class="small fw-bold text-muted mb-1">Max distance (metres)</label>
+                                        <label class="small fw-bold text-muted mb-1 d-block">Max distance (metres)</label>
                                         <input type="number" class="form-control" min="10" step="1"
                                                t-model="this.state.gpsForm.max_m"
                                                t-att-disabled="this.state.isSavingGps"/>
                                         <small class="text-muted">Recommended 150–200 if 100 is too strict</small>
                                     </div>
                                     <div class="col-md-3">
+                                        <label class="small fw-bold text-muted mb-1 d-block invisible" aria-hidden="true">Save</label>
                                         <button class="btn btn-dark fw-bold text-white px-4"
                                                 t-on-click="saveGpsSettings"
                                                 t-att-disabled="this.state.isSavingGps">
@@ -130,9 +128,23 @@
                         </div>
                     </div>
 
-                    
                 </div>
             </t>
+
+            <div class="px-4 py-3 border-top small text-muted">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="flex-fill text-start">
+                        <i class="fa fa-copyright me-1" aria-hidden="true"/>
+                        <t t-esc="this.state.appName"/> <t t-esc="this.currentYear"/>
+                    </div>
+                    <div class="flex-fill text-center">
+                        Designed &amp; Developed by WMSols
+                    </div>
+                    <div class="flex-fill text-end">
+                        System Version: <span class="fw-semibold text-dark" t-esc="this.state.appVersion"/>
+                    </div>
+                </div>
+            </div>
         </div>
     </t>
 </templates>

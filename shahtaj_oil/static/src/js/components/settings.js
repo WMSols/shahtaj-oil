@@ -32,6 +32,10 @@ export class PortalSettings extends Component {
         });
     }
 
+    get currentYear() {
+        return new Date().getFullYear();
+    }
+
     _logoPreviewSrc(logoBase64) {
         if (!logoBase64) {
             return false;

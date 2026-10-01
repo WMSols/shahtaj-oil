@@ -4,6 +4,7 @@ import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { ConfirmModal } from "./confirm_modal";
 import {
+    canManageProducts,
     canMutate,
     canSee,
     firstAllowedSub,
@@ -224,6 +225,10 @@ export class WarehouseInventory extends Component {
         return showPrices();
     }
 
+    get canManageProducts() {
+        return canManageProducts();
+    }
+
     formatStockQty(value) {
         return (Number(value) || 0).toLocaleString(undefined, {
             minimumFractionDigits: 2,
@@ -236,7 +241,7 @@ export class WarehouseInventory extends Component {
         if (this.showPrices) {
             columns += 1;
         }
-        if (this.canMutate) {
+        if (this.canManageProducts) {
             columns += 1;
         }
         return columns;
@@ -268,6 +273,9 @@ export class WarehouseInventory extends Component {
     }
 
     toggleArchive(model, id, makeActive) {
+        if (model === "product.template" && !this.canManageProducts) {
+            return;
+        }
         if (makeActive) {
             this.executeToggleArchive(model, id, makeActive);
         } else {
@@ -543,6 +551,9 @@ export class WarehouseInventory extends Component {
     }
 
     viewProductDetails(product) {
+        if (!this.canManageProducts) {
+            return;
+        }
         let currentTaxId = "";
         if (product.taxes_id && product.taxes_id.length > 0) {
             currentTaxId = product.taxes_id[0].toString();

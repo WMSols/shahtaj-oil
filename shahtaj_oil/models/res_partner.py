@@ -12,14 +12,15 @@ from odoo.tools import float_is_zero
 
 MAX_REGISTRATION_DISTANCE_M = 100.0
 
-# Approvers (Dist + Manager via order_approver), bookers, and KPO (shop balances)
-# can use credit fields without full Invoicing app rights.
+# Approvers (Dist + Manager via order_approver), bookers, KPO, and Warehouse
+# can read credit fields without full Invoicing app rights.
 _SHAHTAJ_CREDIT_GROUPS = (
     'account.group_account_invoice,account.group_account_readonly,'
     'shahtaj_oil.group_shahtaj_office_ops,'
     'shahtaj_oil.group_shahtaj_order_approver,'
     'shahtaj_oil.group_shahtaj_order_booker,'
-    'shahtaj_oil.group_shahtaj_kpo'
+    'shahtaj_oil.group_shahtaj_kpo,'
+    'shahtaj_oil.group_shahtaj_warehouse'
 )
 
 

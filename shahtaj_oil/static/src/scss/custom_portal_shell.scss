@@ -40,6 +40,39 @@ body.o_shahtaj_custom_portal .o_user_menu .oe_topbar_name {
     display: none !important;
 }
 
+/* DM job section headers: a light bar so the row reads as a control. */
+.shahtaj-accordion-toggle {
+    background: #f1f5f9 !important;
+    border: 0 !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+    color: #0f172a;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.shahtaj-accordion-toggle:hover,
+.shahtaj-accordion-toggle:focus-visible {
+    background: #e2e8f0 !important;
+}
+
+.shahtaj-accordion-toggle .fa,
+.shahtaj-accordion-toggle svg {
+    color: #475569 !important;
+}
+
+/* Inactive pills on Staff and DM Operations stay outlined and darken on hover. */
+.shahtaj-pill-tab {
+    border: 1px solid #cbd5e1 !important;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.shahtaj-pill-tab:not(.active):hover,
+.shahtaj-pill-tab:not(.active):focus-visible {
+    background: #e2e8f0 !important;
+    color: #0f172a !important;
+    border-color: #94a3b8 !important;
+}
+
 .shahtaj-assign-close {
     color: #334155;
     background: #f1f5f9;

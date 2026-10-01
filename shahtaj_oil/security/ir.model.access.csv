@@ -311,3 +311,4 @@ access_product_pricelist_warehouse_acl,product.pricelist.warehouse.acl,product.m
 access_product_pricelist_item_warehouse_acl,product.pricelist.item.warehouse.acl,product.model_product_pricelist_item,group_shahtaj_warehouse_acl,1,0,0,0
 access_account_move_shahtaj_warehouse_acl,account.move.shahtaj.warehouse.acl,account.model_account_move,group_shahtaj_warehouse_acl,1,0,0,0
 access_account_move_line_shahtaj_warehouse_acl,account.move.line.shahtaj.warehouse.acl,account.model_account_move_line,group_shahtaj_warehouse_acl,1,0,0,0
+access_account_payment_term_warehouse_acl,account.payment.term.warehouse.acl,account.model_account_payment_term,group_shahtaj_warehouse_acl,1,0,0,0

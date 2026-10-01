@@ -4,6 +4,7 @@ import { Component, useState, onWillStart, onWillUpdateProps, useEffect, useRef 
 import { useService } from "@web/core/utils/hooks";
 import {
     canDispatchOrders,
+    canEditDispatchDetails,
     canMutate,
     canSettleWallet,
     canSee,
@@ -1972,6 +1973,10 @@ export class OperationsBase extends Component {
         return canDispatchOrders();
     }
 
+    get canEditDispatchDetails() {
+        return canEditDispatchDetails();
+    }
+
     get showPrices() {
         return showPrices();
     }
@@ -2013,7 +2018,7 @@ export class OperationsBase extends Component {
     }
 
     toggleEditDelivery() {
-        if (!hasFinancialAccess()) {
+        if (!canEditDispatchDetails() || !hasFinancialAccess()) {
             return;
         }
         if (this.state.isEditingDelivery) {
@@ -2178,7 +2183,7 @@ export class OperationsBase extends Component {
                 "amount_untaxed", "amount_tax", "amount_total", "invoice_status", "invoice_ids", "state",
                 "shahtaj_shop_category", "shahtaj_approval_state",
             ];
-            if (this.hasFinancialAccess) {
+            if (this.hasFinancialAccess || this.canDispatchOrders) {
                 orderFields.push(
                     "shahtaj_shop_credit_limit", "shahtaj_shop_outstanding",
                     "shahtaj_shop_pending_exposure", "shahtaj_shop_uninvoiced_exposure",
@@ -2240,7 +2245,7 @@ export class OperationsBase extends Component {
     }
 
    async saveDeliveryChanges() {
-        if (!hasFinancialAccess()) {
+        if (!canEditDispatchDetails() || !hasFinancialAccess()) {
             return;
         }
         try {

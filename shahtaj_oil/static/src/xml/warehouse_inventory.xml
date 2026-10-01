@@ -13,7 +13,7 @@
                     <button class="btn btn-outline-secondary fw-bold shadow-sm d-inline-flex align-items-center " t-on-click="refreshData" t-att-disabled="this.state.isLoading" title="Refresh Inventory Data">
                         <i class="fa fa-refresh me-2" t-att-class="{'fa-spin': this.state.isLoading}"></i> Refresh
                     </button>
-                    <button t-if="this.canMutate and this.hasFinancialAccess" class="btn btn-outline-danger ms-3 fw-bold shadow-sm d-inline-flex align-items-center" t-on-click="() => this.setSubTab('archive')" title="View Archived Items">
+                    <button t-if="this.canManageProducts and this.hasFinancialAccess" class="btn btn-outline-danger ms-3 fw-bold shadow-sm d-inline-flex align-items-center" t-on-click="() => this.setSubTab('archive')" title="View Archived Items">
                         <i class="fa fa-archive me-2"></i> View Archive
                     </button>
                 </div>
@@ -42,7 +42,7 @@
                                 <option t-if="this.showPrices" value="price_asc">Price: Low to High</option>
                                 <option t-if="this.showPrices" value="price_desc">Price: High to Low</option>
                             </select>
-                            <button t-if="this.canMutate" class="btn btn-sm btn-dark fw-bold d-flex align-items-center text-white ms-2 shadow-sm text-nowrap" t-on-click="() => { this.resetForms(); this.state.showProductAddForm = true; }" title="Add a brand new product to your catalog">
+                            <button t-if="this.canManageProducts" class="btn btn-sm btn-dark fw-bold d-flex align-items-center text-white ms-2 shadow-sm text-nowrap" t-on-click="() => { this.resetForms(); this.state.showProductAddForm = true; }" title="Add a brand new product to your catalog">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus me-1">
                                     <path d="M5 12h14"/>
                                     <path d="M12 5v14"/>
@@ -253,7 +253,7 @@
                                         <th class="border-top-0 ps-4">Product Details</th>
                                         <th t-if="this.showPrices" class="border-top-0 text-end" title="Cost price / sale price">Price Cost/Sale</th>
                                         <th class="border-top-0 text-end">On-Hand Qty</th>
-                                        <th t-if="this.canMutate" class="border-top-0 text-center pe-4">Actions</th>
+                                        <th t-if="this.canManageProducts" class="border-top-0 text-center pe-4">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -281,7 +281,7 @@
                                                 </div>
                                             </td>
                                             <td class="text-end"><span class="h6 fw-bold text-dark mb-0"><t t-esc="item.qty_available"/></span> <span class="text-muted ms-1 small"><t t-esc="item.uom_name"/></span></td>
-                                            <td t-if="this.canMutate" class="text-center pe-4">
+                                            <td t-if="this.canManageProducts" class="text-center pe-4">
                                                 <button class="btn btn-sm btn-light border fw-bold text-primary" t-on-click="() => this.viewProductDetails(item)">Edit</button>
                                                 <button class="btn btn-sm btn-outline-danger ms-2 fw-bold" t-on-click="() => this.toggleArchive('product.template', item.id, false)">Archive</button>
                                             </td>
