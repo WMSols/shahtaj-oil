@@ -3118,6 +3118,16 @@ export class OperationsBase extends Component {
         })[channel] || channel || '—';
     }
 
+    _invoicePaymentStateLabel(state) {
+        return ({
+            not_paid: 'Not Paid',
+            partial: 'Partial',
+            in_payment: 'In Payment',
+            paid: 'Paid',
+            reversed: 'Reversed',
+        })[state] || state || '—';
+    }
+
     _mapRecoveryRow(p) {
         return {
             id: p.id,
@@ -3135,7 +3145,7 @@ export class OperationsBase extends Component {
     }
 
     async viewRecovery(row) {
-        this.state.selectedRecovery = { ...row };
+        this.state.selectedRecovery = { ...row, invoiceReady: false };
         try {
             const recs = await this.orm.read("account.payment", [row.id], [
                 "name", "date", "amount", "state", "partner_id",
@@ -3145,13 +3155,46 @@ export class OperationsBase extends Component {
                 "shahtaj_payer_bank_name", "shahtaj_payer_account_number",
                 "shahtaj_has_cheque_image", "shahtaj_cheque_image",
                 "shahtaj_dm_delivery_id", "reconciled_invoice_ids",
+                "shahtaj_invoice_names", "shahtaj_invoice_amount_total",
+                "shahtaj_invoice_amount_residual",
             ]);
             if (!recs.length || !this.state.selectedRecovery || this.state.selectedRecovery.id !== row.id) {
                 return;
             }
             const p = recs[0];
-            const invoices = Array.isArray(p.reconciled_invoice_ids) ? p.reconciled_invoice_ids : [];
-            const invoiceNames = invoices.map((inv) => Array.isArray(inv) ? inv[1] : String(inv)).filter(Boolean);
+            const invoiceIds = (Array.isArray(p.reconciled_invoice_ids) ? p.reconciled_invoice_ids : [])
+                .map((inv) => Array.isArray(inv) ? inv[0] : inv)
+                .filter(Boolean);
+            let invoiceLines = [];
+            let invoiceNote = "";
+            if (p.state === "canceled") {
+                invoiceNote = "Payment cancelled.";
+            } else if (!invoiceIds.length) {
+                invoiceNote = "No invoice linked to this collection.";
+            } else {
+                try {
+                    const moves = await this.orm.read("account.move", invoiceIds, [
+                        "name", "display_name", "amount_total", "amount_residual",
+                        "payment_state", "move_type",
+                    ]);
+                    invoiceLines = moves
+                        .filter((move) => move.move_type === "out_invoice" || move.move_type === "out_refund")
+                        .map((move) => ({
+                            id: move.id,
+                            name: move.name || move.display_name || "—",
+                            total: Math.abs(move.amount_total || 0),
+                            remaining: Math.abs(move.amount_residual || 0),
+                            status: this._invoicePaymentStateLabel(move.payment_state),
+                        }));
+                } catch (error) {
+                    invoiceLines = [];
+                }
+                if (!invoiceLines.length) {
+                    invoiceNote = p.shahtaj_invoice_names
+                        ? ""
+                        : "No invoice linked to this collection.";
+                }
+            }
             this.state.selectedRecovery = {
                 ...this._mapRecoveryRow(p),
                 journal: p.journal_id ? p.journal_id[1] : '—',
@@ -3163,8 +3206,12 @@ export class OperationsBase extends Component {
                 hasChequeImage: !!p.shahtaj_has_cheque_image,
                 chequeImage: p.shahtaj_cheque_image || '',
                 job: p.shahtaj_dm_delivery_id ? p.shahtaj_dm_delivery_id[1] : '',
-                invoices: invoiceNames,
-                invoiceLabel: invoiceNames.join(', '),
+                invoiceLabel: p.shahtaj_invoice_names || '',
+                invoiceTotal: p.shahtaj_invoice_amount_total || 0,
+                invoiceRemaining: p.shahtaj_invoice_amount_residual || 0,
+                invoiceLines,
+                invoiceNote,
+                invoiceReady: true,
             };
         } catch (error) {
             this.notification.add("Could not load recovery: " + (error.data?.message || error.message), { type: "danger" });

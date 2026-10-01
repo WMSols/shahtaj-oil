@@ -31,7 +31,6 @@ import { BankTransactions } from "./bank_transactions";
 import { Accounting } from "./accounting";
 import { FieldReports } from "./field_reports";
 import { ConfirmModal } from "./confirm_modal";
-import { startConnectionProbe } from "./connection_probe";
 
 export class ShahtajDashboard extends Component {
     static components = { StaffManagement, OperationsTracking, DeliveryManPerformance, TerritoryRoutes, WarehouseInventory, FinancialsInvoicing, PortalSettings, SchedulesTargets, BankTransactions, Accounting, FieldReports, ConfirmModal }; 
@@ -68,10 +67,7 @@ export class ShahtajDashboard extends Component {
             cashDirection: 'all',
             cashDateFrom: '',
             cashDateTo: '', 
-            isSidebarOpen: false,
-            linkStatus: "checking",
-            linkMs: null,
-            serverMs: null, 
+            isSidebarOpen: false, 
             isSwitchingTab: false,
             isSidebarLocked: false,
             isLoadingKpis: false,
@@ -163,14 +159,8 @@ export class ShahtajDashboard extends Component {
             this.state.isSidebarLocked = Boolean(ev.detail?.busy);
         };
         window.addEventListener("shahtaj-portal-busy", this._onPortalBusy);
-        this._stopConnectionProbe = startConnectionProbe((patch) => {
-            Object.assign(this.state, patch);
-        });
         onWillUnmount(() => {
             window.removeEventListener("shahtaj-portal-busy", this._onPortalBusy);
-            if (this._stopConnectionProbe) {
-                this._stopConnectionProbe();
-            }
             resetPortalBusy();
             this.destroyCashChart();
         });
@@ -1038,68 +1028,6 @@ export class ShahtajDashboard extends Component {
             resetPortalBusy();
         }
     }
-    get linkBars() {
-        if (this.state.linkStatus !== "online" || this.state.linkMs == null) {
-            return 0;
-        }
-        const ms = this.state.linkMs;
-        if (ms > 800) {
-            return 1;
-        }
-        if (ms > 300) {
-            return 2;
-        }
-        if (ms > 100) {
-            return 3;
-        }
-        return 4;
-    }
-
-    get linkQualityLabel() {
-        if (this.state.linkStatus === "checking") {
-            return "Checking";
-        }
-        if (this.state.linkStatus === "offline") {
-            return "Offline";
-        }
-        return ["", "Poor", "Fair", "Good", "Strong"][this.linkBars] || "Poor";
-    }
-
-    get linkQualityClass() {
-        if (this.state.linkStatus === "checking") {
-            return "text-muted";
-        }
-        if (this.state.linkStatus === "offline" || this.linkBars <= 1) {
-            return "text-danger";
-        }
-        if (this.linkBars === 2) {
-            return "text-warning";
-        }
-        return "text-success";
-    }
-
-    get linkHint() {
-        return "Link is how long it takes to reach this server. Server is the slowest portal request in the last few seconds. A fast link with a slow server means the system is the delay.";
-    }
-
-    formatDuration(ms) {
-        if (ms == null || Number.isNaN(ms)) {
-            return "—";
-        }
-        if (ms >= 1000) {
-            return `${(ms / 1000).toFixed(1)} s`;
-        }
-        return `${Math.round(ms)} ms`;
-    }
-
-    linkBarStyle(level) {
-        const heights = { 1: 6, 2: 10, 3: 14, 4: 18 };
-        const active = level <= this.linkBars;
-        const colors = { 1: "#dc2626", 2: "#d97706", 3: "#65a30d", 4: "#16a34a" };
-        const color = active ? colors[this.linkBars] || "#16a34a" : "#e2e8f0";
-        return `display:inline-block;width:4px;height:${heights[level]}px;border-radius:2px;background:${color};`;
-    }
-
     toggleSidebar() {
         if (this.state.isSwitchingTab) {
             return;

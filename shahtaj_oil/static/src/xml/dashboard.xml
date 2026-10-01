@@ -273,9 +273,9 @@
 
             <div t-if="this.state.isSidebarOpen" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-md-none" style="z-index: 1040;" t-on-click="toggleSidebar"></div>
 
-            <div t-attf-class="bg-white border-end shadow-sm flex-column overflow-hidden transition-all #{this.state.isSidebarOpen ? 'position-fixed top-0 start-0 d-flex h-100' : 'd-none d-md-flex h-100 position-relative'}" t-att-style="'width: 280px; min-width: 280px; z-index: 1050;' + (this.state.isSwitchingTab ? ' cursor: wait;' : '')">
+            <div t-attf-class="bg-white border-end shadow-sm flex-column overflow-y-auto transition-all #{this.state.isSidebarOpen ? 'position-fixed top-0 start-0 d-flex h-100' : 'd-none d-md-flex h-100 position-relative'}" t-att-style="'width: 280px; min-width: 280px; z-index: 1050;' + (this.state.isSwitchingTab ? ' cursor: wait;' : '')">
 
-                <div class="p-4 border-bottom text-center bg-white position-relative flex-shrink-0">
+                <div class="p-4 border-bottom text-center bg-white position-relative">
                     <button class="btn btn-sm btn-light position-absolute top-0 end-0 m-2 d-md-none shadow-sm" t-on-click="toggleSidebar">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x">
                             <path d="M18 6 6 18"/>
@@ -286,7 +286,7 @@
                     <h6 class="mb-0 fw-bold text-dark mt-2" t-esc="this.portalTitle"/>
                 </div>
 
-                <div class="list-group list-group-flush p-3 fw-bold flex-grow-1 overflow-y-auto" style="min-height: 0;">                
+                <div class="list-group list-group-flush p-3 fw-bold flex-grow-1">                
                     <!-- NEW: Dashboard Overview Button -->
                     <div class="mb-2">
                         <button t-on-click="() => this.switchTab('overview')" class="list-group-item list-group-item-action border-0 rounded text-start d-flex align-items-center transition-all w-100" t-att-style="this.state.activeTab === 'overview' ? 'background-color: #0f172a; color: #ffffff;' : 'color: #4b5563; background-color: transparent;'">
@@ -540,21 +540,6 @@
                         Settings
                     </button>
 
-                </div>
-
-                <div class="border-top px-3 py-2 flex-shrink-0 bg-white" t-att-title="this.linkHint">
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="d-inline-flex align-items-end gap-1" style="height: 18px;" aria-hidden="true">
-                            <t t-foreach="[1, 2, 3, 4]" t-as="level" t-key="level">
-                                <span t-att-style="this.linkBarStyle(level)"/>
-                            </t>
-                        </span>
-                        <span class="small fw-semibold" t-att-class="this.linkQualityClass" t-esc="this.linkQualityLabel"/>
-                    </div>
-                    <div class="d-flex justify-content-between gap-2 small text-muted mt-1">
-                        <span class="text-nowrap">Link <t t-esc="this.formatDuration(this.state.linkMs)"/></span>
-                        <span class="text-nowrap">Server <t t-esc="this.formatDuration(this.state.serverMs)"/></span>
-                    </div>
                 </div>
             </div>
 

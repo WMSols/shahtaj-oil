@@ -1,8 +1,9 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart } from "@odoo/owl";
+import { Component, useState, onWillStart, onWillUnmount } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { notifyPortalBusy } from "../shahtaj_access";
+import { startConnectionProbe } from "./connection_probe";
 
 export class PortalSettings extends Component {
     setup() {
@@ -25,15 +26,84 @@ export class PortalSettings extends Component {
             },
             appName: "Shahtaj Oil",
             appVersion: "",
+            linkStatus: "checking",
+            linkMs: null,
+            serverMs: null,
         });
 
         onWillStart(async () => {
             await this.loadSettings();
         });
+        this._stopConnectionProbe = startConnectionProbe((patch) => {
+            Object.assign(this.state, patch);
+        });
+        onWillUnmount(() => {
+            if (this._stopConnectionProbe) {
+                this._stopConnectionProbe();
+            }
+        });
     }
 
     get currentYear() {
         return new Date().getFullYear();
+    }
+
+    get linkBars() {
+        if (this.state.linkStatus !== "online" || this.state.linkMs == null) {
+            return 0;
+        }
+        const ms = this.state.linkMs;
+        if (ms > 800) {
+            return 1;
+        }
+        if (ms > 300) {
+            return 2;
+        }
+        if (ms > 100) {
+            return 3;
+        }
+        return 4;
+    }
+
+    get linkQualityLabel() {
+        if (this.state.linkStatus === "checking") {
+            return "Checking";
+        }
+        if (this.state.linkStatus === "offline") {
+            return "Offline";
+        }
+        return ["", "Poor", "Fair", "Good", "Strong"][this.linkBars] || "Poor";
+    }
+
+    get linkQualityClass() {
+        if (this.state.linkStatus === "checking") {
+            return "text-muted";
+        }
+        if (this.state.linkStatus === "offline" || this.linkBars <= 1) {
+            return "text-danger";
+        }
+        if (this.linkBars === 2) {
+            return "text-warning";
+        }
+        return "text-success";
+    }
+
+    formatDuration(ms) {
+        if (ms == null || Number.isNaN(ms)) {
+            return "—";
+        }
+        if (ms >= 1000) {
+            return `${(ms / 1000).toFixed(1)} s`;
+        }
+        return `${Math.round(ms)} ms`;
+    }
+
+    linkBarStyle(level) {
+        const heights = { 1: 6, 2: 10, 3: 14, 4: 18 };
+        const active = level <= this.linkBars;
+        const colors = { 1: "#dc2626", 2: "#d97706", 3: "#65a30d", 4: "#16a34a" };
+        const color = active ? colors[this.linkBars] || "#16a34a" : "#e2e8f0";
+        return `display:inline-block;width:4px;height:${heights[level]}px;border-radius:2px;background:${color};`;
     }
 
     _logoPreviewSrc(logoBase64) {

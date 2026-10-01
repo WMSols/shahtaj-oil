@@ -651,9 +651,45 @@
                                     <span class="text-muted small d-block">Customer account</span>
                                     <span><t t-esc="this.state.selectedRecovery.accountNumber"/></span>
                                 </div>
-                                <div class="col-12" t-if="this.state.selectedRecovery.invoiceLabel">
-                                    <span class="text-muted small d-block">Invoices</span>
-                                    <span><t t-esc="this.state.selectedRecovery.invoiceLabel"/></span>
+                                <div class="col-md-6" t-if="this.state.selectedRecovery.invoiceReady">
+                                    <span class="text-muted small d-block">Invoice total</span>
+                                    <span class="fw-bold">Rs. <t t-esc="this.formatMoney(this.state.selectedRecovery.invoiceTotal)"/></span>
+                                </div>
+                                <div class="col-md-6" t-if="this.state.selectedRecovery.invoiceReady">
+                                    <span class="text-muted small d-block">Invoice remaining</span>
+                                    <span class="fw-bold">Rs. <t t-esc="this.formatMoney(this.state.selectedRecovery.invoiceRemaining)"/></span>
+                                </div>
+                                <div class="col-12" t-if="this.state.selectedRecovery.invoiceReady">
+                                    <span class="text-muted small d-block mb-2">Invoice details</span>
+                                    <t t-if="this.state.selectedRecovery.invoiceLines.length">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-bordered mb-1 align-middle">
+                                                <thead class="bg-light small text-muted">
+                                                    <tr>
+                                                        <th>Invoice</th>
+                                                        <th class="text-end">Total</th>
+                                                        <th class="text-end">Remaining</th>
+                                                        <th>Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr t-foreach="this.state.selectedRecovery.invoiceLines" t-as="inv" t-key="inv.id">
+                                                        <td><t t-esc="inv.name"/></td>
+                                                        <td class="text-end">Rs. <t t-esc="this.formatMoney(inv.total)"/></td>
+                                                        <td class="text-end">Rs. <t t-esc="this.formatMoney(inv.remaining)"/></td>
+                                                        <td><t t-esc="inv.status"/></td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <small class="text-muted">This collection: Rs. <t t-esc="this.formatMoney(this.state.selectedRecovery.amount)"/></small>
+                                    </t>
+                                    <span t-elif="this.state.selectedRecovery.invoiceLabel" class="fw-bold">
+                                        <t t-esc="this.state.selectedRecovery.invoiceLabel"/>
+                                    </span>
+                                    <span t-else="" class="text-muted">
+                                        <t t-esc="this.state.selectedRecovery.invoiceNote || 'No invoice linked to this collection.'"/>
+                                    </span>
                                 </div>
                                 <div class="col-12">
                                     <span class="text-muted small d-block">Notes</span>
