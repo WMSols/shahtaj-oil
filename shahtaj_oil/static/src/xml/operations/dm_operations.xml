@@ -60,7 +60,7 @@
                             </t>
                         </div>
 
-                        <div t-if="this.hasFinancialAccess" class="card border-0 shadow-sm rounded-3 mb-3 overflow-hidden">
+                        <div t-if="this.hasFinancialAccess and !this.state.selectedDmJob.isWalkIn" class="card border-0 shadow-sm rounded-3 mb-3 overflow-hidden">
                             <button type="button" class="btn shahtaj-accordion-toggle w-100 text-start d-flex align-items-center justify-content-between p-3" t-on-click="() => this.toggleDmJobSection('shop')">
                                 <h6 class="mb-0 fw-bold text-dark text-uppercase small">Shop Balance</h6>
                                 <i t-attf-class="fa #{this.state.dmJobSections.shop ? 'fa-chevron-up' : 'fa-chevron-down'} text-muted"/>
@@ -176,8 +176,12 @@
                                 <option value="all">All delivery statuses</option>
                                 <option value="pending">To Deliver</option>
                                 <option value="partial">Partially Delivered</option>
-                                <option value="done">Fully Delivered</option>
-                                <option value="no_stock">No Stock Moves</option>
+                            </select>
+                            <select class="form-select form-select-sm" style="max-width: 180px;" t-model="this.state.filters.dispatch.invoiceStatus" t-on-change="() => this.onFilterChange('dispatch')">
+                                <option value="all">All invoice statuses</option>
+                                <option value="invoiced">Invoiced</option>
+                                <option value="draft">Draft</option>
+                                <option value="not_invoiced">Not invoiced</option>
                             </select>
                         </div>
                     </div>
@@ -197,13 +201,14 @@
                                         <th class="text-end border-top-0">Qty Still to Deliver</th>
                                         <th class="text-end border-top-0">Unassigned Qty</th>
                                         <th class="border-top-0">Invoice</th>
+                                        <th class="border-top-0">Stock</th>
                                         <th class="border-top-0">DM Jobs</th>
                                         <th class="text-end pe-4 border-top-0">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <t t-if="this.state.tableDispatch.length === 0 and !this.state.isLoadingList">
-                                        <tr><td colspan="8" class="text-center py-5 text-muted fw-bold">No orders waiting to dispatch.</td></tr>
+                                        <tr><td colspan="9" class="text-center py-5 text-muted fw-bold">No orders waiting to dispatch.</td></tr>
                                     </t>
                                     <t t-foreach="this.state.tableDispatch" t-as="row" t-key="row.odoo_id">
                                         <tr>
@@ -223,6 +228,14 @@
                                                 <span t-if="row.hasPostedInvoice" class="badge bg-success text-white">Posted</span>
                                                 <span t-elif="row.draftInvoiceId" class="badge bg-warning text-dark">Confirm first</span>
                                                 <span t-else="" class="badge bg-warning text-dark">Invoice first</span>
+                                            </td>
+                                            <td>
+                                                <t t-if="row.stockStates and row.stockStates.length">
+                                                    <t t-foreach="row.stockStates" t-as="stockState" t-key="stockState">
+                                                        <span t-attf-class="badge me-1 #{this.stockStateBadgeClass(stockState)}"><t t-esc="this.stockStateLabel(stockState)"/></span>
+                                                    </t>
+                                                </t>
+                                                <span t-else="" class="text-muted">—</span>
                                             </td>
                                             <td><t t-esc="row.dmJobCount"/></td>
                                             <td class="text-end pe-4">
@@ -1154,7 +1167,7 @@
                                     </div>
                                     <div class="row g-2 mb-2">
                                         <div t-attf-class="#{this.state.assignModal.readOnly ? 'col-12' : 'col-md-10'}">
-                                            <select class="form-select form-select-sm" t-att-disabled="this.state.assignModal.readOnly" t-on-change="(ev) => this.setAssignDeliveryMan(job, ev.target.value)">
+                                            <select class="form-select form-select-sm" t-att-disabled="this.state.assignModal.readOnly || !job.canRemove" t-att-title="job.canRemove ? '' : 'This delivery man has already picked or delivered stock'" t-on-change="(ev) => this.setAssignDeliveryMan(job, ev.target.value)">
                                                 <option value="" t-att-selected="this.isSelectedId(job.deliveryManId, '')">Select</option>
                                                 <t t-foreach="this.assignDmOptions(job)" t-as="dm" t-key="dm.id">
                                                     <option t-att-value="this.optionId(dm.id)" t-att-selected="this.isSelectedId(job.deliveryManId, dm.id)"><t t-esc="dm.name"/></option>

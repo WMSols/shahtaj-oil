@@ -223,8 +223,9 @@ access_shahtaj_generate_tasks_wizard_manager,shahtaj.generate.tasks.wizard.manag
 access_sale_order_shahtaj_kpo_acl,sale.order.shahtaj.kpo.acl,sale.model_sale_order,group_shahtaj_kpo_acl,1,0,0,0
 access_sale_order_line_shahtaj_kpo_acl,sale.order.line.shahtaj.kpo.acl,sale.model_sale_order_line,group_shahtaj_kpo_acl,1,0,0,0
 access_res_partner_shahtaj_kpo_acl,res.partner.shahtaj.kpo.acl,base.model_res_partner,group_shahtaj_kpo_acl,1,1,1,0
-access_product_template_shahtaj_kpo_acl,product.template.shahtaj.kpo.acl,product.model_product_template,group_shahtaj_kpo_acl,1,0,0,0
-access_product_product_shahtaj_kpo_acl,product.product.shahtaj.kpo.acl,product.model_product_product,group_shahtaj_kpo_acl,1,0,0,0
+access_product_template_shahtaj_kpo_acl,product.template.shahtaj.kpo.acl,product.model_product_template,group_shahtaj_kpo_acl,1,1,1,0
+access_product_product_shahtaj_kpo_acl,product.product.shahtaj.kpo.acl,product.model_product_product,group_shahtaj_kpo_acl,1,1,1,0
+access_product_category_shahtaj_kpo_acl,product.category.shahtaj.kpo.acl,product.model_product_category,group_shahtaj_kpo_acl,1,0,0,0
 access_res_users_shahtaj_kpo_acl,res.users.shahtaj.kpo.acl,base.model_res_users,group_shahtaj_kpo_acl,1,0,0,0
 access_account_move_shahtaj_kpo_acl,account.move.shahtaj.kpo.acl,account.model_account_move,group_shahtaj_kpo_acl,1,1,1,0
 access_account_move_line_shahtaj_kpo_acl,account.move.line.shahtaj.kpo.acl,account.model_account_move_line,group_shahtaj_kpo_acl,1,1,1,0

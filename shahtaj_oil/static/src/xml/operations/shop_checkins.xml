@@ -348,7 +348,7 @@
             </div>
         </div>
 
-        <div class="card border-0 shadow-sm rounded-3 mb-4 mt-3 overflow-hidden">
+        <div t-if="this.state.selectedCheckin.purpose !== 'walk_in'" class="card border-0 shadow-sm rounded-3 mb-4 mt-3 overflow-hidden">
             <button type="button" class="btn w-100 text-start d-flex align-items-center justify-content-between p-3 bg-white border-0"
                     t-on-click="toggleShopSnapshot" title="Show or hide shop credit and sales history">
                 <div class="d-flex align-items-center flex-wrap gap-2">

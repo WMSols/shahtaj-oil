@@ -329,7 +329,7 @@ class ProductTemplate(models.Model):
             ('account_type', '=', 'income'),
         ], limit=1)
         if income:
-            category.property_account_income_categ_id = income
+            category.sudo().property_account_income_categ_id = income
         return category
 
     @api.model
@@ -439,7 +439,14 @@ class ProductTemplate(models.Model):
         # Enforce ordered-qty invoicing on every product create (portal / native / import).
         for vals in vals_list:
             vals['invoice_policy'] = 'order'
-        products = super().create(vals_list)
+        # KPO can create products but lacks Inventory groups. Stock hooks on
+        # create (variant, routes) run with elevated rights after the ACL check.
+        needs_sudo = self._shahtaj_distributor_needs_stock_sudo()
+        if needs_sudo:
+            self.check_access('create')
+            products = super(ProductTemplate, self.sudo()).create(vals_list)
+        else:
+            products = super().create(vals_list)
         products._sync_shahtaj_supplierinfo()
         # Portal create passes opening qty in context so stock is set in the same
         # request (avoids a fragile follow-up RPC after create).
@@ -529,7 +536,10 @@ class ProductTemplate(models.Model):
             return False
         if user.has_group('stock.group_stock_user'):
             return False
-        return user.has_group('shahtaj_oil.group_shahtaj_office_ops')
+        return (
+            user.has_group('shahtaj_oil.group_shahtaj_office_ops')
+            or user.has_group('shahtaj_oil.group_shahtaj_kpo')
+        )
 
     def _shahtaj_ensure_distributor_stock_access(self):
         """Only Shahtaj distributors (or real Inventory users) may use stock helpers."""

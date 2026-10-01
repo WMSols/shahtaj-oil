@@ -410,7 +410,9 @@ export class PoManagement extends Component {
                 this.state.purchaseOrders = records.map((po) => this._mapPurchaseOrder(po));
             }
             else if (stateKey === 'receipts') {
-                this.state.receipts = records.map((pick) => this._mapReceipt(pick));
+                const rows = records.map((pick) => this._mapReceipt(pick));
+                await this._markReceiptsReadyToBill(rows);
+                this.state.receipts = rows;
             }
             else if (stateKey === 'vendorBills') {
                 this.state.vendorBills = records.map((bill) => this._mapVendorBill(bill));
@@ -1018,7 +1020,28 @@ export class PoManagement extends Component {
             isReturn,
             typeLabel: isReturn ? 'Return' : 'Receipt',
             purchaseId: pick.purchase_id ? pick.purchase_id[0] : false,
+            canCreateBill: false,
         };
+    }
+
+    async _markReceiptsReadyToBill(rows) {
+        const purchaseIds = [...new Set(rows.map((row) => row.purchaseId).filter(Boolean))];
+        const billable = new Set();
+        if (purchaseIds.length) {
+            const orders = await this.orm.searchRead(
+                "purchase.order",
+                [["id", "in", purchaseIds]],
+                ["id", "state", "invoice_status"],
+            );
+            for (const order of orders) {
+                if (order.state === "purchase" && order.invoice_status === "to invoice") {
+                    billable.add(order.id);
+                }
+            }
+        }
+        for (const row of rows) {
+            row.canCreateBill = row.state === "done" && !row.isReturn && billable.has(row.purchaseId);
+        }
     }
 
     async _reloadReceipt(receiptId) {
@@ -1070,6 +1093,11 @@ export class PoManagement extends Component {
     }
 
     async viewReceipt(receipt) {
+        try {
+            await this._markReceiptsReadyToBill([receipt]);
+        } catch (_error) {
+            receipt.canCreateBill = false;
+        }
         this.state.selectedReceipt = receipt;
         this.state.selectedReceiptLines = [];
         this.state.isLoadingLines = true;
@@ -1319,12 +1347,35 @@ export class PoManagement extends Component {
     }
 
     async actionCreateVendorBill(po) {
+        if (!po || !po.id) {
+            return;
+        }
         try {
-            await this.orm.call("purchase.order", "action_create_invoice", [[po.id]]);
-            await this.fetchActiveList();
-            this.requestTabSwitch('financials', 'vendor_bills');
+            const [before] = await this.orm.read("purchase.order", [po.id], ["invoice_ids"]);
+            const previousIds = new Set((before && before.invoice_ids) || []);
+            const action = await this.orm.call("purchase.order", "action_create_invoice", [[po.id]]);
+            let billId = action && action.res_id;
+            if (!billId) {
+                const [after] = await this.orm.read("purchase.order", [po.id], ["invoice_ids"]);
+                const ids = (after && after.invoice_ids) || [];
+                billId = ids.find((id) => !previousIds.has(id)) || false;
+            }
             this.notification.add("Vendor bill created successfully.", { type: "success" });
+            this._openBillAfterTab = billId || null;
+            this.requestTabSwitch("financials", "vendor_bills");
+            if (billId) {
+                const openId = billId;
+                setTimeout(() => {
+                    if (this._openBillAfterTab !== openId) {
+                        return;
+                    }
+                    this._openBillAfterTab = null;
+                    this.state.poSubTab = "vendor_bills";
+                    this._reloadVendorBill(openId);
+                }, 50);
+            }
         } catch (error) {
+            this._openBillAfterTab = null;
             this.notification.add("Failed to create vendor bill: " + (error.data?.message || error.message), { type: "danger" });
         }
     }

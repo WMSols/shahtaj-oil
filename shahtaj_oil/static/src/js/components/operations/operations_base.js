@@ -1494,9 +1494,30 @@ export class OperationsBase extends Component {
         return Number(row.qtyToDeliver) > 0;
     }
 
+    _dispatchInvoiceDomain(status) {
+        const posted = ["invoice_ids", "any", [["state", "=", "posted"], ["move_type", "=", "out_invoice"]]];
+        const draft = ["invoice_ids", "any", [["state", "=", "draft"], ["move_type", "=", "out_invoice"]]];
+        const noPosted = ["invoice_ids", "not any", [["state", "=", "posted"], ["move_type", "=", "out_invoice"]]];
+        const noOpen = ["invoice_ids", "not any", [["state", "in", ["draft", "posted"]], ["move_type", "=", "out_invoice"]]];
+        if (status === "invoiced") return [posted];
+        if (status === "draft") return ["&", draft, noPosted];
+        if (status === "not_invoiced") return [noOpen];
+        return [];
+    }
+
+    _sortedStockStates(states) {
+        const rank = ["not_ready", "ready", "picked", "partial", "delivered", "returned"];
+        const present = [...new Set((states || []).filter(Boolean))];
+        return [
+            ...rank.filter((state) => present.includes(state)),
+            ...present.filter((state) => !rank.includes(state)),
+        ];
+    }
+
     async _dispatchUnassignedByOrder(orderIds) {
-        const result = {};
-        if (!orderIds.length) return result;
+        const qtyByOrder = {};
+        const stockStatesByOrder = {};
+        if (!orderIds.length) return { qtyByOrder, stockStatesByOrder };
         // No stored unassigned qty. Assigned qty is on DM jobs; leftover is ordered minus that.
         const [lines, jobs] = await Promise.all([
             this.orm.searchRead(
@@ -1511,7 +1532,7 @@ export class OperationsBase extends Component {
             this.orm.searchRead(
                 "shahtaj.dm.delivery",
                 [["sale_order_id", "in", orderIds]],
-                ["sale_order_id", "qty_assigned_total"],
+                ["sale_order_id", "qty_assigned_total", "state"],
             ),
         ]);
         const ordered = {};
@@ -1521,16 +1542,20 @@ export class OperationsBase extends Component {
             ordered[orderId] = (ordered[orderId] || 0) + (Number(line.product_uom_qty) || 0);
         }
         const assigned = {};
+        const states = {};
         for (const job of jobs) {
             const orderId = job.sale_order_id && job.sale_order_id[0];
             if (!orderId) continue;
             assigned[orderId] = (assigned[orderId] || 0) + (Number(job.qty_assigned_total) || 0);
+            if (!states[orderId]) states[orderId] = [];
+            if (job.state) states[orderId].push(job.state);
         }
         for (const orderId of orderIds) {
             const left = (ordered[orderId] || 0) - (assigned[orderId] || 0);
-            result[orderId] = left > 0 ? left : 0;
+            qtyByOrder[orderId] = left > 0 ? left : 0;
+            stockStatesByOrder[orderId] = this._sortedStockStates(states[orderId]);
         }
-        return result;
+        return { qtyByOrder, stockStatesByOrder };
     }
 
     _operationsListQuery(tab, filters) {
@@ -1570,17 +1595,15 @@ export class OperationsBase extends Component {
             if (tab === 'dispatch') {
                 domain.push(['state', 'in', ['sale', 'done']]);
                 const deliveryStatus = filters.deliveryStatus || 'all';
-                if (deliveryStatus === 'all') {
-                    domain.push(['shahtaj_delivery_status', 'in', ['pending', 'partial']]);
-                    domain.push(['shahtaj_qty_to_deliver', '>', 0]);
-                } else if (deliveryStatus === 'pending' || deliveryStatus === 'partial') {
+                if (deliveryStatus === 'pending' || deliveryStatus === 'partial') {
                     domain.push(['shahtaj_delivery_status', '=', deliveryStatus]);
-                    domain.push(['shahtaj_qty_to_deliver', '>', 0]);
                 } else {
-                    domain.push(['shahtaj_delivery_status', '=', deliveryStatus]);
+                    domain.push(['shahtaj_delivery_status', 'in', ['pending', 'partial']]);
                 }
+                domain.push(['shahtaj_qty_to_deliver', '>', 0]);
                 if (filters.dateFrom) domain.push(['date_order', '>=', this._pktDateToUtcBounds(filters.dateFrom).start]);
                 if (filters.dateTo) domain.push(['date_order', '<=', this._pktDateToUtcBounds(filters.dateTo).end]);
+                domain.push(...this._dispatchInvoiceDomain(filters.invoiceStatus));
             }
             if (tab === 'verification') {
                 domain.push(['shahtaj_approval_state', '=', 'to_approve']);
@@ -1817,10 +1840,10 @@ export class OperationsBase extends Component {
             // 3. MAP RESULTS
             if (tab === 'deliveries' || tab === 'dispatch' || tab === 'orders' || tab === 'verification') {
                 const orderIds = records.map(o => o.id);
-                const [lines, invoiceFlags, unassignedByOrder] = await Promise.all([
+                const [lines, invoiceFlags, dispatchExtras] = await Promise.all([
                     orderIds.length ? this.orm.searchRead("sale.order.line", [["order_id", "in", orderIds]], ["order_id", "product_uom_qty", "qty_delivered"]) : Promise.resolve([]),
                     this._customerInvoiceStates(records),
-                    tab === "dispatch" ? this._dispatchUnassignedByOrder(orderIds) : Promise.resolve({}),
+                    tab === "dispatch" ? this._dispatchUnassignedByOrder(orderIds) : Promise.resolve({ qtyByOrder: {}, stockStatesByOrder: {} }),
                 ]);
                 this.state[targetState] = records.map(o => {
                     const row = this._mapSaleOrderRow(o, lines);
@@ -1828,16 +1851,14 @@ export class OperationsBase extends Component {
                     if (tab === 'dispatch') {
                         row.deliveryStatus = o.shahtaj_delivery_status || '';
                         row.qtyToDeliver = o.shahtaj_qty_to_deliver || 0;
-                        row.qtyUnassigned = unassignedByOrder[o.id] || 0;
+                        row.qtyUnassigned = (dispatchExtras.qtyByOrder || {})[o.id] || 0;
+                        row.stockStates = (dispatchExtras.stockStatesByOrder || {})[o.id] || [];
                         row.dmJobCount = o.shahtaj_dm_delivery_count || 0;
                     }
                     return row;
                 });
                 if (tab === 'dispatch') {
-                    const deliveryStatus = filters.deliveryStatus || 'all';
-                    const visible = (deliveryStatus === 'done' || deliveryStatus === 'no_stock')
-                        ? this.state[targetState]
-                        : this.state[targetState].filter((row) => this._dispatchOrderStillOpen(row));
+                    const visible = this.state[targetState].filter((row) => this._dispatchOrderStillOpen(row));
                     const hidden = this.state[targetState].length - visible.length;
                     this.state[targetState] = visible;
                     if (hidden) {
@@ -2634,6 +2655,9 @@ export class OperationsBase extends Component {
     }
 
     setAssignDeliveryMan(job, value) {
+        if (!job || job.canRemove === false) {
+            return;
+        }
         const id = this.optionId(value);
         job.deliveryManId = id;
         const match = (this.state.lookupDeliveryMen || []).find((dm) => this.optionId(dm.id) === id);
@@ -2857,7 +2881,7 @@ export class OperationsBase extends Component {
             "display_name", "delivery_man_id", "scheduled_date", "scheduled_time",
             "picked_at", "delivered_at", "state", "field_state", "assignment_mode",
             "assigned_by_id", "qty_assigned_total",
-            "sale_order_id", "partner_id", "order_booker_id", "order_date", "notes",
+            "sale_order_id", "partner_id", "order_booker_id", "order_date", "notes", "is_walk_in",
             "gps_verified", "check_in_distance_m", "receiver_name",
             "check_in_latitude", "check_in_longitude", "has_delivery_proof", "delivery_proof_image",
         ];
@@ -2898,6 +2922,7 @@ export class OperationsBase extends Component {
             invoiceStatus: rec.invoice_status || "",
             orderDate: rec.order_date || "",
             notes: rec.notes || "",
+            isWalkIn: !!rec.is_walk_in,
             shopCategory: rec.shop_category || "",
             shopDue: rec.shop_outstanding_balance || 0,
             shopUnpaidAmount: rec.shop_unpaid_invoice_amount || 0,
@@ -3327,7 +3352,7 @@ export class OperationsBase extends Component {
 
     _defaultDispatchFilters() {
         const date = this._navSource().requestedDispatchDate || '';
-        return { search: '', dateFrom: date, dateTo: date, deliveryStatus: 'all' };
+        return { search: '', dateFrom: date, dateTo: date, deliveryStatus: 'all', invoiceStatus: 'all' };
     }
 
     _defaultDmJobsFilters() {
@@ -3962,7 +3987,9 @@ export class OperationsBase extends Component {
         } catch (error) {
             // GPS detail still useful without visit enrichment.
         }
-        await this._loadCheckinShopSnapshot(this.state.selectedCheckin);
+        if (this.state.selectedCheckin.purpose !== "walk_in") {
+            await this._loadCheckinShopSnapshot(this.state.selectedCheckin);
+        }
     }
     closeCheckin() {
         this.state.selectedCheckin = null;

@@ -55,10 +55,13 @@ const ROLE_ACCESS = {
             ["financials", "invoices"],
             ["financials", "credit"],
             ["financials", "po_management"],
+            ["warehouse", "inventory"],
+            ["warehouse", "archive"],
         ],
         cards: ["orders", "invoices"],
         canMutate: true,
         canSettleWallet: true,
+        canManageProducts: true,
         showPrices: true,
     },
     warehouse: {

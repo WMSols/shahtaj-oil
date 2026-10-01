@@ -139,6 +139,7 @@
     'shahtaj_oil/static/src/js/components/settings.js',
     'shahtaj_oil/static/src/js/components/schedules_targets.js',
     'shahtaj_oil/static/src/js/components/accounting.js',
+    'shahtaj_oil/static/src/js/components/connection_probe.js',
     'shahtaj_oil/static/src/js/components/dashboard.js',
     'shahtaj_oil/static/src/js/components/bank_transactions.js',
     'shahtaj_oil/static/src/js/components/*.js',
