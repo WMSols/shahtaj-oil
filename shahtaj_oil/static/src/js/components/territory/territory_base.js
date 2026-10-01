@@ -6,6 +6,7 @@ import { ConfirmModal } from "../confirm_modal";
 import { hasFinancialAccess } from "../../shahtaj_access";
 import { printFilter, printListPdf } from "../../shahtaj_list_export";
 import { applyTerritoryDashboardToState, getTerritoryDashboard } from "./territory_cache";
+import { ensureLeaflet } from "../../shahtaj_leaflet";
 
 export class TerritoryBase extends Component {
     static props = {
@@ -156,6 +157,7 @@ export class TerritoryBase extends Component {
         });
 
         useEffect(() => {
+            let cancelled = false;
             if (this.mapInstance) {
                 this.mapInstance.remove();
                 this.mapInstance = null;
@@ -165,24 +167,26 @@ export class TerritoryBase extends Component {
             const shop = this.state.selectedShopDetails;
 
             if (mapEl && shop && shop.partner_latitude && shop.partner_longitude) {
-                if (typeof L !== 'undefined') {
+                ensureLeaflet().then((L) => {
+                    if (cancelled || !mapEl.isConnected) {
+                        return;
+                    }
                     this.mapInstance = L.map(mapEl).setView([shop.partner_latitude, shop.partner_longitude], 16);
-                    
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                         maxZoom: 19,
                         attribution: '© OpenStreetMap'
                     }).addTo(this.mapInstance);
-
                     L.marker([shop.partner_latitude, shop.partner_longitude])
                         .addTo(this.mapInstance)
                         .bindPopup(`<b>${shop.name}</b><br/>${shop.owner_name}`)
                         .openPopup();
-                } else {
-                    console.warn("Leaflet library is missing! Check your __manifest__.py assets.");
-                }
+                }).catch((error) => {
+                    console.warn("Leaflet library failed to load.", error);
+                });
             }
-            
+
             return () => {
+                cancelled = true;
                 if (this.mapInstance) {
                     this.mapInstance.remove();
                     this.mapInstance = null;

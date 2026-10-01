@@ -233,20 +233,30 @@ export class Expenses extends Component {
             // outstanding_balance is computed/non-stored, so shop balances must be sorted in JS
             // (highest outstanding first) then sliced to keep pagination ranking correct.
             const sortShopBalances = stateKey === 'credits' && this.state.creditSubView === 'balances';
-            const searchReadOptions = sortShopBalances
-                ? { context: queryContext }
-                : { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc", context: queryContext };
-            const [total, fetchedRecords] = await Promise.all([
-                sortShopBalances ? Promise.resolve(0) : this.orm.searchCount(model, domain, { context: queryContext }),
-                this.orm.searchRead(model, domain, fields, searchReadOptions)
-            ]);
-            let records = fetchedRecords;
+            let records;
             if (sortShopBalances) {
-                records = [...fetchedRecords].sort((a, b) => (b.outstanding_balance || 0) - (a.outstanding_balance || 0));
-                this.state.pagination[stateKey].total = records.length;
-                const start = (pag.page - 1) * pag.limit;
-                records = records.slice(start, start + pag.limit);
+                const page = await this.orm.call(
+                    "shahtaj.portal.read",
+                    "shahtaj_credit_balance_page",
+                    [{
+                        search: (filters && filters.search) || "",
+                        hasCreditLimit: Boolean(this.state.filters.credits && this.state.filters.credits.hasCreditLimit),
+                        creditSubView: "balances",
+                    }, pag.page, pag.limit],
+                );
+                records = page.records || [];
+                this.state.pagination[stateKey].total = page.total || 0;
             } else {
+                const [total, fetchedRecords] = await Promise.all([
+                    this.orm.searchCount(model, domain, { context: queryContext }),
+                    this.orm.searchRead(model, domain, fields, {
+                        limit: pag.limit,
+                        offset: (pag.page - 1) * pag.limit,
+                        order: "id desc",
+                        context: queryContext,
+                    }),
+                ]);
+                records = fetchedRecords;
                 this.state.pagination[stateKey].total = total;
             }
             // 5. MAP DATA TO UI

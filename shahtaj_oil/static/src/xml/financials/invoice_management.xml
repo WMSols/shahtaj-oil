@@ -44,15 +44,9 @@
                                        t-att-value="this.state.filters.allOrders.search" 
                                        t-on-input="(ev) => this.onSearchInput(ev, 'allOrders')"/>
                             </div>
-                            <select class="form-select form-select-sm shadow-sm" style="width: 200px;"
-                                    t-model="this.state.filters.allOrders.shop"
-                                    t-on-change="() => this.onFilterChange('allOrders')"
-                                    title="Filter by shop">
-                                <option value="all">All Shops</option>
-                                <t t-foreach="this.state.invoiceShops" t-as="shop" t-key="shop.id">
-                                    <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
-                                </t>
-                            </select>
+                            <ShopFilter shopId="this.state.filters.allOrders.shop"
+                                        shopName="this.state.filters.allOrders.shopName"
+                                        onSelect="(shopId, shopName) => this.onShopFilterSelect('allOrders', shopId, shopName)"/>
                             <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
                                    t-model="this.state.filters.allOrders.dateFrom"
                                    t-on-change="() => this.onFilterChange('allOrders')"
@@ -269,15 +263,9 @@
                                        t-att-value="this.state.filters.orders.search" 
                                        t-on-input="(ev) => this.onSearchInput(ev, 'orders')"/>
                             </div>
-                            <select class="form-select form-select-sm shadow-sm" style="width: 200px;"
-                                    t-model="this.state.filters.orders.shop"
-                                    t-on-change="() => this.onFilterChange('orders')"
-                                    title="Filter by shop">
-                                <option value="all">All Shops</option>
-                                <t t-foreach="this.state.invoiceShops" t-as="shop" t-key="shop.id">
-                                    <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
-                                </t>
-                            </select>
+                            <ShopFilter shopId="this.state.filters.orders.shop"
+                                        shopName="this.state.filters.orders.shopName"
+                                        onSelect="(shopId, shopName) => this.onShopFilterSelect('orders', shopId, shopName)"/>
                             <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
                                    t-model="this.state.filters.orders.dateFrom"
                                    t-on-change="() => this.onFilterChange('orders')"
@@ -483,15 +471,9 @@
                                        t-att-value="this.state.filters.invoices.search" 
                                        t-on-input="(ev) => this.onSearchInput(ev, 'invoices')"/>
                             </div>
-                            <select class="form-select form-select-sm shadow-sm" style="width: 200px;"
-                                    t-model="this.state.filters.invoices.shop"
-                                    t-on-change="() => this.onFilterChange('invoices')"
-                                    title="Filter by shop">
-                                <option value="all">All Shops</option>
-                                <t t-foreach="this.state.invoiceShops" t-as="shop" t-key="shop.id">
-                                    <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
-                                </t>
-                            </select>
+                            <ShopFilter shopId="this.state.filters.invoices.shop"
+                                        shopName="this.state.filters.invoices.shopName"
+                                        onSelect="(shopId, shopName) => this.onShopFilterSelect('invoices', shopId, shopName)"/>
                             <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
                                    t-model="this.state.filters.invoices.dateFrom"
                                    t-on-change="() => this.onFilterChange('invoices')"
@@ -1006,15 +988,9 @@
                                        t-att-value="this.state.filters.payments.search"
                                        t-on-input="(ev) => this.onSearchInput(ev, 'payments')"/>
                             </div>
-                            <select class="form-select form-select-sm shadow-sm" style="width: 200px;"
-                                    t-model="this.state.filters.payments.shop"
-                                    t-on-change="() => this.onFilterChange('payments')"
-                                    title="Filter by shop">
-                                <option value="all">All Shops</option>
-                                <t t-foreach="this.state.invoiceShops" t-as="shop" t-key="shop.id">
-                                    <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
-                                </t>
-                            </select>
+                            <ShopFilter shopId="this.state.filters.payments.shop"
+                                        shopName="this.state.filters.payments.shopName"
+                                        onSelect="(shopId, shopName) => this.onShopFilterSelect('payments', shopId, shopName)"/>
                             <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
                                    t-model="this.state.filters.payments.dateFrom"
                                    t-on-change="() => this.onFilterChange('payments')"
@@ -1195,15 +1171,9 @@
                                        t-att-value="this.state.filters.creditNotes.search"
                                        t-on-input="(ev) => this.onSearchInput(ev, 'creditNotes')"/>
                             </div>
-                            <select class="form-select form-select-sm shadow-sm" style="width: 200px;"
-                                    t-model="this.state.filters.creditNotes.shop"
-                                    t-on-change="() => this.onFilterChange('creditNotes')"
-                                    title="Filter by shop">
-                                <option value="all">All Shops</option>
-                                <t t-foreach="this.state.invoiceShops" t-as="shop" t-key="shop.id">
-                                    <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
-                                </t>
-                            </select>
+                            <ShopFilter shopId="this.state.filters.creditNotes.shop"
+                                        shopName="this.state.filters.creditNotes.shopName"
+                                        onSelect="(shopId, shopName) => this.onShopFilterSelect('creditNotes', shopId, shopName)"/>
                             <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;"
                                    t-model="this.state.filters.creditNotes.dateFrom"
                                    t-on-change="() => this.onFilterChange('creditNotes')"

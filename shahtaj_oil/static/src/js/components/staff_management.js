@@ -132,7 +132,7 @@ export class StaffManagement extends Component {
                 if (!this.state.loading.save && !this.state.loading.toggle && !this.state.showForm && this.state.viewMode !== "detail") {
                     this.fetchStaffData(true);
                 }
-            }, 15000);
+            }, 150000);
         });
 
         onWillUnmount(() => {

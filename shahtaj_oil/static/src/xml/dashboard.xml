@@ -599,7 +599,7 @@
                                     <div class="text-muted">A snapshot of your network, field activity, and stock.</div>
                                     <div class="small text-secondary mt-1" t-esc="this.overviewDateLabel"/>
                                 </div>
-                                <button class="btn btn-dark fw-bold shadow-sm d-inline-flex align-items-center px-3 py-2 rounded-3" t-on-click="fetchMasterKPIs" t-att-disabled="this.state.isLoadingKpis" title="Refresh KPIs">
+                                <button class="btn btn-dark fw-bold shadow-sm d-inline-flex align-items-center px-3 py-2 rounded-3" t-on-click="() => this.fetchMasterKPIs({ force: true })" t-att-disabled="this.state.isLoadingKpis" title="Refresh KPIs">
                                     <span t-if="this.state.isLoadingKpis" class="spinner-border spinner-border-sm me-2" role="status"></span>
                                     <i t-else="" class="fa fa-refresh me-2"></i>
                                     Refresh

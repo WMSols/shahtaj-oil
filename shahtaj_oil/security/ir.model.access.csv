@@ -1,5 +1,6 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_shahtaj_zone_user,shahtaj.zone.user,model_shahtaj_zone,base.group_user,1,1,1,1
+access_shahtaj_portal_read_user,shahtaj.portal.read.user,model_shahtaj_portal_read,base.group_user,1,0,0,0
 access_shahtaj_route_user,shahtaj.route.user,model_shahtaj_route,base.group_user,1,1,1,1
 access_shahtaj_weekly_schedule_user,shahtaj.weekly.schedule.user,model_shahtaj_weekly_schedule,base.group_user,1,1,1,1
 access_shahtaj_visit_task_user,shahtaj.visit.task.user,model_shahtaj_visit_task,base.group_user,1,1,1,1

@@ -203,20 +203,30 @@ export class CreditControl extends Component {
             // outstanding_balance is computed/non-stored, so shop balances must be sorted in JS
             // (highest outstanding first) then sliced to keep pagination ranking correct.
             const sortShopBalances = stateKey === 'credits' && this.state.creditSubView === 'balances';
-            const searchReadOptions = sortShopBalances
-                ? { context: queryContext }
-                : { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc", context: queryContext };
-            const [total, fetchedRecords] = await Promise.all([
-                sortShopBalances ? Promise.resolve(0) : this.orm.searchCount(model, domain, { context: queryContext }),
-                this.orm.searchRead(model, domain, fields, searchReadOptions)
-            ]);
-            let records = fetchedRecords;
+            let records;
             if (sortShopBalances) {
-                records = [...fetchedRecords].sort((a, b) => (b.outstanding_balance || 0) - (a.outstanding_balance || 0));
-                this.state.pagination[stateKey].total = records.length;
-                const start = (pag.page - 1) * pag.limit;
-                records = records.slice(start, start + pag.limit);
+                const page = await this.orm.call(
+                    "shahtaj.portal.read",
+                    "shahtaj_credit_balance_page",
+                    [{
+                        search: (filters && filters.search) || "",
+                        hasCreditLimit: Boolean(this.state.filters.credits && this.state.filters.credits.hasCreditLimit),
+                        creditSubView: "balances",
+                    }, pag.page, pag.limit],
+                );
+                records = page.records || [];
+                this.state.pagination[stateKey].total = page.total || 0;
             } else {
+                const [total, fetchedRecords] = await Promise.all([
+                    this.orm.searchCount(model, domain, { context: queryContext }),
+                    this.orm.searchRead(model, domain, fields, {
+                        limit: pag.limit,
+                        offset: (pag.page - 1) * pag.limit,
+                        order: "id desc",
+                        context: queryContext,
+                    }),
+                ]);
+                records = fetchedRecords;
                 this.state.pagination[stateKey].total = total;
             }
             // 5. MAP DATA TO UI
@@ -411,19 +421,16 @@ export class CreditControl extends Component {
         this.state.isPrintingList = true;
         try {
             const filters = this.state.filters.credits;
-            const domain = [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]];
-            if (filters.hasCreditLimit) {
-                domain.push(["credit_limit", ">", 0]);
-            }
-            if (filters.search) {
-                domain.push("|", ["name", "ilike", filters.search], ["owner_name", "ilike", filters.search]);
-            }
-            const records = await this.orm.searchRead(
-                "res.partner",
-                domain,
-                ["name", "owner_name", "shahtaj_shop_category", "credit_limit", "outstanding_balance"]
+            const page = await this.orm.call(
+                "shahtaj.portal.read",
+                "shahtaj_credit_balance_page",
+                [{
+                    search: filters.search || "",
+                    hasCreditLimit: Boolean(filters.hasCreditLimit),
+                    creditSubView: "balances",
+                }, 1, 10000],
             );
-            records.sort((a, b) => (b.outstanding_balance || 0) - (a.outstanding_balance || 0));
+            const records = page.records || [];
             if (!records.length) {
                 this.notification.add("No rows match the current filters.", { type: "warning" });
                 return;

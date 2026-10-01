@@ -5,6 +5,7 @@ import { useService } from "@web/core/utils/hooks";
 import { canMutate, canSee, hasFinancialAccess, loadPortalAccess, notifyPortalBusy, portalAccessState } from "../../shahtaj_access";
 import { printFilter, printListPdf } from "../../shahtaj_list_export";
 import { ConfirmModal } from "../confirm_modal";
+import { ShopFilter } from "./shop_filter";
 import {
     applyLookupsToState,
     getFinancialLookups,
@@ -14,7 +15,7 @@ import {
 } from "./financials_cache";
 
 export class InvoiceManagement extends Component {
-    static components = { ConfirmModal };
+    static components = { ConfirmModal, ShopFilter };
     static props = {
         requestedInvoiceSubTab: { type: String, optional: true },
         requestedInvoiceStatus: { type: String, optional: true },
@@ -43,7 +44,6 @@ export class InvoiceManagement extends Component {
             isPaying: false,
             isRefunding: false,
             isLoadingLines: false,
-            invoiceShops: [],
             selectedPayment: null,
             selectedShop: null,
             showPaymentModal: false,
@@ -62,11 +62,11 @@ export class InvoiceManagement extends Component {
             creditNotes: [],
             payments: [],
             filters: {
-                allOrders: { search: "", status: "all", shop: "all", dateFrom: "", dateTo: "" },
-                orders: { search: "", shop: "all", dateFrom: "", dateTo: "" },
-                invoices: { search: "", status: this.props.requestedInvoiceStatus || "all", shop: "all", dateFrom: "", dateTo: "", walkIn: false },
-                creditNotes: { search: "", status: "all", shop: "all", dateFrom: "", dateTo: "" },
-                payments: { search: "", shop: "all", dateFrom: "", dateTo: "" },
+                allOrders: { search: "", status: "all", shop: "all", shopName: "", dateFrom: "", dateTo: "" },
+                orders: { search: "", shop: "all", shopName: "", dateFrom: "", dateTo: "" },
+                invoices: { search: "", status: this.props.requestedInvoiceStatus || "all", shop: "all", shopName: "", dateFrom: "", dateTo: "", walkIn: false },
+                creditNotes: { search: "", status: "all", shop: "all", shopName: "", dateFrom: "", dateTo: "" },
+                payments: { search: "", shop: "all", shopName: "", dateFrom: "", dateTo: "" },
             },
             paymentForm: {
                 journal_id: "", amount: 0, date: "", invoice_id: null, invoice_name: "",
@@ -207,26 +207,19 @@ export class InvoiceManagement extends Component {
         this.fetchActiveList(); // Dropdowns don't need debouncing, fetch immediately
     }
 
+    onShopFilterSelect(listKey, shopId, shopName) {
+        const filters = this.state.filters[listKey];
+        if (!filters) {
+            return;
+        }
+        filters.shop = shopId || "all";
+        filters.shopName = shopId && shopId !== "all" ? (shopName || "") : "";
+        this.onFilterChange(listKey);
+    }
+
     onInvoicesWalkInToggle(ev) {
         this.state.filters.invoices.walkIn = ev.target.checked;
         this.onFilterChange('invoices');
-    }
-
-    async ensureInvoiceShopLookup() {
-        if (this.state.invoiceShops.length) {
-            return;
-        }
-        try {
-            const shops = await this.orm.searchRead(
-                "res.partner",
-                [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"], ["active", "=", true]],
-                ["id", "name"],
-                { order: "name asc", limit: 500 }
-            );
-            this.state.invoiceShops = shops || [];
-        } catch (error) {
-            this.state.invoiceShops = [];
-        }
     }
 
     _applyInvoiceListFilters(domain, stateKey, filters) {
@@ -409,9 +402,6 @@ export class InvoiceManagement extends Component {
             const { stateKey, model, fields } = config;
             const pag = this.state.pagination[stateKey];
             const filters = this.state.filters[stateKey];
-            if (["allOrders", "orders", "invoices", "creditNotes", "payments"].includes(stateKey)) {
-                await this.ensureInvoiceShopLookup();
-            }
             const domain = this._listDomain(stateKey, filters);
 
             // 4. FIRE DUAL QUERIES (Total Count + Paged Records)
@@ -419,20 +409,30 @@ export class InvoiceManagement extends Component {
             // outstanding_balance is computed/non-stored, so shop balances must be sorted in JS
             // (highest outstanding first) then sliced to keep pagination ranking correct.
             const sortShopBalances = stateKey === 'credits' && this.state.creditSubView === 'balances';
-            const searchReadOptions = sortShopBalances
-                ? { context: queryContext }
-                : { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc", context: queryContext };
-            const [total, fetchedRecords] = await Promise.all([
-                sortShopBalances ? Promise.resolve(0) : this.orm.searchCount(model, domain, { context: queryContext }),
-                this.orm.searchRead(model, domain, fields, searchReadOptions)
-            ]);
-            let records = fetchedRecords;
+            let records;
             if (sortShopBalances) {
-                records = [...fetchedRecords].sort((a, b) => (b.outstanding_balance || 0) - (a.outstanding_balance || 0));
-                this.state.pagination[stateKey].total = records.length;
-                const start = (pag.page - 1) * pag.limit;
-                records = records.slice(start, start + pag.limit);
+                const page = await this.orm.call(
+                    "shahtaj.portal.read",
+                    "shahtaj_credit_balance_page",
+                    [{
+                        search: (filters && filters.search) || "",
+                        hasCreditLimit: Boolean(this.state.filters.credits && this.state.filters.credits.hasCreditLimit),
+                        creditSubView: "balances",
+                    }, pag.page, pag.limit],
+                );
+                records = page.records || [];
+                this.state.pagination[stateKey].total = page.total || 0;
             } else {
+                const [total, fetchedRecords] = await Promise.all([
+                    this.orm.searchCount(model, domain, { context: queryContext }),
+                    this.orm.searchRead(model, domain, fields, {
+                        limit: pag.limit,
+                        offset: (pag.page - 1) * pag.limit,
+                        order: "id desc",
+                        context: queryContext,
+                    }),
+                ]);
+                records = fetchedRecords;
                 this.state.pagination[stateKey].total = total;
             }
             // 5. MAP DATA TO UI
@@ -1392,10 +1392,11 @@ export class InvoiceManagement extends Component {
         } catch (error) { this.notification.add("Failed to save limit. Ensure you have distributor rights.", { type: "danger" }); }
     }
 
-    _shopFilterName(shopId) {
-        if (!shopId || shopId === "all") return "";
-        const shop = (this.state.invoiceShops || []).find((row) => String(row.id) === String(shopId));
-        return shop ? shop.name : "";
+    _shopFilterName(filters) {
+        if (!filters || !filters.shop || filters.shop === "all") {
+            return "";
+        }
+        return filters.shopName || "";
     }
 
     _moveStatus(move, creditNote) {
@@ -1440,7 +1441,7 @@ export class InvoiceManagement extends Component {
                 "Customer Invoices",
                 [
                     printFilter("Search", filters.search),
-                    printFilter("Shop", this._shopFilterName(filters.shop)),
+                    printFilter("Shop", this._shopFilterName(filters)),
                     printFilter("From", filters.dateFrom),
                     printFilter("To", filters.dateTo),
                     printFilter("Status", statusLabels[filters.status]),
@@ -1479,7 +1480,7 @@ export class InvoiceManagement extends Component {
                 "Customer Payments",
                 [
                     printFilter("Search", filters.search),
-                    printFilter("Shop", this._shopFilterName(filters.shop)),
+                    printFilter("Shop", this._shopFilterName(filters)),
                     printFilter("From", filters.dateFrom),
                     printFilter("To", filters.dateTo),
                 ],
@@ -1509,7 +1510,7 @@ export class InvoiceManagement extends Component {
                 "Credit Notes",
                 [
                     printFilter("Search", filters.search),
-                    printFilter("Shop", this._shopFilterName(filters.shop)),
+                    printFilter("Shop", this._shopFilterName(filters)),
                     printFilter("From", filters.dateFrom),
                     printFilter("To", filters.dateTo),
                     printFilter("Status", filters.status),

@@ -7,6 +7,7 @@
                 <div>
                     <h2 class="h4 fw-bold text-dark mb-0">Staff &amp; Role Management</h2>
                     <small class="text-muted">Manage field personnel, assign roles, and track performance.</small>
+                    <small t-if="!this.state.showForm and this.state.viewMode === 'list'" class="text-muted d-block mt-1">Auto updates every 2:30 minutes. Click Refresh to update immediately.</small>
                 </div>
                 <div class="d-flex gap-2 w-100 w-md-auto" t-if="!this.state.showForm and this.state.viewMode === 'list'">
                     <button class="btn btn-outline-secondary fw-bold d-flex align-items-center justify-content-center shadow-sm" t-on-click="() => this.fetchStaffData(false)" t-att-disabled="this.state.loading.fetch" title="Refresh Data">

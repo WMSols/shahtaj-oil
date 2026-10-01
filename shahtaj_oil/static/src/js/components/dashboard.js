@@ -18,6 +18,7 @@ import {
     resetPortalBusy,
     showPrices,
 } from "../shahtaj_access";
+import { cachedRead } from "../shahtaj_read_cache";
 import { StaffManagement } from "./staff_management";
 import { OperationsTracking } from "./operations/operations_tracking";
 import { DeliveryManPerformance } from "./delivery_man_performance";
@@ -39,8 +40,6 @@ export class ShahtajDashboard extends Component {
         this.cashChartRef = useRef("cashChart");
         this.cashChart = null;
         this._cashChartToken = 0;
-        this._opsLoadToken = 0;
-        this._cashLoadToken = 0;
         this._kpiLoadToken = 0;
         this._navToken = 0;
         const today = new Date();
@@ -229,56 +228,11 @@ export class ShahtajDashboard extends Component {
         return `${year}-${month}-${day}`;
     }
 
-    /**
-     * Convert a Pakistan calendar date (YYYY-MM-DD) to Odoo UTC naive bounds.
-     * PKT day 2026-08-19 is 2026-08-18 19:00:00 UTC through 2026-08-19 18:59:59 UTC.
-     */
-    _pktDateToUtcBounds(dateStr) {
-        const start = new Date(`${dateStr}T00:00:00+05:00`);
-        const end = new Date(`${dateStr}T23:59:59+05:00`);
-        const toOdooUtc = (d) => d.toISOString().slice(0, 19).replace("T", " ");
-        return { start: toOdooUtc(start), end: toOdooUtc(end) };
-    }
-
-    _shopRegDomain(dateStr) {
-        const bounds = this._pktDateToUtcBounds(dateStr || this.todayStr);
-        return [
-            ["is_shahtaj_shop", "=", true],
-            ["registered_by_id", "!=", false],
-            ["registered_by_id.shahtaj_is_order_booker", "=", true],
-            ["create_date", ">=", bounds.start],
-            ["create_date", "<=", bounds.end],
-        ];
-    }
-
-    _parseDayKey(value) {
-        if (!value) {
-            return "";
-        }
-        return String(value).slice(0, 10);
-    }
-
-    _buildDayKeys(fromStr, toStr) {
-        const keys = [];
-        const cursor = new Date(`${fromStr}T00:00:00`);
-        const end = new Date(`${toStr}T00:00:00`);
-        while (cursor <= end) {
-            keys.push(this._formatDate(cursor));
-            cursor.setDate(cursor.getDate() + 1);
-        }
-        return keys;
-    }
-
     _getCashDateRange() {
         const days = this.state.cashRangeDays || 30;
         const to = new Date();
         const from = new Date(to.getFullYear(), to.getMonth(), to.getDate() - (days - 1));
         return { from: this._formatDate(from), to: this._formatDate(to) };
-    }
-
-    _labelForDay(dayKey) {
-        const date = new Date(`${dayKey}T00:00:00`);
-        return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
     }
 
     _cashTrendKey() {
@@ -299,164 +253,42 @@ export class ShahtajDashboard extends Component {
         return amount < 0 ? `Rs. -${abs}` : `Rs. ${abs}`;
     }
     
-    async _count(model, domain) {
-        try {
-            return await this.orm.searchCount(model, domain);
-        } catch (error) {
-            console.error("KPI count failed", model, error);
-            return 0;
-        }
-    }
-
-    async fetchMasterKPIs() {
+    async fetchMasterKPIs(options = {}) {
+        const force = Boolean(options && options.force);
         const token = ++this._kpiLoadToken;
         const opsDate = this.state.opsDate;
         const shopRegDate = this.state.shopRegDate;
         const cashRangeDays = this.state.cashRangeDays;
         this.state.isLoadingKpis = true;
-        let opsBounds;
+        const key = ["overview", opsDate, shopRegDate, cashRangeDays].join("|");
         try {
-            opsBounds = this._pktDateToUtcBounds(opsDate || this.todayStr);
-        } catch (error) {
-            console.error("Failed to fetch Master KPIs", error);
-            if (token === this._kpiLoadToken) {
-                this.state.isLoadingKpis = false;
-            }
-            return;
-        }
-        const productBaseDomain = [
-            ["sale_ok", "=", true],
-            ["default_code", "!=", "SHAHTAJ-LEGACY"],
-            ["active", "=", true],
-        ];
-        const next = {};
-
-        try {
-            const jobs = [];
-            if (this.canSeeCard("territory")) {
-                jobs.push((async () => {
-                    const [zones, routes, shops, pendingShops, shopsRegisteredByOb] = await Promise.all([
-                        this._count("shahtaj.zone", [["active", "=", true]]),
-                        this._count("shahtaj.route", [["active", "=", true]]),
-                        this._count("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", true]]),
-                        this._count("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", true], ["shop_approval_state", "=", "pending"]]),
-                        this._count("res.partner", this._shopRegDomain(shopRegDate)),
-                    ]);
-                    Object.assign(next, { totalZones: zones, totalRoutes: routes, totalShops: shops, pendingShops, shopsRegisteredByOb });
-                })());
-            }
-            if (this.canSeeCard("staffBookers")) {
-                jobs.push((async () => {
-                    const [totalBookers, onlineBookers] = await Promise.all([
-                        this._count("res.users", [["shahtaj_is_order_booker", "=", true], ["active", "=", true]]),
-                        this._count("res.users", [["shahtaj_is_order_booker", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
-                    ]);
-                    Object.assign(next, { totalBookers, onlineBookers });
-                })());
-            }
-            if (this.canSeeCard("checkins")) {
-                jobs.push((async () => {
-                    next.todayCheckins = await this._count("shahtaj.gps.attempt", [
-                        ["purpose", "=", "check_in"],
-                        ["create_date", ">=", opsBounds.start],
-                        ["create_date", "<=", opsBounds.end],
-                    ]);
-                })());
-            }
-            if (this.canSeeCard("orders")) {
-                jobs.push((async () => {
-                    next.todayOrders = await this._count("sale.order", [
-                        ["shahtaj_visit_id", "!=", false],
-                        ["date_order", ">=", opsBounds.start],
-                        ["date_order", "<=", opsBounds.end],
-                    ]);
-                })());
-            }
-            if (this.canSeeCard("dispatch")) {
-                jobs.push((async () => {
-                    const [todayDeliveries, ordersToDispatch] = await Promise.all([
-                        this._count("sale.order", this._toDispatchDomain(opsDate)),
-                        this._count("sale.order", [
-                            ["state", "in", ["sale", "done"]],
-                            ["shahtaj_delivery_status", "in", ["pending", "partial"]],
-                            ["shahtaj_qty_to_deliver", ">", 0],
-                            ["shahtaj_dm_delivery_ids", "=", false],
-                        ]),
-                    ]);
-                    Object.assign(next, { todayDeliveries, ordersToDispatch });
-                })());
-            }
-            if (this.canSeeCard("warehouse")) {
-                jobs.push((async () => {
-                    const [totalProducts, outOfStockProducts] = await Promise.all([
-                        this._count("product.template", productBaseDomain),
-                        this._count("product.template", [...productBaseDomain, ["qty_available", "<=", 0]]),
-                    ]);
-                    Object.assign(next, { totalProducts, outOfStockProducts });
-                })());
-            }
-            if (this.canSeeCard("schedules")) {
-                jobs.push((async () => {
-                    const [activeSchedules, activeTargets] = await Promise.all([
-                        this._count("shahtaj.weekly.schedule", [["active", "=", true]]),
-                        this._count("shahtaj.visit.target", [["active", "=", true]]),
-                    ]);
-                    Object.assign(next, { activeSchedules, activeTargets });
-                })());
-            }
-            if (this.canSeeCard("deliveryMen")) {
-                jobs.push((async () => {
-                    const [totalDeliveryMen, onlineDeliveryMen] = await Promise.all([
-                        this._count("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true]]),
-                        this._count("res.users", [["shahtaj_is_delivery_man", "=", true], ["active", "=", true], ["shahtaj_online_status", "=", "online"]]),
-                    ]);
-                    Object.assign(next, { totalDeliveryMen, onlineDeliveryMen });
-                })());
-            }
-            if (this.canSeeCard("deliveryJobs")) {
-                jobs.push((async () => {
-                    const [dmJobsToday, todayInTransit, pendingDeliveries, dmJobsActive, dmInTransit] = await Promise.all([
-                        this._count("shahtaj.dm.delivery", [["scheduled_date", "=", opsDate], ["state", "!=", "not_ready"]]),
-                        this._count("shahtaj.dm.delivery", [["scheduled_date", "=", opsDate], ["field_state", "=", "in_transit"]]),
-                        this._count("shahtaj.dm.delivery", [["field_state", "=", "pending"]]),
-                        this._count("shahtaj.dm.delivery", [["state", "in", ["ready", "picked", "partial"]]]),
-                        this._count("shahtaj.dm.delivery", [["field_state", "=", "in_transit"]]),
-                    ]);
-                    Object.assign(next, { dmJobsToday, todayInTransit, pendingDeliveries, dmJobsActive, dmInTransit });
-                })());
-            }
-            if (this.canSeeCard("invoices")) {
-                jobs.push((async () => {
-                    Object.assign(next, await this.fetchInvoiceOverview());
-                })());
-            }
-            if (this.canSeeCard("financials")) {
-                jobs.push((async () => {
-                    Object.assign(next, await this.fetchCashOverview());
-                })());
-            }
-            await Promise.all(jobs);
+            const next = await cachedRead(key, () => this.orm.call(
+                "shahtaj.portal.read",
+                "shahtaj_portal_overview",
+                [opsDate, shopRegDate, cashRangeDays],
+            ), { force });
             if (token !== this._kpiLoadToken) {
                 return;
             }
+            const payload = Object.assign({}, next);
             if (opsDate !== this.state.opsDate) {
-                delete next.todayCheckins;
-                delete next.todayOrders;
-                delete next.todayDeliveries;
-                delete next.dmJobsToday;
-                delete next.todayInTransit;
+                delete payload.todayCheckins;
+                delete payload.todayOrders;
+                delete payload.todayDeliveries;
+                delete payload.dmJobsToday;
+                delete payload.todayInTransit;
             }
             if (shopRegDate !== this.state.shopRegDate) {
-                delete next.shopsRegisteredByOb;
+                delete payload.shopsRegisteredByOb;
             }
             if (cashRangeDays !== this.state.cashRangeDays) {
-                delete next.cashIn;
-                delete next.cashOut;
-                delete next.netCash;
-                delete next.stillOwed;
-                delete next.cashTrend;
+                delete payload.cashIn;
+                delete payload.cashOut;
+                delete payload.netCash;
+                delete payload.stillOwed;
+                delete payload.cashTrend;
             }
-            Object.assign(this.state.kpis, next);
+            Object.assign(this.state.kpis, payload);
         } catch (error) {
             console.error("Failed to fetch Master KPIs", error);
         } finally {
@@ -464,78 +296,6 @@ export class ShahtajDashboard extends Component {
                 this.state.isLoadingKpis = false;
             }
         }
-    }
-
-    async fetchInvoiceOverview() {
-        const [totalOrders, toInvoice, openInvoices, creditNotes, vendorBills] = await Promise.all([
-            this._count("sale.order", [["shahtaj_visit_id", "!=", false]]),
-            this._count("sale.order", [["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]]),
-            this._count("account.move", [["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true], ["state", "=", "posted"], ["payment_state", "in", ["not_paid", "partial"]]]),
-            this._count("account.move", [["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]]),
-            this.canSee("financials", "vendor_bills")
-                ? this._count("account.move", [["move_type", "in", ["in_invoice", "in_refund"]], ["state", "in", ["draft", "posted"]]])
-                : Promise.resolve(0),
-        ]);
-        return { totalOrders, toInvoice, openInvoices, creditNotes, vendorBills };
-    }
-
-    async fetchCashOverview() {
-        const { from, to } = this._getCashDateRange();
-        const dayKeys = this._buildDayKeys(from, to);
-        const byDay = {};
-        for (const key of dayKeys) {
-            byDay[key] = { cashIn: 0, cashOut: 0 };
-        }
-
-        const paymentDomain = [
-            ["journal_id.type", "in", ["bank", "cash"]],
-            ["date", ">=", from],
-            ["date", "<=", to],
-            ["state", "in", ["paid", "in_process", "posted", "reconciled"]],
-        ];
-
-        let payments = [];
-        let shopsData = [];
-        try {
-            [payments, shopsData] = await Promise.all([
-                this.orm.searchRead("account.payment", paymentDomain, ["date", "amount", "amount_signed", "payment_type"], { limit: 10000 }),
-                this.orm.searchRead("res.partner", [["is_shahtaj_shop", "=", true], ["shop_approval_state", "=", "approved"]], ["outstanding_balance"], { limit: 10000 }),
-            ]);
-        } catch (error) {
-            console.error("Failed to fetch cash overview", error);
-        }
-
-        let cashIn = 0;
-        let cashOut = 0;
-        for (const payment of payments || []) {
-            const amount = Math.abs(payment.amount_signed || payment.amount || 0);
-            const day = this._parseDayKey(payment.date);
-            if (payment.payment_type === "outbound") {
-                cashOut += amount;
-                if (byDay[day]) {
-                    byDay[day].cashOut += amount;
-                }
-            } else {
-                cashIn += amount;
-                if (byDay[day]) {
-                    byDay[day].cashIn += amount;
-                }
-            }
-        }
-
-        const stillOwed = (shopsData || []).reduce((sum, shop) => sum + (shop.outstanding_balance || 0), 0);
-
-        return {
-            cashIn,
-            cashOut,
-            netCash: cashIn - cashOut,
-            stillOwed,
-            cashTrend: {
-                labels: dayKeys.map((key) => this._labelForDay(key)),
-                cashIn: dayKeys.map((key) => byDay[key].cashIn),
-                cashOut: dayKeys.map((key) => byDay[key].cashOut),
-            },
-        };
     }
 
     async onOpsDateChange(ev) {
@@ -544,37 +304,11 @@ export class ShahtajDashboard extends Component {
             return;
         }
         this.state.opsDate = dateStr;
-        const token = ++this._opsLoadToken;
         this.state.isLoadingOps = true;
-        const opsBounds = this._pktDateToUtcBounds(dateStr);
         try {
-            const [todayCheckins, todayOrders, todayDeliveries, dmJobsToday, todayInTransit] = await Promise.all([
-                this.canSeeCard("checkins") ? this._count("shahtaj.gps.attempt", [
-                    ["purpose", "=", "check_in"],
-                    ["create_date", ">=", opsBounds.start],
-                    ["create_date", "<=", opsBounds.end],
-                ]) : Promise.resolve(this.state.kpis.todayCheckins),
-                this.canSeeCard("orders") ? this._count("sale.order", [["shahtaj_visit_id", "!=", false], ["date_order", ">=", opsBounds.start], ["date_order", "<=", opsBounds.end]]) : Promise.resolve(this.state.kpis.todayOrders),
-                this.canSeeCard("dispatch") ? this._count("sale.order", this._toDispatchDomain(dateStr)) : Promise.resolve(this.state.kpis.todayDeliveries),
-                this.canSeeCard("deliveryJobs") ? this._count("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["state", "!=", "not_ready"]]) : Promise.resolve(this.state.kpis.dmJobsToday),
-                this.canSeeCard("deliveryJobs") ? this._count("shahtaj.dm.delivery", [["scheduled_date", "=", dateStr], ["field_state", "=", "in_transit"]]) : Promise.resolve(this.state.kpis.todayInTransit),
-            ]);
-            if (token !== this._opsLoadToken) {
-                return;
-            }
-            Object.assign(this.state.kpis, {
-                todayCheckins,
-                todayOrders,
-                todayDeliveries,
-                dmJobsToday,
-                todayInTransit,
-            });
-        } catch (error) {
-            console.error("Failed to fetch field activity counts", error);
+            await this.fetchMasterKPIs();
         } finally {
-            if (token === this._opsLoadToken) {
-                this.state.isLoadingOps = false;
-            }
+            this.state.isLoadingOps = false;
         }
     }
 
@@ -585,10 +319,7 @@ export class ShahtajDashboard extends Component {
         }
         this.state.shopRegDate = dateStr;
         try {
-            this.state.kpis.shopsRegisteredByOb = await this.orm.searchCount(
-                "res.partner",
-                this._shopRegDomain(dateStr),
-            );
+            await this.fetchMasterKPIs();
         } catch (error) {
             console.error("Failed to fetch shop registration count", error);
         }
@@ -599,20 +330,11 @@ export class ShahtajDashboard extends Component {
             return;
         }
         this.state.cashRangeDays = days;
-        const token = ++this._cashLoadToken;
         this.state.isLoadingCash = true;
         try {
-            const financial = await this.fetchCashOverview();
-            if (token !== this._cashLoadToken) {
-                return;
-            }
-            Object.assign(this.state.kpis, financial);
-        } catch (error) {
-            console.error("Failed to fetch financial overview", error);
+            await this.fetchMasterKPIs();
         } finally {
-            if (token === this._cashLoadToken) {
-                this.state.isLoadingCash = false;
-            }
+            this.state.isLoadingCash = false;
         }
     }
 
@@ -960,20 +682,6 @@ export class ShahtajDashboard extends Component {
 
     _opsDay() {
         return this.state.opsDate || this.todayStr;
-    }
-
-    _toDispatchDomain(dateStr) {
-        const bounds = this._pktDateToUtcBounds(dateStr || this._opsDay());
-        return [
-            "|",
-            ["shahtaj_visit_id", "!=", false],
-            ["partner_id.is_shahtaj_shop", "=", true],
-            ["state", "in", ["sale", "done"]],
-            ["shahtaj_delivery_status", "in", ["pending", "partial"]],
-            ["shahtaj_qty_to_deliver", ">", 0],
-            ["date_order", ">=", bounds.start],
-            ["date_order", "<=", bounds.end],
-        ];
     }
 
     openStaff(role = 'order_booker', status = 'all') {

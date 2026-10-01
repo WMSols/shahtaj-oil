@@ -45,3 +45,4 @@ from . import shahtaj_activity_log
 from . import shahtaj_field_report
 from . import stock_picking
 from . import shahtaj_list_print
+from . import shahtaj_portal_read

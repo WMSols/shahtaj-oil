@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Shahtaj Oil',
-    'version': '19.0.1.1.182',
+    'version': '19.0.1.1.185',
     'post_init_hook': 'post_init_hook',
     'category': 'Sales/Distribution',
     'summary': 'Unified Command Center for Shahtaj Oil distributions, field booking, and SPA frontend',
@@ -125,6 +125,8 @@
     'shahtaj_oil/static/src/scss/shahtaj_route_checklist.scss',
     'shahtaj_oil/static/src/js/custom_portal_shell.js',
     'shahtaj_oil/static/src/js/shahtaj_access.js',
+    'shahtaj_oil/static/src/js/shahtaj_read_cache.js',
+    'shahtaj_oil/static/src/js/shahtaj_leaflet.js',
     'shahtaj_oil/static/src/js/shahtaj_list_export.js',
     'shahtaj_oil/static/src/js/shahtaj_geolocate_widget.js',
     'shahtaj_oil/static/src/xml/dashboard.xml',
@@ -144,8 +146,6 @@
     'shahtaj_oil/static/src/js/components/bank_transactions.js',
     'shahtaj_oil/static/src/js/components/*.js',
     'shahtaj_oil/static/src/xml/*.xml',
-    'shahtaj_oil/static/src/lib/leaflet/leaflet.css',
-    'shahtaj_oil/static/src/lib/leaflet/leaflet.js',
 
 ],
     },

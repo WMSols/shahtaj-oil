@@ -23,6 +23,7 @@ import {
     getOperationsLookups,
     getOperationsTaxCatalog,
 } from "./operations_cache";
+import { ensureLeaflet } from "../../shahtaj_leaflet";
 
 let pendingCheckinOrder = null;
 
@@ -250,6 +251,7 @@ export class OperationsBase extends Component {
         });
 
         useEffect(() => {
+            let cancelled = false;
             if (this.checkinMapInstance) {
                 this.checkinMapInstance.remove();
                 this.checkinMapInstance = null;
@@ -272,11 +274,10 @@ export class OperationsBase extends Component {
                 return () => {};
             }
 
-            if (typeof L === 'undefined') {
-                console.warn("Leaflet library is missing! Check your __manifest__.py assets.");
-                return () => {};
-            }
-
+            ensureLeaflet().then((L) => {
+                if (cancelled || !mapEl.isConnected) {
+                    return;
+                }
             const center = hasShop ? [shopLat, shopLng] : [attLat, attLng];
             this.checkinMapInstance = L.map(mapEl).setView(center, 16);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -322,8 +323,12 @@ export class OperationsBase extends Component {
             if (bounds.length > 1) {
                 this.checkinMapInstance.fitBounds(bounds, { padding: [36, 36], maxZoom: 17 });
             }
+            }).catch((error) => {
+                console.warn("Leaflet library failed to load.", error);
+            });
 
             return () => {
+                cancelled = true;
                 if (this.checkinMapInstance) {
                     this.checkinMapInstance.remove();
                     this.checkinMapInstance = null;
@@ -983,29 +988,13 @@ export class OperationsBase extends Component {
      * Page schedules with today (PKT weekday) first so pagination and the table agree.
      */
     async _fetchSchedulesSortedPage(domain, fields, pag) {
-        const context = { active_test: false };
-        const slim = await this.orm.searchRead(
-            'shahtaj.weekly.schedule',
-            domain,
-            ['id', 'day_of_week', 'active'],
-            { context, order: 'id desc', limit: 2000 },
+        const filters = this.state.filters.schedules || {};
+        const page = await this.orm.call(
+            "shahtaj.portal.read",
+            "shahtaj_schedule_page",
+            [{ booker: filters.booker || "all", date: filters.date || "" }, pag.page, pag.limit],
         );
-        const todayDow = this._pktTodayWeekday();
-        slim.sort((a, b) => this._compareSchedulesByToday(a, b, todayDow));
-        const total = slim.length;
-        const offset = (pag.page - 1) * pag.limit;
-        const pageIds = slim.slice(offset, offset + pag.limit).map((r) => r.id);
-        if (!pageIds.length) {
-            return { total, records: [] };
-        }
-        const records = await this.orm.read(
-            'shahtaj.weekly.schedule',
-            pageIds,
-            fields,
-            { context },
-        );
-        const byId = Object.fromEntries(records.map((r) => [r.id, r]));
-        return { total, records: pageIds.map((id) => byId[id]).filter(Boolean) };
+        return { total: page.total || 0, records: page.records || [] };
     }
 
     async _fetchDmJobsPinnedPage(domain, fields, pag) {
@@ -1819,10 +1808,24 @@ export class OperationsBase extends Component {
             } else if (tab === 'dm_jobs') {
                 ({ total, records } = await this._fetchDmJobsPinnedPage(domain, fields, pag));
             } else if (tab === 'checkins') {
-                records = await this.orm.searchRead(model, domain, fields, {
-                    order: 'create_date desc, id desc',
-                });
-                total = 0;
+                let pageResult = await this.orm.call(
+                    "shahtaj.portal.read",
+                    "shahtaj_checkin_session_page",
+                    [filters, pag.page, pag.limit],
+                );
+                const limit = pag.limit || 50;
+                const pageCount = Math.max(1, Math.ceil((pageResult.total || 0) / limit) || 1);
+                if ((pag.page || 1) > pageCount) {
+                    pag.page = pageCount;
+                    pageResult = await this.orm.call(
+                        "shahtaj.portal.read",
+                        "shahtaj_checkin_session_page",
+                        [filters, pag.page, pag.limit],
+                    );
+                }
+                records = pageResult.attempts || [];
+                total = pageResult.total || 0;
+                this._checkinHeadlineIds = pageResult.headlineIds || [];
             } else {
                 [total, records] = await Promise.all([
                     this.orm.searchCount(
@@ -1904,8 +1907,12 @@ export class OperationsBase extends Component {
             else if (tab === 'checkins') {
                 const enrichment = await this._enrichCheckinRows(records);
                 const mapped = records.map((attempt) => this._mapGpsAttempt(attempt, enrichment));
-                const sessions = this._filterCheckinSessions(this._groupCheckinSessions(mapped), filters);
-                this.state.tableCheckins = this._pageCheckinSessions(sessions);
+                const sessions = this._groupCheckinSessions(mapped);
+                const byId = new Map(sessions.map((session) => [session.id, session]));
+                this.state.tableCheckins = (this._checkinHeadlineIds || [])
+                    .map((id) => byId.get(id))
+                    .filter(Boolean);
+                this.state.pagination.checkins.total = total;
             }
             else if (tab === 'schedules') {
                 const dateStr = filters.date || '';
