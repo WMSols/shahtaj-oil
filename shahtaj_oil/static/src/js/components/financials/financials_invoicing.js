@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
+import { Component, useState, onMounted, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { canSee, hasFinancialAccess, loadPortalAccess } from "../../shahtaj_access";
 import { MoneyOverview } from "./money_overview";
@@ -52,6 +52,7 @@ export class FinancialsInvoicing extends Component {
             cashDateTo: cash.dateTo,
             invoiceStatus: this.props.requestedInvoiceStatus || "all",
             stats: { ...EMPTY_STATS },
+            isLoadingStats: true,
             isRefreshing: false,
             refreshNonce: 0,
         });
@@ -78,17 +79,24 @@ export class FinancialsInvoicing extends Component {
             this.state.invoiceStatus = nextProps.requestedInvoiceStatus || "all";
         });
 
-        onWillStart(async () => {
-            await loadPortalAccess();
-            if (!hasFinancialAccess() && !canSee("financials", "invoices")) {
-                return;
-            }
-            try {
-                this.state.stats = await getFinancialStats(this.orm);
-            } catch (error) {
-                console.error("Failed to load financial stats", error);
-            }
+        onMounted(() => {
+            this._loadHeaderStats();
         });
+    }
+
+    async _loadHeaderStats() {
+        await loadPortalAccess();
+        if (!hasFinancialAccess() && !canSee("financials", "invoices")) {
+            this.state.isLoadingStats = false;
+            return;
+        }
+        try {
+            this.state.stats = await getFinancialStats(this.orm);
+        } catch (error) {
+            console.error("Failed to load financial stats", error);
+        } finally {
+            this.state.isLoadingStats = false;
+        }
     }
 
     _cashNav(props) {

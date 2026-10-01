@@ -78,21 +78,30 @@
                     <div class="row g-3 mb-3">
                         <div class="col-md-4">
                             <div class="border rounded-3 p-3 bg-light h-100">
-                                <small class="text-muted fw-bold text-uppercase">Collected</small>
+                                <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
+                                    <small class="text-muted fw-bold text-uppercase">Collected</small>
+                                    <span class="badge bg-white text-dark border text-truncate" style="max-width: 55%;" t-esc="this.selectedJournalLabel"/>
+                                </div>
                                 <div class="fw-bold text-success fs-5">+ Rs. <t t-esc="this.state.totals.moneyIn.toLocaleString(undefined, {minimumFractionDigits: 2})"/>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="border rounded-3 p-3 bg-light h-100">
-                                <small class="text-muted fw-bold text-uppercase">Paid Out</small>
+                                <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
+                                    <small class="text-muted fw-bold text-uppercase">Paid Out</small>
+                                    <span class="badge bg-white text-dark border text-truncate" style="max-width: 55%;" t-esc="this.selectedJournalLabel"/>
+                                </div>
                                 <div class="fw-bold text-danger fs-5">- Rs. <t t-esc="this.state.totals.moneyOut.toLocaleString(undefined, {minimumFractionDigits: 2})"/>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="border rounded-3 p-3 bg-light h-100">
-                                <small class="text-muted fw-bold text-uppercase">Net Cash</small>
+                                <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
+                                    <small class="text-muted fw-bold text-uppercase">Net Cash</small>
+                                    <span class="badge bg-white text-dark border text-truncate" style="max-width: 55%;" t-esc="this.selectedJournalLabel"/>
+                                </div>
                                 <div t-attf-class="fw-bold fs-5 #{this.state.totals.net &lt; 0 ? 'text-danger' : 'text-dark'}">
                                     Rs. <t t-esc="this.state.totals.net.toLocaleString(undefined, {minimumFractionDigits: 2})"/>
                                 </div>

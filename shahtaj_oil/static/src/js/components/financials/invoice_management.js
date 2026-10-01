@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
+import { Component, useState, onMounted, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { canMutate, canSee, hasFinancialAccess, loadPortalAccess, notifyPortalBusy, portalAccessState } from "../../shahtaj_access";
 import { printFilter, printListPdf } from "../../shahtaj_list_export";
@@ -88,7 +88,7 @@ export class InvoiceManagement extends Component {
                 loading: false,
             },
             itemsPerPage: ITEMS_PER_PAGE,
-            isLoadingList: false,
+            isLoadingList: true,
             isPrintingList: false,
             searchTimeout: null,
             pagination: {
@@ -106,7 +106,8 @@ export class InvoiceManagement extends Component {
             };
         };
         this.debouncedFetchActiveList = this.debounceSearch(() => this.fetchActiveList(), 400);
-        onWillUpdateProps(async (nextProps) => {
+        this._lookupsPromise = null;
+        onWillUpdateProps((nextProps) => {
             const status = nextProps.requestedInvoiceStatus || "all";
             const statusChanged = status !== (this.props.requestedInvoiceStatus || "all");
             if (statusChanged) {
@@ -120,19 +121,34 @@ export class InvoiceManagement extends Component {
                 this.fetchActiveList();
             }
             if (nextProps.refreshNonce !== this.props.refreshNonce) {
-                await this.reloadFromRefresh();
+                this.reloadFromRefresh();
             }
         });
-        onWillStart(async () => {
-            await loadPortalAccess();
-            if (!hasFinancialAccess() && !canSee("financials", "invoices")) {
-                return;
-            }
-            if (canMutate()) {
-                await this.loadLookups();
-            }
-            await this.fetchActiveList();
+        onMounted(() => {
+            this._bootInvoices();
         });
+    }
+
+    async _bootInvoices() {
+        await loadPortalAccess();
+        if (!hasFinancialAccess() && !canSee("financials", "invoices")) {
+            this.state.isLoadingList = false;
+            return;
+        }
+        if (canMutate()) {
+            this._ensureLookups();
+        }
+        await this.fetchActiveList();
+    }
+
+    _ensureLookups() {
+        if (!this._lookupsPromise) {
+            this._lookupsPromise = this.loadLookups().catch((error) => {
+                this._lookupsPromise = null;
+                throw error;
+            });
+        }
+        return this._lookupsPromise;
     }
 
     async loadLookups({ force = false } = {}) {
@@ -382,7 +398,10 @@ export class InvoiceManagement extends Component {
         const config = this.state.activeSubTab === 'credit' 
             ? tabMap['credit'] 
             : (this.state.activeSubTab === 'expenses' ? tabMap[this.state.expenseSubTab] : (this.state.activeSubTab === 'po_management' ? tabMap[this.state.poSubTab] : tabMap[this.state.invoiceSubTab]));
-        if (!config) return;
+        if (!config) {
+            this.state.isLoadingList = false;
+            return;
+        }
 
         this.state.isLoadingList = true;
         notifyPortalBusy(true);
@@ -778,7 +797,14 @@ export class InvoiceManagement extends Component {
         });
     }
 
-    toggleEditInvoice() { 
+    async toggleEditInvoice() {
+        if (canMutate()) {
+            try {
+                await this._ensureLookups();
+            } catch (error) {
+                console.error("Failed to load invoice lookups", error);
+            }
+        }
         this.state.isEditingInvoice = true; 
         this.state.removedLineIds = [];
         
@@ -793,7 +819,14 @@ export class InvoiceManagement extends Component {
         this.viewInvoice(this.state.selectedInvoice); 
     }
 
-    addLine() {
+    async addLine() {
+        if (canMutate()) {
+            try {
+                await this._ensureLookups();
+            } catch (error) {
+                console.error("Failed to load invoice lookups", error);
+            }
+        }
         const newLine = {
             id: 'new_' + Date.now(),
             product_id: '',

@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
+import { Component, useState, onMounted, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
 import { printFilter, printListPdf } from "../shahtaj_list_export";
@@ -23,7 +23,7 @@ export class BankTransactions extends Component {
             activeTab: 'transactions', 
             viewMode: 'list', 
             selectedTransaction: null,
-            isLoading: { data: false, saveJournal: false },
+            isLoading: { data: true, saveJournal: false },
             isPrinting: false,
             
             showJournalModal: false,
@@ -81,11 +81,20 @@ export class BankTransactions extends Component {
             this.fetchActiveList();
         });
 
-        onWillStart(async () => {
-            if (!hasFinancialAccess()) return;
-            await this.loadLookupJournals();
-            await this.fetchActiveList();
+        onMounted(() => {
+            this._bootTransactions();
         });
+    }
+
+    async _bootTransactions() {
+        if (!hasFinancialAccess()) {
+            this.state.isLoading.data = false;
+            return;
+        }
+        await Promise.all([
+            this.loadLookupJournals(),
+            this.fetchActiveList(),
+        ]);
     }
 
     // --- UNIVERSAL PAGINATION HANDLERS ---
@@ -109,6 +118,17 @@ export class BankTransactions extends Component {
             pag.page = newPage;
             this.fetchActiveList();
         }
+    }
+
+    get selectedJournalLabel() {
+        const journalId = this.state.filters.transactions.journal;
+        if (!journalId || journalId === "all") {
+            return "All Journals";
+        }
+        const journal = (this.state.lookupJournals || []).find(
+            (row) => String(row.id) === String(journalId)
+        );
+        return journal ? journal.name : "Journal";
     }
 
     async refreshData() {

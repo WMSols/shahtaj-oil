@@ -198,7 +198,7 @@
                                         <th class="ps-4 border-top-0">Order</th>
                                         <th class="border-top-0">Shop &amp; Booker</th>
                                         <th class="border-top-0">Delivery Status</th>
-                                        <th class="text-end border-top-0">Qty Still to Deliver</th>
+                                        <th class="text-end border-top-0">Order Total Qty</th>
                                         <th class="text-end border-top-0">Unassigned Qty</th>
                                         <th class="border-top-0">Invoice</th>
                                         <th class="border-top-0">Stock</th>
@@ -222,7 +222,7 @@
                                                     <t t-esc="this.deliveryStatusLabel(row.deliveryStatus)"/>
                                                 </span>
                                             </td>
-                                            <td class="text-end"><t t-esc="this._formatQty(row.qtyToDeliver)"/></td>
+                                            <td class="text-end"><t t-esc="this._formatQty(row.qtyOrdered)"/></td>
                                             <td t-attf-class="text-end #{row.qtyUnassigned > 0 ? 'fw-bold' : ''}"><t t-esc="this._formatQty(row.qtyUnassigned)"/></td>
                                             <td>
                                                 <span t-if="row.hasPostedInvoice" class="badge bg-success text-white">Posted</span>

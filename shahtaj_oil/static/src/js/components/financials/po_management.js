@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, onWillUpdateProps, onWillUnmount } from "@odoo/owl";
+import { Component, useState, onMounted, onWillUpdateProps, onWillUnmount } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { canSee, hasFinancialAccess, notifyPortalBusy, portalAccessState } from "../../shahtaj_access";
 import { printFilter, printListPdf } from "../../shahtaj_list_export";
@@ -80,7 +80,7 @@ export class PoManagement extends Component {
             },
             confirmModal: { isOpen: false, title: "", message: "", onConfirm: null },
             itemsPerPage: ITEMS_PER_PAGE,
-            isLoadingList: false,
+            isLoadingList: true,
             isPrintingList: false,
             searchTimeout: null,
             pagination: {
@@ -120,23 +120,39 @@ export class PoManagement extends Component {
             };
         };
         this.debouncedFetchActiveList = this.debounceSearch(() => this.fetchActiveList(), 400);
-        onWillUpdateProps(async (nextProps) => {
+        this._lookupsPromise = null;
+        onWillUpdateProps((nextProps) => {
             if (nextProps.requestedPoSubTab && nextProps.requestedPoSubTab !== this.props.requestedPoSubTab) {
                 this.setPoSubTab(nextProps.requestedPoSubTab);
             }
             if (nextProps.refreshNonce !== this.props.refreshNonce) {
-                await this.reloadFromRefresh();
+                this.reloadFromRefresh();
             }
-            await this._consumePendingPoPrefill();
+            this._consumePendingPoPrefill();
         });
-        onWillStart(async () => {
-            if (!hasFinancialAccess() && !canSee("financials", "po_management")) {
-                return;
-            }
-            await this.loadLookups();
-            await this.fetchActiveList();
-            await this._consumePendingPoPrefill();
+        onMounted(() => {
+            this._bootPurchaseOrders();
         });
+    }
+
+    async _bootPurchaseOrders() {
+        if (!hasFinancialAccess() && !canSee("financials", "po_management")) {
+            this.state.isLoadingList = false;
+            return;
+        }
+        this._ensureLookups();
+        await this.fetchActiveList();
+        await this._consumePendingPoPrefill();
+    }
+
+    _ensureLookups() {
+        if (!this._lookupsPromise) {
+            this._lookupsPromise = this.loadLookups().catch((error) => {
+                this._lookupsPromise = null;
+                throw error;
+            });
+        }
+        return this._lookupsPromise;
     }
 
     async loadLookups({ force = false } = {}) {
@@ -307,7 +323,10 @@ export class PoManagement extends Component {
         const config = this.state.activeSubTab === 'credit' 
             ? tabMap['credit'] 
             : (this.state.activeSubTab === 'expenses' ? tabMap[this.state.expenseSubTab] : (this.state.activeSubTab === 'po_management' ? tabMap[this.state.poSubTab] : tabMap[this.state.invoiceSubTab]));
-        if (!config) return;
+        if (!config) {
+            this.state.isLoadingList = false;
+            return;
+        }
 
         this.state.isLoadingList = true;
         notifyPortalBusy(true);
@@ -713,7 +732,12 @@ export class PoManagement extends Component {
         }
     }
 
-    openPurchaseOrderForm() {
+    async openPurchaseOrderForm() {
+        try {
+            await this._ensureLookups();
+        } catch (error) {
+            console.error("Failed to load purchase order lookups", error);
+        }
         this.resetPurchaseOrderForm();
         this.state.showPurchaseOrderForm = true;
     }
@@ -1276,6 +1300,11 @@ export class PoManagement extends Component {
     }
 
     async openPurchaseOrderFormWithProduct({ vendorId, productId, productTmplId, productName, vendorName } = {}) {
+        try {
+            await this._ensureLookups();
+        } catch (error) {
+            console.error("Failed to load purchase order lookups", error);
+        }
         this.resetPurchaseOrderForm();
         const parsedVendorId = vendorId ? parseInt(vendorId, 10) : null;
         if (parsedVendorId) {

@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, onWillUnmount, useRef, useEffect } from "@odoo/owl";
+import { Component, useState, onWillStart, onMounted, onWillUnmount, useRef, useEffect } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { registry } from "@web/core/registry";
 import { loadBundle, loadJS } from "@web/core/assets";
@@ -14,7 +14,6 @@ import {
     firstAllowedSub,
     hasFinancialAccess,
     loadPortalAccess,
-    notifyPortalBusy,
     portalTitle,
     resetPortalBusy,
     showPrices,
@@ -42,12 +41,16 @@ export class ShahtajDashboard extends Component {
         this._cashChartToken = 0;
         this._opsLoadToken = 0;
         this._cashLoadToken = 0;
+        this._kpiLoadToken = 0;
+        this._navToken = 0;
         const today = new Date();
         this.todayStr = this._formatDate(today);
 
         this.state = useState({
             activeTab: 'overview', // Default to the new Master Overview
             activeSubTab: '',
+            renderedTab: 'overview',
+            renderedSubTab: '',
             staffRole: 'order_booker',
             deliveriesSubTab: '',
             checkinPurpose: 'all',
@@ -142,8 +145,12 @@ export class ShahtajDashboard extends Component {
             await loadPortalAccess();
             this.state.staffRole = defaultStaffRole();
             this.state.deliveriesSubTab = defaultDeliveriesSub();
-            const chartPromise = this.canSeeCard("financials") ? this.ensureChartJs() : Promise.resolve();
-            await Promise.all([this.fetchMasterKPIs(), chartPromise]);
+        });
+        onMounted(() => {
+            if (this.canSeeCard("financials")) {
+                this.ensureChartJs();
+            }
+            this.fetchMasterKPIs();
         });
         useEffect(
             () => {
@@ -155,12 +162,60 @@ export class ShahtajDashboard extends Component {
                 this._cashTrendKey(),
             ]
         );
+        this._cursorX = null;
+        this._cursorY = null;
+        this._cursorHold = null;
+        this._cursorReleaseArmed = false;
+        this._sawPortalBusy = false;
+        this._onCursorPointerMove = (ev) => {
+            this._cursorX = ev.clientX;
+            this._cursorY = ev.clientY;
+            if (this._cursorHold && ev.target !== this._cursorHold) {
+                this._cursorHold.style.removeProperty("cursor");
+                this._cursorHold = null;
+            }
+            if (!this._cursorReleaseArmed || this.portalWaitCursor) {
+                return;
+            }
+            this._cursorReleaseArmed = false;
+            const style = document.getElementById("so-portal-cursor");
+            if (style) {
+                style.textContent = "";
+            }
+        };
+        window.addEventListener("pointermove", this._onCursorPointerMove, true);
+        useEffect(
+            () => {
+                if (this.portalWaitCursor) {
+                    this._sawPortalBusy = true;
+                    this._applyPortalCursor(true);
+                    return;
+                }
+                if (!this._sawPortalBusy) {
+                    return;
+                }
+                this._applyPortalCursor(false);
+                const frame = requestAnimationFrame(() => {
+                    if (!this.portalWaitCursor) {
+                        this._cursorReleaseArmed = true;
+                    }
+                });
+                return () => cancelAnimationFrame(frame);
+            },
+            () => [this.portalWaitCursor]
+        );
         this._onPortalBusy = (ev) => {
             this.state.isSidebarLocked = Boolean(ev.detail?.busy);
         };
         window.addEventListener("shahtaj-portal-busy", this._onPortalBusy);
         onWillUnmount(() => {
             window.removeEventListener("shahtaj-portal-busy", this._onPortalBusy);
+            window.removeEventListener("pointermove", this._onCursorPointerMove, true);
+            if (this._cursorHold) {
+                this._cursorHold.style.removeProperty("cursor");
+                this._cursorHold = null;
+            }
+            document.getElementById("so-portal-cursor")?.remove();
             resetPortalBusy();
             this.destroyCashChart();
         });
@@ -254,9 +309,21 @@ export class ShahtajDashboard extends Component {
     }
 
     async fetchMasterKPIs() {
+        const token = ++this._kpiLoadToken;
+        const opsDate = this.state.opsDate;
+        const shopRegDate = this.state.shopRegDate;
+        const cashRangeDays = this.state.cashRangeDays;
         this.state.isLoadingKpis = true;
-        notifyPortalBusy(true);
-        const opsBounds = this._pktDateToUtcBounds(this.state.opsDate || this.todayStr);
+        let opsBounds;
+        try {
+            opsBounds = this._pktDateToUtcBounds(opsDate || this.todayStr);
+        } catch (error) {
+            console.error("Failed to fetch Master KPIs", error);
+            if (token === this._kpiLoadToken) {
+                this.state.isLoadingKpis = false;
+            }
+            return;
+        }
         const productBaseDomain = [
             ["sale_ok", "=", true],
             ["default_code", "!=", "SHAHTAJ-LEGACY"],
@@ -273,7 +340,7 @@ export class ShahtajDashboard extends Component {
                         this._count("shahtaj.route", [["active", "=", true]]),
                         this._count("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", true]]),
                         this._count("res.partner", [["is_shahtaj_shop", "=", true], ["active", "=", true], ["shop_approval_state", "=", "pending"]]),
-                        this._count("res.partner", this._shopRegDomain(this.state.shopRegDate)),
+                        this._count("res.partner", this._shopRegDomain(shopRegDate)),
                     ]);
                     Object.assign(next, { totalZones: zones, totalRoutes: routes, totalShops: shops, pendingShops, shopsRegisteredByOb });
                 })());
@@ -308,7 +375,7 @@ export class ShahtajDashboard extends Component {
             if (this.canSeeCard("dispatch")) {
                 jobs.push((async () => {
                     const [todayDeliveries, ordersToDispatch] = await Promise.all([
-                        this._count("sale.order", this._toDispatchDomain(this.state.opsDate)),
+                        this._count("sale.order", this._toDispatchDomain(opsDate)),
                         this._count("sale.order", [
                             ["state", "in", ["sale", "done"]],
                             ["shahtaj_delivery_status", "in", ["pending", "partial"]],
@@ -349,8 +416,8 @@ export class ShahtajDashboard extends Component {
             if (this.canSeeCard("deliveryJobs")) {
                 jobs.push((async () => {
                     const [dmJobsToday, todayInTransit, pendingDeliveries, dmJobsActive, dmInTransit] = await Promise.all([
-                        this._count("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["state", "!=", "not_ready"]]),
-                        this._count("shahtaj.dm.delivery", [["scheduled_date", "=", this.state.opsDate], ["field_state", "=", "in_transit"]]),
+                        this._count("shahtaj.dm.delivery", [["scheduled_date", "=", opsDate], ["state", "!=", "not_ready"]]),
+                        this._count("shahtaj.dm.delivery", [["scheduled_date", "=", opsDate], ["field_state", "=", "in_transit"]]),
                         this._count("shahtaj.dm.delivery", [["field_state", "=", "pending"]]),
                         this._count("shahtaj.dm.delivery", [["state", "in", ["ready", "picked", "partial"]]]),
                         this._count("shahtaj.dm.delivery", [["field_state", "=", "in_transit"]]),
@@ -369,12 +436,33 @@ export class ShahtajDashboard extends Component {
                 })());
             }
             await Promise.all(jobs);
+            if (token !== this._kpiLoadToken) {
+                return;
+            }
+            if (opsDate !== this.state.opsDate) {
+                delete next.todayCheckins;
+                delete next.todayOrders;
+                delete next.todayDeliveries;
+                delete next.dmJobsToday;
+                delete next.todayInTransit;
+            }
+            if (shopRegDate !== this.state.shopRegDate) {
+                delete next.shopsRegisteredByOb;
+            }
+            if (cashRangeDays !== this.state.cashRangeDays) {
+                delete next.cashIn;
+                delete next.cashOut;
+                delete next.netCash;
+                delete next.stillOwed;
+                delete next.cashTrend;
+            }
             Object.assign(this.state.kpis, next);
         } catch (error) {
             console.error("Failed to fetch Master KPIs", error);
         } finally {
-            this.state.isLoadingKpis = false;
-            notifyPortalBusy(false);
+            if (token === this._kpiLoadToken) {
+                this.state.isLoadingKpis = false;
+            }
         }
     }
 
@@ -660,6 +748,51 @@ export class ShahtajDashboard extends Component {
         return canSeeCard(card);
     }
 
+    get contentReady() {
+        return this.state.renderedTab === this.state.activeTab
+            && (this.state.renderedSubTab || "") === (this.state.activeSubTab || "");
+    }
+
+    get portalWaitCursor() {
+        if (this.state.isSwitchingTab || this.state.isSidebarLocked) {
+            return true;
+        }
+        if (!this.contentReady || this.state.renderedTab !== "overview") {
+            return false;
+        }
+        return this.state.isLoadingKpis
+            || this.state.isLoadingOps
+            || this.state.isLoadingCash;
+    }
+
+    _applyPortalCursor(wait) {
+        let style = document.getElementById("so-portal-cursor");
+        if (!style) {
+            style = document.createElement("style");
+            style.id = "so-portal-cursor";
+            document.head.appendChild(style);
+        }
+        this._cursorReleaseArmed = false;
+        if (this._cursorHold) {
+            this._cursorHold.style.removeProperty("cursor");
+            this._cursorHold = null;
+        }
+        if (wait) {
+            style.textContent = "html, html * { cursor: wait !important; }";
+            return;
+        }
+        style.textContent = "html, html * { cursor: default !important; }";
+        if (this._cursorX == null) {
+            return;
+        }
+        const hit = document.elementFromPoint(this._cursorX, this._cursorY);
+        if (!hit) {
+            return;
+        }
+        hit.style.setProperty("cursor", "default", "important");
+        this._cursorHold = hit;
+    }
+
     get showFieldCard() {
         return this.canSeeCard("checkins")
             || this.canSeeCard("orders")
@@ -792,6 +925,9 @@ export class ShahtajDashboard extends Component {
     }
 
     get hasAttentionItems() {
+        if (this.state.isLoadingKpis) {
+            return false;
+        }
         const kpis = this.state.kpis;
         return (this.canSeeCard("territory") && kpis.pendingShops > 0)
             || (this.canSeeCard("deliveryJobs") && kpis.pendingDeliveries > 0)
@@ -916,28 +1052,29 @@ export class ShahtajDashboard extends Component {
         this.switchTab('financials', 'customer_invoices', { filters: { invoiceStatus: status } });
     }
 
-    async toggleMenu(menuName, defaultSubTab = '') {
-        if (this.state.isSwitchingTab) {
-            return;
-        }
+    toggleMenu(menuName, defaultSubTab = '') {
         const isCurrentlyOpen = this.state.expandedMenus[menuName];
-        
-        // 1. Close ALL menus first (Exclusive Accordion Logic)
         for (let key in this.state.expandedMenus) {
             this.state.expandedMenus[key] = false;
         }
-        
-        // 2. Toggle the specific menu that was clicked
         this.state.expandedMenus[menuName] = !isCurrentlyOpen;
-        
-        // 3. If opening, yield to the browser instantly so the accordion animation starts, THEN switch tabs
+        if (!this.state.expandedMenus[menuName]) {
+            return;
+        }
         const sub = (defaultSubTab && canSee(menuName, defaultSubTab))
             ? defaultSubTab
             : firstAllowedSub(menuName);
-        if (this.state.expandedMenus[menuName]) {
-            await new Promise(resolve => setTimeout(resolve, 10));
-            await this.switchTab(menuName, sub);
+        this.switchTab(menuName, sub);
+    }
+
+    _selectMenu(tabName) {
+        for (let key in this.state.expandedMenus) {
+            this.state.expandedMenus[key] = false;
         }
+        if (this.state.expandedMenus[tabName] !== undefined) {
+            this.state.expandedMenus[tabName] = true;
+        }
+        this.state.isSidebarOpen = false;
     }
     _guardNavigation(tabName, subTabName) {
         if (tabName === 'staff') {
@@ -964,74 +1101,45 @@ export class ShahtajDashboard extends Component {
         return { tabName, subTabName };
     }
     async switchTab(tabName, subTabName = '', options = {}) {
-        if (this.state.isSwitchingTab) {
-            return;
-        }
         if (tabName === 'staff' && !this.state.staffRole) {
             this.state.staffRole = defaultStaffRole();
         }
         const guarded = this._guardNavigation(tabName, subTabName);
         tabName = guarded.tabName;
-        subTabName = guarded.subTabName;
+        subTabName = guarded.subTabName || '';
 
         this._applyNavFilters(options.filters);
 
         const sameTab = this.state.activeTab === tabName;
-        const sameSub = sameTab && (this.state.activeSubTab || '') === (subTabName || '');
+        const sameSub = sameTab && (this.state.activeSubTab || '') === subTabName;
+        this._selectMenu(tabName);
         if (sameSub && !options.forceBusy) {
-            for (let key in this.state.expandedMenus) {
-                this.state.expandedMenus[key] = false;
-            }
-            if (this.state.expandedMenus[tabName] !== undefined) {
-                this.state.expandedMenus[tabName] = true;
-            }
-            this.state.isSidebarOpen = false;
             return;
         }
 
-        notifyPortalBusy(true);
+        this.state.activeTab = tabName;
+        this.state.activeSubTab = subTabName;
+        this.state.isSwitchingTab = this.state.renderedTab !== tabName
+            || (this.state.renderedSubTab || '') !== subTabName;
+
+        const token = ++this._navToken;
         try {
-            if (sameTab) {
-                this.state.activeSubTab = subTabName;
-                for (let key in this.state.expandedMenus) {
-                    this.state.expandedMenus[key] = false;
-                }
-                if (this.state.expandedMenus[tabName] !== undefined) {
-                    this.state.expandedMenus[tabName] = true;
-                }
-                this.state.isSidebarOpen = false;
-                await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 10)));
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+            if (token !== this._navToken) {
                 return;
             }
-
-            this.state.isSwitchingTab = true;
-            await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 10)));
-
-            this.state.activeTab = tabName;
-            this.state.activeSubTab = subTabName;
-
-            for (let key in this.state.expandedMenus) {
-                this.state.expandedMenus[key] = false;
-            }
-            if (this.state.expandedMenus[tabName] !== undefined) {
-                this.state.expandedMenus[tabName] = true;
-            }
-            this.state.isSidebarOpen = false;
-
-            await new Promise((resolve) => setTimeout(resolve, 10));
-
+            this.state.renderedTab = tabName;
+            this.state.renderedSubTab = subTabName;
             if (tabName === 'overview') {
-                await this.fetchMasterKPIs();
+                this.fetchMasterKPIs();
             }
         } finally {
-            this.state.isSwitchingTab = false;
-            resetPortalBusy();
+            if (token === this._navToken) {
+                this.state.isSwitchingTab = false;
+            }
         }
     }
     toggleSidebar() {
-        if (this.state.isSwitchingTab) {
-            return;
-        }
         this.state.isSidebarOpen = !this.state.isSidebarOpen;
     }
 }

@@ -1457,6 +1457,7 @@ export class OperationsBase extends Component {
             shopId: o.partner_id ? o.partner_id[0] : false,
             booker: o.user_id ? o.user_id[1] : 'Unknown', bookerId: o.user_id ? o.user_id[0] : false,
             date: o.date_order ? String(o.date_order).split(" ")[0] : 'Unknown', items: (o.order_line || []).length,
+            qtyOrdered: totalOrd,
             total: this._formatRs(o.amount_total),
             tax: this._formatRs(o.amount_tax),
             rawAmount: o.amount_total || 0,

@@ -16,7 +16,6 @@
             .smooth-accordion-inner {
                 overflow: hidden;
             }
-
             .so-ov-page {
                 max-width: 1320px;
                 margin: 0 auto;
@@ -26,6 +25,7 @@
                 grid-template-columns: repeat(12, minmax(0, 1fr));
                 gap: 1rem;
                 align-items: stretch;
+                position: relative;
             }
             .so-ov-board > div {
                 grid-column: span 12;
@@ -259,10 +259,12 @@
                 gap: 10px;
                 background: rgba(255, 255, 255, 0.78);
                 backdrop-filter: blur(2px);
-                cursor: wait;
             }
             .so-ov-finance .so-ov-loading {
                 background: rgba(239, 246, 255, 0.78);
+            }
+            .so-ov-loading--board {
+                background: rgba(255, 255, 255, 0.94);
             }
             .so-ov-bills-metric .so-ov-metric-value {
                 font-size: 1.5rem;
@@ -273,7 +275,7 @@
 
             <div t-if="this.state.isSidebarOpen" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-md-none" style="z-index: 1040;" t-on-click="toggleSidebar"></div>
 
-            <div t-attf-class="bg-white border-end shadow-sm flex-column overflow-y-auto transition-all #{this.state.isSidebarOpen ? 'position-fixed top-0 start-0 d-flex h-100' : 'd-none d-md-flex h-100 position-relative'}" t-att-style="'width: 280px; min-width: 280px; z-index: 1050;' + (this.state.isSwitchingTab ? ' cursor: wait;' : '')">
+            <div t-attf-class="bg-white border-end shadow-sm flex-column overflow-y-auto transition-all #{this.state.isSidebarOpen ? 'position-fixed top-0 start-0 d-flex h-100' : 'd-none d-md-flex h-100 position-relative'}" style="width: 280px; min-width: 280px; z-index: 1050;">
 
                 <div class="p-4 border-bottom text-center bg-white position-relative">
                     <button class="btn btn-sm btn-light position-absolute top-0 end-0 m-2 d-md-none shadow-sm" t-on-click="toggleSidebar">
@@ -563,9 +565,9 @@
                     
 
                     <!-- THE LOGO LOADING OVERLAY -->
-                    <t t-if="this.state.isSwitchingTab">
+                    <t t-if="!this.contentReady">
 
-                        <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center" style="background-color: rgba(248, 250, 252, 0.85); z-index: 1000; backdrop-filter: blur(3px); pointer-events: auto; cursor: wait;" t-on-click.stop.prevent="" t-on-mousedown.stop.prevent="">
+                        <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center" style="background-color: rgba(248, 250, 252, 0.85); z-index: 1000; backdrop-filter: blur(3px); pointer-events: auto;" t-on-click.stop.prevent="" t-on-mousedown.stop.prevent="">
 
                             <!-- Bouncing Logo -->
                             <div>
@@ -585,7 +587,7 @@
                     </t>
 
                     <!-- MASTER DASHBOARD OVERVIEW -->
-                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'overview'" class="h-100 p-2 p-md-3">
+                    <div t-if="this.contentReady and this.state.renderedTab === 'overview'" class="h-100 p-2 p-md-3">
                         <div class="so-ov-page">
 
                             <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
@@ -625,6 +627,7 @@
                                 </span>
                             </div>
 
+                            <div class="position-relative">
                             <div class="so-ov-board">
                                 <div t-if="this.canSeeCard('territory')" t-att-class="this.overviewSpanClass('territory')">
                                     <div class="so-ov-card p-4">
@@ -1004,50 +1007,55 @@
                                         </div>
                                     </div>
                                 </div>
+                                    <div t-if="this.state.isLoadingKpis" class="so-ov-loading so-ov-loading--board">
+                                        <span class="spinner-border text-primary" role="status"></span>
+                                        <span class="small fw-bold text-muted">Loading overview...</span>
+                                    </div>
+                                </div>
 
                         </div>
                     </div>
-                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'territory'" class="h-100">
-                        <TerritoryRoutes requestedSubTab="this.state.activeSubTab" requestedShopStatus="this.state.shopStatus" requestedShopRegisteredOn="this.state.shopRegisteredOn" requestedShopRegistrar="this.state.shopRegistrar" />
+                    <div t-if="this.contentReady and this.state.renderedTab === 'territory'" class="h-100">
+                        <TerritoryRoutes requestedSubTab="this.state.renderedSubTab" requestedShopStatus="this.state.shopStatus" requestedShopRegisteredOn="this.state.shopRegisteredOn" requestedShopRegistrar="this.state.shopRegistrar" />
                     </div>
 
-                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'warehouse'" class="h-100">
-                        <WarehouseInventory requestedSubTab="this.state.activeSubTab" requestedStockStatus="this.state.stockStatus" />
+                    <div t-if="this.contentReady and this.state.renderedTab === 'warehouse'" class="h-100">
+                        <WarehouseInventory requestedSubTab="this.state.renderedSubTab" requestedStockStatus="this.state.stockStatus" />
                     </div>
 
-                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'operations' and this.state.activeSubTab !== 'dm_performance'" class="h-100">
-                        <OperationsTracking requestedSubTab="this.state.activeSubTab" requestedDeliveriesSubTab="this.state.deliveriesSubTab" requestedCheckinPurpose="this.state.checkinPurpose" requestedCheckinRole="this.state.checkinRole" requestedCheckinDate="this.state.checkinDate" requestedOrderDate="this.state.orderDate" requestedDispatchDate="this.state.dispatchDate" requestedDmDate="this.state.dmDate" requestedDmFieldState="this.state.dmFieldState" requestedDmState="this.state.dmState" />
+                    <div t-if="this.contentReady and this.state.renderedTab === 'operations' and this.state.renderedSubTab !== 'dm_performance'" class="h-100">
+                        <OperationsTracking requestedSubTab="this.state.renderedSubTab" requestedDeliveriesSubTab="this.state.deliveriesSubTab" requestedCheckinPurpose="this.state.checkinPurpose" requestedCheckinRole="this.state.checkinRole" requestedCheckinDate="this.state.checkinDate" requestedOrderDate="this.state.orderDate" requestedDispatchDate="this.state.dispatchDate" requestedDmDate="this.state.dmDate" requestedDmFieldState="this.state.dmFieldState" requestedDmState="this.state.dmState" />
                     </div>
 
-                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'operations' and this.state.activeSubTab === 'dm_performance'" class="h-100">
+                    <div t-if="this.contentReady and this.state.renderedTab === 'operations' and this.state.renderedSubTab === 'dm_performance'" class="h-100">
                         <DeliveryManPerformance />
                     </div>
 
-                    <div t-if="!this.state.isSwitchingTab and this.canSee('financials', this.state.activeSubTab) and this.state.activeTab === 'financials'" class="h-100">
-                        <FinancialsInvoicing requestedSubTab="this.state.activeSubTab" requestedInvoiceStatus="this.state.invoiceStatus" requestedCashDirection="this.state.cashDirection" requestedCashDateFrom="this.state.cashDateFrom" requestedCashDateTo="this.state.cashDateTo" />
+                    <div t-if="this.contentReady and this.canSee('financials', this.state.renderedSubTab) and this.state.renderedTab === 'financials'" class="h-100">
+                        <FinancialsInvoicing requestedSubTab="this.state.renderedSubTab" requestedInvoiceStatus="this.state.invoiceStatus" requestedCashDirection="this.state.cashDirection" requestedCashDateFrom="this.state.cashDateFrom" requestedCashDateTo="this.state.cashDateTo" />
                     </div>
 
-                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'staff'" class="h-100">
+                    <div t-if="this.contentReady and this.state.renderedTab === 'staff'" class="h-100">
                         <StaffManagement requestedStaffRole="this.state.staffRole" requestedStaffStatus="this.state.staffStatus" />
                     </div>
 
-                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'reports'" class="h-100">
-                        <FieldReports requestedSubTab="this.state.activeSubTab" />
+                    <div t-if="this.contentReady and this.state.renderedTab === 'reports'" class="h-100">
+                        <FieldReports requestedSubTab="this.state.renderedSubTab" />
                     </div>
 
-                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'schedules'" class="h-100">
-                        <SchedulesTargets requestedSubTab="this.state.activeSubTab" />
+                    <div t-if="this.contentReady and this.state.renderedTab === 'schedules'" class="h-100">
+                        <SchedulesTargets requestedSubTab="this.state.renderedSubTab" />
                     </div>
 
-                    <div t-if="!this.state.isSwitchingTab and this.canSee('transactions') and this.state.activeTab === 'transactions'" class="h-100">
+                    <div t-if="this.contentReady and this.canSee('transactions') and this.state.renderedTab === 'transactions'" class="h-100">
                         <BankTransactions />
                     </div>
 
-                    <div t-if="!this.state.isSwitchingTab and this.canSee('accounting', this.state.activeSubTab) and this.state.activeTab === 'accounting'" class="w-100" style="min-width: 0;">
-                        <Accounting requestedSubTab="this.state.activeSubTab" />
+                    <div t-if="this.contentReady and this.canSee('accounting', this.state.renderedSubTab) and this.state.renderedTab === 'accounting'" class="w-100" style="min-width: 0;">
+                        <Accounting requestedSubTab="this.state.renderedSubTab" />
                     </div>
 
-                    <div t-if="!this.state.isSwitchingTab and this.state.activeTab === 'settings'" class="h-100">
+                    <div t-if="this.contentReady and this.state.renderedTab === 'settings'" class="h-100">
                         <PortalSettings />
                     </div>
 
