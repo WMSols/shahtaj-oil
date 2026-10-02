@@ -594,7 +594,6 @@
                                 <div>
                                     <div class="d-flex align-items-center gap-2 mb-1">
                                         <h2 class="fw-bold text-dark mb-0">System Overview</h2>
-                                        <span class="badge rounded-pill" style="background: #fef3c7; color: #92400e;">Preview</span>
                                     </div>
                                     <div class="text-muted">A snapshot of your network, field activity, and stock.</div>
                                     <div class="small text-secondary mt-1" t-esc="this.overviewDateLabel"/>

@@ -467,7 +467,7 @@
                         <select class="form-select form-select-sm" style="max-width: 160px;" t-model="this.state.filters.collections.state" t-on-change="() => this.onFilterChange('collections')">
                             <option value="all">All states</option>
                             <option value="draft">Draft</option>
-                            <option value="in_process">In Process</option>
+                            <option value="in_process">Partial</option>
                             <option value="paid">Paid</option>
                             <option value="canceled">Canceled</option>
                             <option value="rejected">Rejected</option>

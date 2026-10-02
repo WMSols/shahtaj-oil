@@ -2524,7 +2524,7 @@ export class OperationsBase extends Component {
     recoveryStateLabel(state) {
         const map = {
             draft: "Draft",
-            in_process: "In Process",
+            in_process: "Partial",
             paid: "Paid",
             canceled: "Canceled",
             cancelled: "Canceled",
