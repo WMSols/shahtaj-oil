@@ -230,24 +230,24 @@
                         <t t-esc="this.state.selectedCheckin.shop"/>
                     </h5>
                     <p class="text-muted mb-1 small">
-                        <strong>Shop ID:</strong>
+                        <strong>Shop ID: </strong>
                         <t t-esc="this.state.selectedCheckin.shopId"/>
                     </p>
                     <p class="text-muted mb-1 small">
-                        <strong>User:</strong>
+                        <strong>User: </strong>
                         <t t-esc="this.state.selectedCheckin.booker"/>
                         <span class="ms-1">(ID: <t t-esc="this.state.selectedCheckin.bookerId"/>)</span>
                     </p>
                     <p class="text-muted mb-1 small">
-                        <strong>Role:</strong>
+                        <strong>Role: </strong>
                         <t t-esc="this.state.selectedCheckin.roleLabel"/>
                     </p>
                     <p class="text-muted mb-1 small">
-                        <strong>Purpose:</strong>
+                        <strong>Purpose: </strong>
                         <t t-esc="this.state.selectedCheckin.purposeLabel"/>
                     </p>
-                    <p class="text-muted mb-0 small" title="Linked task or delivery job">
-                        <strong>Reference:</strong>
+                    <p class="text-muted mb-0 small" t-if="this.state.selectedCheckin.purpose !== 'walk_in'" title="Linked task or delivery job">
+                        <strong>Reference: </strong>
                         <t t-esc="this.state.selectedCheckin.taskRef"/>
                     </p>
                     <p class="bg-info text-white mb-0 p-2 small mt-3" t-if="this.state.selectedCheckin.isOk" title="Linked visit notes">
@@ -292,25 +292,25 @@
                                 <t t-esc="this.state.selectedCheckin.time"/>
                             </span>
                         </div>
-                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom" t-if="this.state.selectedCheckin.purpose !== 'walk_in'">
                             <span class="text-muted small">Ended At:</span>
                             <span class="fw-bold text-dark">
                                 <t t-esc="this.state.selectedCheckin.endTime || '—'"/>
                             </span>
                         </div>
-                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom" t-if="this.state.selectedCheckin.purpose !== 'walk_in'">
                             <span class="text-muted small">Time Spent:</span>
                             <span class="fw-bold text-dark" title="Total time spent at the shop">
                                 <t t-esc="this.state.selectedCheckin.duration || '—'"/>
                             </span>
                         </div>
-                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom" t-if="this.state.selectedCheckin.purpose !== 'walk_in'">
                             <span class="text-muted small">Distance:</span>
                             <span class="fw-bold text-dark">
                                 <t t-esc="this.state.selectedCheckin.distLabel"/>
                             </span>
                         </div>
-                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                        <div class="d-flex justify-content-between mb-2 pb-2 border-bottom" t-if="this.state.selectedCheckin.purpose !== 'walk_in'">
                             <span class="text-muted small">Allowed Range:</span>
                             <span class="fw-bold text-dark">
                                 <t t-esc="Math.round(this.state.selectedCheckin.min_distance_m || 0)"/>–

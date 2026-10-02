@@ -1905,8 +1905,8 @@ export class OperationsBase extends Component {
                     dm: s.delivery_man_id ? s.delivery_man_id[1] : '—',
                     date: s.session_date || '—',
                     state: s.state,
-                    departed: s.departed_at || '—',
-                    ended: s.ended_at || '—',
+                    departed: s.departed_at ? (this.formatUtcToPkt(s.departed_at) || '—') : '—',
+                    ended: s.ended_at ? (this.formatUtcToPkt(s.ended_at) || '—') : '—',
                 }));
             }
             else if (tab === 'collections') {
@@ -3687,7 +3687,7 @@ export class OperationsBase extends Component {
             }
         }
 
-        if (this.state.selectedOrder.odoo_id) {
+        if (this.state.selectedOrder.odoo_id && !this.state.selectedOrder.isWalkIn) {
             try {
                 const snaps = await this.orm.read(
                     "sale.order",

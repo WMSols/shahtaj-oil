@@ -98,10 +98,18 @@
                         <button class="btn btn-sm btn-outline-secondary me-2" t-on-click="closeDm">← Back</button>
                         <span class="fw-bold"><t t-esc="this.state.selectedDm.name"/></span>
                     </div>
-                    <span class="badge bg-primary text-white">
-                        <t t-esc="this.state.selectedDm.done"/> / <t t-esc="this.state.selectedDm.assigned"/> done
-                        · <t t-esc="Math.round(this.state.selectedDm.progress)"/>%
-                    </span>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <button class="btn btn-sm btn-outline-secondary fw-bold"
+                                t-on-click="printDayActivity"
+                                t-att-disabled="this.state.isPrinting or this.state.isLoading"
+                                title="Print this delivery man's jobs for the selected day">
+                            <i class="fa fa-print me-1"/> Print Day
+                        </button>
+                        <span class="badge bg-primary text-white">
+                            <t t-esc="this.state.selectedDm.done"/> / <t t-esc="this.state.selectedDm.assigned"/> done
+                            · <t t-esc="Math.round(this.state.selectedDm.progress)"/>%
+                        </span>
+                    </div>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover mb-0 align-middle">

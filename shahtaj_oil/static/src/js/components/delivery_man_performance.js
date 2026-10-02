@@ -337,6 +337,42 @@ export class DeliveryManPerformance extends Component {
         }
     }
 
+    async printDayActivity() {
+        if (this.state.isPrinting || !this.state.selectedDm) return;
+        this.state.isPrinting = true;
+        try {
+            const day = this.state.date || this.todayStr;
+            const dm = this.state.selectedDm;
+            const jobs = this.state.jobs || [];
+            if (!jobs.length) {
+                this.notification.add("No day activity rows to print.", { type: "warning" });
+                return;
+            }
+            await printListPdf(this.orm, this.action, {
+                title: "DM Performance — Day Activity",
+                filters: [
+                    dm.name ? `Delivery man: ${dm.name}` : "",
+                    day ? `Date: ${day}` : "",
+                    `Done: ${dm.done} / ${dm.assigned}`,
+                    `Progress: ${Math.round(dm.progress)}%`,
+                ].filter(Boolean),
+                columns: ["Date", "Order", "Shop", "Walk-in", "Stock", "Stop"],
+                rows: jobs.map((job) => [
+                    job.date || "",
+                    job.order || "",
+                    job.shop || "",
+                    job.isWalkIn ? "Yes" : "",
+                    this.stockLabel(job.state),
+                    this.stopLabel(job.fieldState),
+                ]),
+            });
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrinting = false;
+        }
+    }
+
     statusLabel(status) {
         const map = { online: "Online", away: "Away", offline: "Offline" };
         return map[status] || status || "—";
