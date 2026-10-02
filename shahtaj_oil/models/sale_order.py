@@ -691,6 +691,90 @@ class SaleOrder(models.Model):
             )
         return True
 
+    def _shahtaj_user_can_reset_to_draft(self):
+        user = self.env.user
+        if user.has_group('shahtaj_oil.group_shahtaj_kpo') or user.has_group('shahtaj_oil.group_shahtaj_warehouse'):
+            return False
+        return (
+            user.has_group('shahtaj_oil.group_shahtaj_manager')
+            or user.has_group('shahtaj_oil.group_shahtaj_office_ops')
+        )
+
+    def action_shahtaj_reset_to_draft(self):
+        """Return a live order to draft so the portal can edit lines and taxes."""
+        if not self._shahtaj_user_can_reset_to_draft():
+            raise AccessError(_('Only a distributor or manager can reset an order to draft.'))
+        for order in self:
+            if order.state == 'draft':
+                continue
+            if order.state not in ('sent', 'sale', 'cancel'):
+                raise UserError(_(
+                    'Cannot reset "%(order)s" to draft in its current state.',
+                    order=order.display_name,
+                ))
+            posted = order._shahtaj_posted_customer_invoices()
+            if posted:
+                raise UserError(_(
+                    'Cannot reset "%(order)s" to draft: it already has posted invoice(s) %(invoices)s.',
+                    order=order.display_name,
+                    invoices=', '.join(posted.mapped('display_name')),
+                ))
+            delivered = order.order_line.filtered(
+                lambda l: not l.display_type and l.qty_delivered > 0
+            )
+            if delivered:
+                raise UserError(_(
+                    'Cannot reset "%(order)s" to draft: stock has already been delivered.',
+                    order=order.display_name,
+                ))
+            jobs = order.shahtaj_dm_delivery_ids
+            busy_jobs = jobs.filtered(
+                lambda j: j.state in ('picked', 'partial', 'delivered', 'returned')
+            )
+            if busy_jobs:
+                raise UserError(_(
+                    'Cannot reset "%(order)s" to draft: delivery is already in progress or completed.',
+                    order=order.display_name,
+                ))
+            if order.state != 'cancel':
+                pending_jobs = jobs - busy_jobs
+                if pending_jobs:
+                    try:
+                        with self.env.cr.savepoint():
+                            pending_jobs.sudo().unlink()
+                    except Exception:
+                        pass
+                drafts = order.invoice_ids.filtered(
+                    lambda m: m.state == 'draft' and m.move_type == 'out_invoice'
+                )
+                if drafts:
+                    drafts.sudo().button_cancel()
+                order.with_context(disable_cancel_warning=True).action_cancel()
+            order.action_draft()
+            if order.state != 'draft':
+                vals = {
+                    'state': 'draft',
+                    'signature': False,
+                    'signed_by': False,
+                    'signed_on': False,
+                }
+                if 'locked' in order._fields:
+                    vals['locked'] = False
+                order.write(vals)
+            elif 'locked' in order._fields and order.locked:
+                order.write({'locked': False})
+            self.env['shahtaj.activity.log'].log_business(
+                operation='order.reset_draft',
+                name='Reset order to draft',
+                related_record=order,
+                message=_(
+                    '%(user)s reset order %(order)s to draft.',
+                    user=self.env.user.name,
+                    order=order.name,
+                ),
+            )
+        return True
+
     def action_shahtaj_open_reject_wizard(self):
         """Open wizard to enter rejection reason before cancelling."""
         self.ensure_one()

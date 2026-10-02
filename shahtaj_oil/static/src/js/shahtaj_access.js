@@ -62,6 +62,7 @@ const ROLE_ACCESS = {
         canMutate: true,
         canSettleWallet: true,
         canManageProducts: true,
+        canResetOrderToDraft: false,
         showPrices: true,
     },
     warehouse: {
@@ -77,6 +78,7 @@ const ROLE_ACCESS = {
         canMutate: true,
         canDispatchOrders: true,
         canManageProducts: false,
+        canResetOrderToDraft: false,
         canManageStaff: false,
         canEditDispatchDetails: false,
         showPrices: false,
@@ -339,6 +341,20 @@ export function canManageProducts() {
         return config.canManageProducts;
     }
     return canMutate();
+}
+
+export function isDistributorPortal() {
+    return portalAccessState.role === "distributor";
+}
+
+/** Draft editing stays available to distributor and manager. */
+export function canResetOrderToDraft() {
+    const config = currentConfig();
+    if (config.canResetOrderToDraft === false) {
+        return false;
+    }
+    const role = portalAccessState.role;
+    return role === "distributor" || role === "manager";
 }
 
 export function showPrices() {

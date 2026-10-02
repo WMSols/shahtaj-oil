@@ -24,8 +24,14 @@
     <div class="p-4 bg-light border-bottom">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-                <h4 class="fw-bold mb-0">Create Sales Order</h4>
-                <small class="text-muted">Place an order for a shop directly from the portal.</small>
+                <h4 class="fw-bold mb-0">
+                    <t t-if="this.state.saleOrderForm.order_id">Edit <t t-esc="this.state.saleOrderForm.order_name"/></t>
+                    <t t-else="">Create Sales Order</t>
+                </h4>
+                <small class="text-muted">
+                    <t t-if="this.state.saleOrderForm.order_id">Change the shop, lines, prices, and taxes, then save.</t>
+                    <t t-else="">Place an order for a shop directly from the portal.</t>
+                </small>
             </div>
             <button type="button" class="btn btn-sm btn-light border-0 rounded-circle d-flex align-items-center justify-content-center p-0" style="width: 32px; height: 32px;" t-on-click="closeSaleOrderForm" title="Close" aria-label="Close">
                 <i class="fa fa-times"></i>
@@ -50,7 +56,10 @@
                     <t t-if="this.state.isSavingSaleOrder">
                         <span class="spinner-border spinner-border-sm me-2"/> Saving...
                     </t>
-                    <t t-else="">Save Sales Order</t>
+                    <t t-else="">
+                        <t t-if="this.state.saleOrderForm.order_id">Save Changes</t>
+                        <t t-else="">Save Sales Order</t>
+                    </t>
                 </button>
             </div>
         </div>
@@ -213,7 +222,8 @@
                                             </td>
                                             <td class="align-middle text-end pe-4">
                                                 <button class="btn btn-sm btn-outline-dark fw-bold me-1" t-on-click="() => this.viewOrder(ord)">View Details →</button>
-                                                <button t-if="this.canMutate and this.canCancelOrder(ord)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click.stop="() => this.requestCancelOrder(ord)" t-att-disabled="this.state.isCancellingOrder">Cancel</button>
+                                                <button t-if="this.orderCanResetToDraft(ord)" class="btn btn-sm btn-outline-primary fw-bold me-1" t-on-click.stop="() => this.requestResetOrderToDraft(ord)" t-att-disabled="this.state.isResettingOrder">Reset to Draft</button>
+                                                <button t-if="this.isDistributorPortal and this.canCancelOrder(ord)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click.stop="() => this.requestCancelOrder(ord)" t-att-disabled="this.state.isCancellingOrder">Cancel</button>
                                             </td>
                                         </tr>
                                     </t>
@@ -251,6 +261,9 @@
 </div>
 <div class="d-flex align-items-center">
     <t t-if="this.state.selectedOrder.status === 'Draft'">
+        <button t-if="this.canResetOrderToDraft" class="btn btn-sm btn-outline-primary shadow-sm fw-bold px-3 d-flex align-items-center me-2" t-on-click="() => this.openEditSaleOrder(this.state.selectedOrder)" title="Edit shop, lines, prices, and taxes">
+            Edit Order
+        </button>
         <button t-if="this.canMutate" class="btn btn-sm btn-primary text-white shadow-sm fw-bold px-3 d-flex align-items-center me-2" t-on-click="confirmSelectedOrder" t-att-disabled="this.state.isConfirmingOrder" title="Confirm this draft sales order">
             <t t-if="this.state.isConfirmingOrder">
                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -275,8 +288,17 @@
             </t>
         </button>
     </t>
+    <t t-if="this.orderCanResetToDraft(this.state.selectedOrder)">
+        <button class="btn btn-sm btn-outline-primary fw-bold px-3 d-flex align-items-center ms-2" t-on-click="() => this.requestResetOrderToDraft(this.state.selectedOrder)" t-att-disabled="this.state.isResettingOrder" title="Return this order to draft so lines and taxes can be edited">
+            <t t-if="this.state.isResettingOrder">
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                            Resetting...
+            </t>
+            <t t-else="">Reset to Draft</t>
+        </button>
+    </t>
     <t t-if="this.canCancelOrder(this.state.selectedOrder)">
-        <button t-if="this.canMutate" class="btn btn-sm btn-outline-danger fw-bold px-3 d-flex align-items-center ms-2" t-on-click="() => this.requestCancelOrder(this.state.selectedOrder)" t-att-disabled="this.state.isCancellingOrder" title="Cancel this order. Cancelled orders cannot be invoiced or delivered.">
+        <button t-if="this.isDistributorPortal" class="btn btn-sm btn-outline-danger fw-bold px-3 d-flex align-items-center ms-2" t-on-click="() => this.requestCancelOrder(this.state.selectedOrder)" t-att-disabled="this.state.isCancellingOrder" title="Cancel this order. Cancelled orders cannot be invoiced or delivered.">
             <t t-if="this.state.isCancellingOrder">
                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                                             Cancelling...

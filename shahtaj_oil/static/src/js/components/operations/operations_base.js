@@ -6,10 +6,12 @@ import {
     canDispatchOrders,
     canEditDispatchDetails,
     canMutate,
+    canResetOrderToDraft,
     canSettleWallet,
     canSee,
     defaultDeliveriesSub,
     hasFinancialAccess,
+    isDistributorPortal,
     loadPortalAccess,
     notifyPortalBusy,
     showPrices,
@@ -122,6 +124,7 @@ export class OperationsBase extends Component {
             confirmingInvoiceOrderId: false,
             isConfirmingOrder: false,
             isCancellingOrder: false,
+            isResettingOrder: false,
             confirmModal: { isOpen: false, title: '', message: '', onConfirm: null },
             isSavingSaleOrder: false,
             isEditingDelivery: false,
@@ -361,9 +364,12 @@ export class OperationsBase extends Component {
 
     _emptySaleOrderForm() {
         return {
+            order_id: null,
+            order_name: '',
             partner_id: '',
             date_order: this.todayStr,
             lines: [this._emptySaleOrderLine()],
+            removed_line_ids: [],
         };
     }
     // --- UNIVERSAL PAGINATION HANDLERS ---
@@ -1408,6 +1414,21 @@ export class OperationsBase extends Component {
         return !!(row && row.hasPostedInvoice && row.status !== "Cancelled" && row.orderState !== "cancel");
     }
 
+    get canResetOrderToDraft() {
+        return canResetOrderToDraft();
+    }
+
+    get isDistributorPortal() {
+        return isDistributorPortal();
+    }
+
+    orderCanResetToDraft(row) {
+        if (!isDistributorPortal() || !canResetOrderToDraft() || !row || !row.odoo_id) return false;
+        if (row.hasPostedInvoice || row.is_fully_delivered) return false;
+        if (["Invoiced", "Delivered", "Needs Verification", "Draft"].includes(row.status)) return false;
+        return ["sale", "sent", "cancel"].includes(row.orderState);
+    }
+
     canCancelOrder(row) {
         if (!row) return false;
         if (["Cancelled", "Rejected", "Delivered", "Invoiced", "Needs Verification"].includes(row.status)) return false;
@@ -2040,6 +2061,30 @@ export class OperationsBase extends Component {
         }
     }
 
+    _taxLabels(taxIds) {
+        const names = (taxIds || []).map((id) => {
+            const taxId = Number(Array.isArray(id) ? id[0] : id);
+            const tax = (this.state.saleTaxes || []).find((row) => Number(row.id) === taxId);
+            return tax ? tax.name : "";
+        }).filter(Boolean);
+        return names.length ? names.join(", ") : "None";
+    }
+
+    async _loadMissingTaxNames(taxIds) {
+        const missing = [...new Set((taxIds || []).map((id) => Number(Array.isArray(id) ? id[0] : id)).filter(Boolean))]
+            .filter((taxId) => !(this.state.saleTaxes || []).some((row) => Number(row.id) === taxId));
+        if (!missing.length) {
+            return;
+        }
+        try {
+            const rows = await this.orm.read("account.tax", missing, ["name"]);
+            const known = this.state.saleTaxes || [];
+            this.state.saleTaxes = known.concat(rows.filter((row) => row && row.name));
+        } catch (error) {
+            // The label stays blank for taxes this user cannot read.
+        }
+    }
+
   
     closeDelivery() { 
         this.state.selectedDelivery = null;
@@ -2184,14 +2229,12 @@ export class OperationsBase extends Component {
                 [["order_id", "=", dlv.odoo_id]],
                 ["id", "name", "product_id", "product_uom_qty", "qty_delivered", "qty_invoiced", "price_unit", "tax_ids", "price_subtotal"]
             );
+            await this._loadMissingTaxNames(lines.flatMap((l) => l.tax_ids || []));
 
             dlv.full_lines = lines.map(l => {
                 // Must read from l.tax_ids here as well
                 const taxIds = l.tax_ids || [];
-                const taxNames = taxIds.map(id => {
-                    const tax = this.state.saleTaxes.find(t => t.id === id);
-                    return tax ? tax.name : `Tax`;
-                }).join(', ');
+                const taxNames = this._taxLabels(taxIds);
 
                 return {
                     id: l.id,
@@ -3589,19 +3632,17 @@ export class OperationsBase extends Component {
         }
         
         if (this.state.selectedOrder.line_ids && this.state.selectedOrder.line_ids.length > 0 && this.state.selectedOrder.lines.length === 0) {
+            await this.ensureCatalogData();
             const lines = await this.orm.searchRead(
                 "sale.order.line",
                 [["id", "in", this.state.selectedOrder.line_ids]],
                 ["name", "product_uom_qty", "product_uom_id", "price_unit", "price_subtotal", "tax_ids", "shahtaj_catalog_price", "shahtaj_has_discount", "shahtaj_unit_discount", "shahtaj_total_discount", "shahtaj_discount_reason"] 
             );
+            await this._loadMissingTaxNames(lines.flatMap((l) => l.tax_ids || []));
             
             // 2. Assign strictly to the reactive proxy so the UI repaints instantly
             this.state.selectedOrder.lines = lines.map(l => {
-                const taxIds = l.tax_ids || [];
-                const taxNames = taxIds.map(id => {
-                    const tax = this.state.saleTaxes ? this.state.saleTaxes.find(t => t.id === id) : null;
-                    return tax ? tax.name : `Tax`;
-                }).join(', ');
+                const taxNames = this._taxLabels(l.tax_ids);
                 return {
                     product: l.name,
                     qty: l.product_uom_qty,
@@ -3688,7 +3729,11 @@ export class OperationsBase extends Component {
             this.notification.add("A sales order must have at least one product line.", { type: "warning" });
             return;
         }
-        this.state.saleOrderForm.lines = this.state.saleOrderForm.lines.filter((line) => line.id !== lineId);
+        const line = this.state.saleOrderForm.lines.find((row) => row.id === lineId);
+        if (line && line.line_id) {
+            this.state.saleOrderForm.removed_line_ids.push(line.line_id);
+        }
+        this.state.saleOrderForm.lines = this.state.saleOrderForm.lines.filter((row) => row.id !== lineId);
     }
 
     onSaleOrderProductChange(line) {
@@ -3748,19 +3793,59 @@ export class OperationsBase extends Component {
                     lineVals.price_unit = parseFloat(line.price) || 0;
                     lineVals.tax_ids = line.tax_id ? [[6, 0, [parseInt(line.tax_id, 10)]]] : [[5, 0, 0]];
                 }
-                orderLines.push([0, 0, lineVals]);
+                orderLines.push(lineVals);
+            }
+            if (form.order_id) {
+                if (!canResetOrderToDraft()) {
+                    this.notification.add("Only a distributor or manager can edit a draft order.", { type: "warning" });
+                    return;
+                }
+                if (form.removed_line_ids && form.removed_line_ids.length) {
+                    await this.orm.unlink("sale.order.line", form.removed_line_ids);
+                }
+                await this.orm.write("sale.order", [form.order_id], {
+                    partner_id: parseInt(form.partner_id, 10),
+                    date_order: form.date_order,
+                });
+                for (const line of form.lines) {
+                    const product = this.state.saleProducts.find((p) => String(p.id) === String(line.product_id));
+                    const lineVals = {
+                        product_id: parseInt(line.product_id, 10),
+                        product_uom_qty: parseFloat(line.qty) || 1,
+                        name: product?.name || "Product",
+                    };
+                    if (hasFinancialAccess()) {
+                        lineVals.price_unit = parseFloat(line.price) || 0;
+                        lineVals.tax_ids = line.tax_id ? [[6, 0, [parseInt(line.tax_id, 10)]]] : [[5, 0, 0]];
+                    }
+                    if (line.line_id) {
+                        await this.orm.write("sale.order.line", [line.line_id], lineVals);
+                    } else {
+                        lineVals.order_id = form.order_id;
+                        await this.orm.create("sale.order.line", [lineVals]);
+                    }
+                }
+                const editedId = form.order_id;
+                this.closeSaleOrderForm();
+                await this.fetchActiveList();
+                const fresh = (this.state.tableOrders || []).find((row) => row.odoo_id === editedId);
+                if (fresh) {
+                    await this.viewOrder(fresh);
+                }
+                this.notification.add("Sales order updated.", { type: "success" });
+                return;
             }
             await this.orm.create("sale.order", [{
                 partner_id: parseInt(form.partner_id, 10),
                 date_order: form.date_order,
                 origin: "Distributor Portal",
-                order_line: orderLines,
+                order_line: orderLines.map((lineVals) => [0, 0, lineVals]),
             }]);
             this.closeSaleOrderForm();
             await this.fetchActiveList();
             this.notification.add("Sales order created successfully.", { type: "success" });
         } catch (error) {
-            this.notification.add("Failed to create sales order: " + (error.data?.message || error.message), { type: "danger" });
+            this.notification.add("Failed to save sales order: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
             this.state.isSavingSaleOrder = false;
         }
@@ -3785,6 +3870,78 @@ export class OperationsBase extends Component {
         }
     }
 
+    async openEditSaleOrder(order) {
+        if (!canResetOrderToDraft() || !order || order.status !== "Draft") return;
+        try {
+            await this.loadSaleOrderCatalog();
+            await this.ensureCatalogData();
+            const lines = await this.orm.searchRead(
+                "sale.order.line",
+                [["order_id", "=", order.odoo_id], ["display_type", "=", false]],
+                ["product_id", "product_uom_qty", "price_unit", "tax_ids"],
+            );
+            await this._loadMissingTaxNames(lines.flatMap((line) => line.tax_ids || []));
+            const formLines = lines.filter((line) => line.product_id).map((line) => {
+                const product = this.state.saleProducts.find((row) => row.id === line.product_id[0]);
+                const taxId = (line.tax_ids && line.tax_ids[0]) || "";
+                return {
+                    id: `line_${line.id}`,
+                    line_id: line.id,
+                    product_id: String(line.product_id[0]),
+                    qty: line.product_uom_qty,
+                    price: line.price_unit,
+                    tax_id: taxId ? String(taxId) : "",
+                    qty_available: product ? product.qty_available : null,
+                    uom_name: product ? product.uom_name : "",
+                };
+            });
+            this.state.selectedOrder = null;
+            this.state.saleOrderForm = {
+                order_id: order.odoo_id,
+                order_name: order.id,
+                partner_id: order.partner_id ? String(order.partner_id[0]) : "",
+                date_order: order.date && order.date !== "Unknown" ? order.date : this.todayStr,
+                lines: formLines.length ? formLines : [this._emptySaleOrderLine()],
+                removed_line_ids: [],
+            };
+            this.state.showSaleOrderForm = true;
+        } catch (error) {
+            this.notification.add("Failed to open the order for editing: " + (error.data?.message || error.message), { type: "danger" });
+        }
+    }
+
+    requestResetOrderToDraft(row) {
+        if (!this.orderCanResetToDraft(row) || this.state.isResettingOrder) return;
+        this.showConfirm(
+            "Reset to Draft",
+            `Reset ${row.id} to draft? You can then edit the shop, lines, prices, and taxes.`,
+            () => this.resetOrderToDraft(row),
+        );
+    }
+
+    async resetOrderToDraft(row) {
+        if (!this.orderCanResetToDraft(row) || this.state.isResettingOrder) return;
+        this.state.isResettingOrder = true;
+        const orderId = row.odoo_id;
+        const wasOpen = !!(this.state.selectedOrder && this.state.selectedOrder.odoo_id === orderId);
+        try {
+            await this.orm.call("sale.order", "action_shahtaj_reset_to_draft", [[orderId]]);
+            this.notification.add("Order reset to draft. You can edit lines and taxes.", { type: "success" });
+            await this.fetchActiveList();
+            if (wasOpen) {
+                const fresh = (this.state.tableOrders || []).find((item) => item.odoo_id === orderId) || row;
+                fresh.status = "Draft";
+                fresh.orderState = "draft";
+                fresh.lines = [];
+                await this.viewOrder(fresh);
+            }
+        } catch (error) {
+            this.notification.add(error.data?.message || "Failed to reset order to draft.", { type: "danger" });
+        } finally {
+            this.state.isResettingOrder = false;
+        }
+    }
+
     showConfirm(title, message, onConfirmCallback) {
         this.state.confirmModal = {
             isOpen: true,
@@ -3802,7 +3959,7 @@ export class OperationsBase extends Component {
     }
 
     requestCancelOrder(row) {
-        if (!this.canCancelOrder(row) || this.state.isCancellingOrder) return;
+        if (!isDistributorPortal() || !this.canCancelOrder(row) || this.state.isCancellingOrder) return;
         this.showConfirm(
             "Cancel Order",
             `Cancel ${row.id}? Cancelled orders cannot be invoiced or delivered.`,
@@ -3811,7 +3968,7 @@ export class OperationsBase extends Component {
     }
 
     async cancelLiveOrder(row) {
-        if (!this.canCancelOrder(row) || this.state.isCancellingOrder) return;
+        if (!isDistributorPortal() || !this.canCancelOrder(row) || this.state.isCancellingOrder) return;
         this.state.isCancellingOrder = true;
         try {
             await this.orm.call("sale.order", "action_shahtaj_cancel_order", [[row.odoo_id]]);
