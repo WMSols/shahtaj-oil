@@ -240,9 +240,17 @@
                 <t t-if="this.state.selectedSchedule.visitDateIsInferred"> · latest matching weekday</t>
             </small>
         </div>
-        <span class="badge bg-light text-dark border px-3 py-2">
-            <t t-esc="this.scheduleVisitRows().length"/> shown
-        </span>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-secondary fw-bold"
+                    t-on-click="printScheduleVisits"
+                    t-att-disabled="this.state.isPrintingList or this.state.scheduleVisitsLoading"
+                    title="Print the shop visits that match the current filters">
+                <i class="fa fa-print me-1"/> Print
+            </button>
+            <span class="badge bg-light text-dark border px-3 py-2">
+                <t t-esc="this.scheduleVisitRows().length"/> shown
+            </span>
+        </div>
     </div>
     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
         <small class="fw-bold text-muted text-uppercase" style="min-width: 5.5rem;">Completion</small>

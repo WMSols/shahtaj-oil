@@ -354,6 +354,7 @@ export class OperationsBase extends Component {
         return {
             id: `new_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
             product_id: '',
+            product_name: '',
             qty: 1,
             price: 0,
             tax_id: '',
@@ -367,6 +368,7 @@ export class OperationsBase extends Component {
             order_id: null,
             order_name: '',
             partner_id: '',
+            partner_name: '',
             date_order: this.todayStr,
             lines: [this._emptySaleOrderLine()],
             removed_line_ids: [],
@@ -2089,6 +2091,8 @@ export class OperationsBase extends Component {
     closeDelivery() { 
         this.state.selectedDelivery = null;
         this.state.shopSnapshotOpen = false;
+        this._resetTabFilters("dispatch");
+        this.fetchActiveList();
     }
 
     toggleEditDelivery() {
@@ -3011,6 +3015,8 @@ export class OperationsBase extends Component {
     closeDmJob() {
         this.state.selectedDmJob = null;
         this.closeImagePreview();
+        this._resetTabFilters("dm_jobs");
+        this.fetchActiveList();
     }
 
     async resetDmJobField(jobId) {
@@ -3271,6 +3277,8 @@ export class OperationsBase extends Component {
 
     closeRecovery() {
         this.state.selectedRecovery = null;
+        this._resetTabFilters("collections");
+        this.fetchActiveList();
     }
 
     openRecoverySettle() {
@@ -3295,6 +3303,8 @@ export class OperationsBase extends Component {
 
     closeSettlement() {
         this.state.selectedSettlement = null;
+        this._resetTabFilters("settlements");
+        this.fetchActiveList();
     }
 
     async _ensureSettleJournals() {
@@ -3612,10 +3622,18 @@ export class OperationsBase extends Component {
     }
 
     viewSchedule(sched) { this.state.selectedSchedule = sched; }
-    closeSchedule() { this.state.selectedSchedule = null; }
+    closeSchedule() {
+        this.state.selectedSchedule = null;
+        this._resetTabFilters("schedules");
+        this.fetchActiveList();
+    }
 
     viewTarget(tgt) { this.state.selectedTarget = tgt; }
-    closeTarget() { this.state.selectedTarget = null; }
+    closeTarget() {
+        this.state.selectedTarget = null;
+        this._resetTabFilters("targets");
+        this.fetchActiveList();
+    }
 
     // --- ORDER ACTIONS (EXISTING) ---
     async viewOrder(order) { 
@@ -3627,8 +3645,6 @@ export class OperationsBase extends Component {
         // FIX: Initialize the contact fields so the "Loading..." check triggers the DB fetch
         if (!this.state.selectedOrder.phone) {
             this.state.selectedOrder.phone = "Loading...";
-            this.state.selectedOrder.email = "Loading...";
-            this.state.selectedOrder.address = "Loading...";
         }
         
         if (this.state.selectedOrder.line_ids && this.state.selectedOrder.line_ids.length > 0 && this.state.selectedOrder.lines.length === 0) {
@@ -3663,14 +3679,11 @@ export class OperationsBase extends Component {
             const partners = await this.orm.searchRead(
                 "res.partner",
                 [["id", "=", this.state.selectedOrder.partner_id[0]]],
-                ["phone", "email", "street", "city"]
+                ["phone"]
             );
             if (partners.length > 0) {
-                const p = partners[0];
                 // 3. Assign strictly to the reactive proxy
-                this.state.selectedOrder.phone = p.phone || 'N/A';
-                this.state.selectedOrder.email = p.email || 'N/A';
-                this.state.selectedOrder.address = [p.street, p.city].filter(Boolean).join(', ') || 'No address provided';
+                this.state.selectedOrder.phone = partners[0].phone || 'N/A';
             }
         }
 
@@ -3706,6 +3719,8 @@ export class OperationsBase extends Component {
     closeOrder() {
         this.state.selectedOrder = null;
         this.state.shopSnapshotOpen = false;
+        this._resetTabFilters("orders");
+        this.fetchActiveList();
     }
 
     async openSaleOrderForm() {
@@ -3718,6 +3733,47 @@ export class OperationsBase extends Component {
     closeSaleOrderForm() {
         this.state.showSaleOrderForm = false;
         this.state.saleOrderForm = this._emptySaleOrderForm();
+    }
+
+    saleOrderShopOptions() {
+        const list = this.state.lookupShops || [];
+        const selected = this.optionId(this.state.saleOrderForm.partner_id);
+        if (!selected || list.some((shop) => this.optionId(shop.id) === selected)) {
+            return list;
+        }
+        const name = this.state.saleOrderForm.partner_name || "Shop";
+        return [{ id: selected, name }, ...list];
+    }
+
+    saleOrderShopLabel() {
+        const selected = this.optionId(this.state.saleOrderForm.partner_id);
+        if (!selected) return "—";
+        const match = (this.state.lookupShops || []).find((shop) => this.optionId(shop.id) === selected);
+        return (match && match.name) || this.state.saleOrderForm.partner_name || selected;
+    }
+
+    saleOrderProductOptions(line) {
+        const list = this.state.saleProducts || [];
+        const selected = this.optionId(line && line.product_id);
+        if (!selected || list.some((product) => this.optionId(product.id) === selected)) {
+            return list;
+        }
+        return [{
+            id: selected,
+            name: (line && line.product_name) || `Product #${selected}`,
+            list_price: line && line.price != null ? line.price : 0,
+            tax_id: line && line.tax_id ? line.tax_id : "",
+            qty_available: line && line.qty_available != null ? line.qty_available : null,
+            uom_name: (line && line.uom_name) || "",
+        }, ...list];
+    }
+
+    onSaleOrderShopChange(ev) {
+        this.state.saleOrderForm.partner_id = this.optionId(ev.target.value);
+        const match = (this.state.lookupShops || []).find(
+            (shop) => this.optionId(shop.id) === this.state.saleOrderForm.partner_id
+        );
+        this.state.saleOrderForm.partner_name = match ? match.name : "";
     }
 
     addSaleOrderLine() {
@@ -3736,19 +3792,32 @@ export class OperationsBase extends Component {
         this.state.saleOrderForm.lines = this.state.saleOrderForm.lines.filter((row) => row.id !== lineId);
     }
 
+    onSaleOrderProductSelect(line, ev) {
+        line.product_id = this.optionId(ev.target.value);
+        this.onSaleOrderProductChange(line);
+    }
+
+    onSaleOrderTaxSelect(line, ev) {
+        line.tax_id = this.optionId(ev.target.value);
+    }
+
     onSaleOrderProductChange(line) {
-        const product = this.state.saleProducts.find((p) => String(p.id) === String(line.product_id));
+        const product = this.saleOrderProductOptions(line).find(
+            (p) => this.optionId(p.id) === this.optionId(line.product_id)
+        );
         if (!product) {
             line.price = 0;
             line.tax_id = '';
             line.qty_available = null;
             line.uom_name = '';
+            line.product_name = '';
             return;
         }
-        line.price = product.list_price || 0;
+        line.price = product.list_price != null ? product.list_price : (line.price || 0);
         line.tax_id = product.tax_id ? String(product.tax_id) : '';
-        line.qty_available = product.qty_available || 0;
+        line.qty_available = product.qty_available != null ? product.qty_available : null;
         line.uom_name = product.uom_name || '';
+        line.product_name = product.name || '';
     }
 
     async saveSaleOrder() {
@@ -3771,7 +3840,9 @@ export class OperationsBase extends Component {
                     this.state.isSavingSaleOrder = false;
                     return;
                 }
-                const product = this.state.saleProducts.find((p) => String(p.id) === String(line.product_id));
+                const product = this.saleOrderProductOptions(line).find(
+                    (p) => this.optionId(p.id) === this.optionId(line.product_id)
+                );
                 const requested = parseFloat(line.qty) || 0;
                 const productKey = String(line.product_id);
                 requestedByProduct[productKey] = (requestedByProduct[productKey] || 0) + requested;
@@ -3804,11 +3875,12 @@ export class OperationsBase extends Component {
                     await this.orm.unlink("sale.order.line", form.removed_line_ids);
                 }
                 await this.orm.write("sale.order", [form.order_id], {
-                    partner_id: parseInt(form.partner_id, 10),
                     date_order: form.date_order,
                 });
                 for (const line of form.lines) {
-                    const product = this.state.saleProducts.find((p) => String(p.id) === String(line.product_id));
+                    const product = this.saleOrderProductOptions(line).find(
+                        (p) => this.optionId(p.id) === this.optionId(line.product_id)
+                    );
                     const lineVals = {
                         product_id: parseInt(line.product_id, 10),
                         product_uom_qty: parseFloat(line.qty) || 1,
@@ -3888,6 +3960,7 @@ export class OperationsBase extends Component {
                     id: `line_${line.id}`,
                     line_id: line.id,
                     product_id: String(line.product_id[0]),
+                    product_name: (product && product.name) || (line.product_id[1] || `Product #${line.product_id[0]}`),
                     qty: line.product_uom_qty,
                     price: line.price_unit,
                     tax_id: taxId ? String(taxId) : "",
@@ -3900,6 +3973,7 @@ export class OperationsBase extends Component {
                 order_id: order.odoo_id,
                 order_name: order.id,
                 partner_id: order.partner_id ? String(order.partner_id[0]) : "",
+                partner_name: order.shop || (order.partner_id ? order.partner_id[1] : "") || "",
                 date_order: order.date && order.date !== "Unknown" ? order.date : this.todayStr,
                 lines: formLines.length ? formLines : [this._emptySaleOrderLine()],
                 removed_line_ids: [],
@@ -3914,7 +3988,7 @@ export class OperationsBase extends Component {
         if (!this.orderCanResetToDraft(row) || this.state.isResettingOrder) return;
         this.showConfirm(
             "Reset to Draft",
-            `Reset ${row.id} to draft? You can then edit the shop, lines, prices, and taxes.`,
+            `Reset ${row.id} to draft? You can then edit the lines, prices, and taxes.`,
             () => this.resetOrderToDraft(row),
         );
     }
@@ -4206,6 +4280,8 @@ export class OperationsBase extends Component {
     closeCheckin() {
         this.state.selectedCheckin = null;
         this.state.shopSnapshotOpen = false;
+        this._resetTabFilters("checkins");
+        this.fetchActiveList();
     }
 
     async _resolveWalkInSaleOrder(log) {

@@ -64,7 +64,7 @@ export class InvoiceManagement extends Component {
             filters: {
                 allOrders: { search: "", status: "all", shop: "all", shopName: "", dateFrom: "", dateTo: "" },
                 orders: { search: "", shop: "all", shopName: "", dateFrom: "", dateTo: "" },
-                invoices: { search: "", status: this.props.requestedInvoiceStatus || "all", shop: "all", shopName: "", dateFrom: "", dateTo: "", walkIn: false },
+                invoices: { search: "", status: this.props.requestedInvoiceStatus || "all", shop: "all", shopName: "", dateFrom: "", dateTo: "", walkIn: false, legacyBalance: false },
                 creditNotes: { search: "", status: "all", shop: "all", shopName: "", dateFrom: "", dateTo: "" },
                 payments: { search: "", shop: "all", shopName: "", dateFrom: "", dateTo: "" },
             },
@@ -222,6 +222,54 @@ export class InvoiceManagement extends Component {
         this.onFilterChange('invoices');
     }
 
+    onInvoicesLegacyBalanceToggle(ev) {
+        this.state.filters.invoices.legacyBalance = ev.target.checked;
+        this.onFilterChange('invoices');
+    }
+
+    _defaultInvoiceFilters(key) {
+        const defaults = {
+            allOrders: { search: "", status: "all", shop: "all", shopName: "", dateFrom: "", dateTo: "" },
+            orders: { search: "", shop: "all", shopName: "", dateFrom: "", dateTo: "" },
+            invoices: { search: "", status: "all", shop: "all", shopName: "", dateFrom: "", dateTo: "", walkIn: false, legacyBalance: false },
+            creditNotes: { search: "", status: "all", shop: "all", shopName: "", dateFrom: "", dateTo: "" },
+            payments: { search: "", shop: "all", shopName: "", dateFrom: "", dateTo: "" },
+        };
+        return { ...(defaults[key] || {}) };
+    }
+
+    closeInvoiceDetail(listKey = "invoices") {
+        this.state.selectedInvoice = null;
+        this.state.selectedInvoiceLines = [];
+        this.state.isEditingInvoice = false;
+        if (this.state.filters[listKey]) {
+            this.state.filters[listKey] = this._defaultInvoiceFilters(listKey);
+        }
+        if (this.state.pagination[listKey]) {
+            this.state.pagination[listKey].page = 1;
+        }
+        this.fetchActiveList();
+    }
+
+    closeOrderDetail(listKey = "orders") {
+        this.state.selectedOrder = null;
+        this.state.selectedOrderLines = [];
+        if (this.state.filters[listKey]) {
+            this.state.filters[listKey] = this._defaultInvoiceFilters(listKey);
+        }
+        if (this.state.pagination[listKey]) {
+            this.state.pagination[listKey].page = 1;
+        }
+        this.fetchActiveList();
+    }
+
+    closePaymentDetail() {
+        this.state.selectedPayment = null;
+        this.state.filters.payments = this._defaultInvoiceFilters("payments");
+        this.state.pagination.payments.page = 1;
+        this.fetchActiveList();
+    }
+
     _applyInvoiceListFilters(domain, stateKey, filters) {
         if (!filters) {
             return;
@@ -294,7 +342,9 @@ export class InvoiceManagement extends Component {
         if (stateKey === "orders") domain.push(["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]);
         if (stateKey === "invoices") {
             domain.push(["move_type", "in", ["out_invoice"]]);
-            if (filters.walkIn) {
+            if (filters.legacyBalance) {
+                domain.push(["shahtaj_is_legacy_balance", "=", true]);
+            } else if (filters.walkIn) {
                 domain.push(["shahtaj_is_walk_in", "=", true]);
             } else {
                 domain.push("|", ["partner_id.is_shahtaj_shop", "=", true], ["shahtaj_is_walk_in", "=", true]);
@@ -376,7 +426,7 @@ export class InvoiceManagement extends Component {
         const tabMap = {
             'all_orders': { stateKey: 'allOrders', model: 'sale.order', fields: ["name", "partner_id", "date_order", "amount_total", "amount_untaxed", "state", "user_id", "payment_term_id", "pricelist_id", "shahtaj_visit_id", "invoice_status"] },
             'orders': { stateKey: 'orders', model: 'sale.order', fields: ["name", "partner_id", "date_order", "amount_total", "amount_untaxed", "state", "user_id", "payment_term_id", "pricelist_id", "shahtaj_visit_id", "invoice_status"] },
-            'customer_invoices': { stateKey: 'invoices', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id", "shahtaj_is_walk_in"] },
+            'customer_invoices': { stateKey: 'invoices', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id", "shahtaj_is_walk_in", "shahtaj_is_legacy_balance"] },
             'credit_notes': { stateKey: 'creditNotes', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"] },
             'payments': { stateKey: 'payments', model: 'account.payment', fields: ["name", "partner_id", "date", "amount", "journal_id", "memo", "state", "shahtaj_payment_channel", "shahtaj_payer_bank_name", "shahtaj_payer_account_number", "shahtaj_instrument_reference", "shahtaj_payment_notes"] },
             'purchase_orders': { stateKey: 'purchaseOrders', model: 'purchase.order', fields: ["name", "partner_id", "date_order", "date_planned", "amount_untaxed", "amount_tax", "amount_total", "state", "invoice_status", "currency_id"] },
@@ -471,6 +521,7 @@ export class InvoiceManagement extends Component {
                         residual: (inv.amount_residual || 0).toLocaleString(), rawResidual: inv.amount_residual !== undefined ? inv.amount_residual : inv.amount_total,
                         status, journal_id: inv.journal_id ? inv.journal_id[0] : false,
                         isWalkIn: !!inv.shahtaj_is_walk_in,
+                        isLegacyBalance: !!inv.shahtaj_is_legacy_balance,
                     };
                 });
             }
@@ -581,7 +632,7 @@ export class InvoiceManagement extends Component {
             const records = await this.orm.searchRead(
                 "account.move", 
                 [["id", "=", invoiceId]], 
-                ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id", "shahtaj_is_walk_in"]
+                ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id", "shahtaj_is_walk_in", "shahtaj_is_legacy_balance"]
             );
             
             if (records.length > 0) {
@@ -608,6 +659,7 @@ export class InvoiceManagement extends Component {
                     status: status, 
                     journal_id: inv.journal_id ? inv.journal_id[0] : false,
                     isWalkIn: !!inv.shahtaj_is_walk_in,
+                    isLegacyBalance: !!inv.shahtaj_is_legacy_balance,
                 };
                 
                 // Automatically pipe it into viewInvoice to fetch the lines and restore the UI
@@ -1411,7 +1463,7 @@ export class InvoiceManagement extends Component {
 
     async _loadPrintMoves(stateKey) {
         const fields = ["name", "partner_id", "invoice_date", "amount_total", "amount_residual", "payment_state", "state", "journal_id"];
-        if (stateKey === "invoices") fields.push("shahtaj_is_walk_in");
+        if (stateKey === "invoices") fields.push("shahtaj_is_walk_in", "shahtaj_is_legacy_balance");
         return this.orm.searchRead("account.move", this._listDomain(stateKey, this.state.filters[stateKey]), fields, { order: "id desc" });
     }
 
@@ -1446,11 +1498,13 @@ export class InvoiceManagement extends Component {
                     printFilter("To", filters.dateTo),
                     printFilter("Status", statusLabels[filters.status]),
                     printFilter("Walk In", filters.walkIn ? "Yes" : ""),
+                    printFilter("Legacy Balance", filters.legacyBalance ? "Yes" : ""),
                 ],
-                ["Invoice #", "Walk-in", "Billed Shop", "Date", "Total Amount", "Amount Due", "Billing Status"],
+                ["Invoice #", "Walk-in", "Legacy Balance", "Billed Shop", "Date", "Total Amount", "Amount Due", "Billing Status"],
                 records.map((inv) => [
                     inv.name && inv.name !== "/" ? inv.name : `Draft Document (*${inv.id})`,
                     inv.shahtaj_is_walk_in ? "Yes" : "",
+                    inv.shahtaj_is_legacy_balance ? "Yes" : "",
                     inv.partner_id ? inv.partner_id[1] : "Unknown",
                     inv.invoice_date || "Not set",
                     `Rs. ${(inv.amount_total || 0).toLocaleString()}`,

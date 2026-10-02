@@ -61,6 +61,48 @@ export class BookersPerformance extends OperationsBase {
         this.state.selectedSchedule = null;
         this.state.scheduleVisits = [];
         this.state.scheduleVisitsLoading = false;
+        this._resetTabFilters("schedules");
+        this.fetchActiveList();
+    }
+
+    async printScheduleVisits() {
+        if (this.state.isPrintingList || this.state.scheduleVisitsLoading) return;
+        const sched = this.state.selectedSchedule;
+        if (!sched) return;
+        this.state.isPrintingList = true;
+        try {
+            const filters = this.state.scheduleVisitFilters;
+            const completion = COMPLETION_FILTERS.find((f) => f.key === filters.completion);
+            const outcome = OUTCOME_FILTERS.find((f) => f.key === filters.outcome);
+            const rows = this.scheduleVisitRows();
+            await this._openListPrint(
+                "Booker Performance — Shop Visits",
+                [
+                    this._printFilter("Booker", sched.bookerName),
+                    this._printFilter("Route", sched.route),
+                    this._printFilter("Zone", sched.zone),
+                    this._printFilter("Day", sched.day),
+                    this._printFilter("Date", this.formatScheduleVisitDate(sched.visitDate)),
+                    this._printFilter("Completion", completion && completion.key !== "all" ? completion.label : ""),
+                    this._printFilter("Outcome", outcome && outcome.key !== "all" ? outcome.label : ""),
+                ],
+                ["Shop", "Order", "Check-in", "Status", "Outcome", "Duration", "Order Total", "Notes"],
+                rows.map((row) => [
+                    row.shop || "",
+                    row.orderName || "",
+                    row.checkIn || "",
+                    row.statusLabel || "",
+                    row.outcomeLabel || "",
+                    row.durationLabel || "",
+                    row.orderLabel || "",
+                    row.notes || "",
+                ]),
+            );
+        } catch (error) {
+            this.notification.add(error?.data?.message || error?.message || "Print failed.", { type: "danger" });
+        } finally {
+            this.state.isPrintingList = false;
+        }
     }
 
     setScheduleVisitFilter(group, value) {

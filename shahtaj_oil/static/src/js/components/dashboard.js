@@ -808,6 +808,47 @@ export class ShahtajDashboard extends Component {
         }
         return { tabName, subTabName };
     }
+    _paintSidebarNav(tabName, subTabName = "") {
+        const root = this.el;
+        if (!root) {
+            return;
+        }
+        const menuStyleActive = "background-color: #0f172a; color: #ffffff;";
+        const menuStyleIdle = "color: #4b5563; background-color: transparent;";
+        const subStyleActive = "color: #0f172a; background-color: #e2e8f0; font-weight: 700;";
+        const subStyleIdle = "color: #6b7280; background-color: transparent;";
+        root.querySelectorAll("[data-shahtaj-nav]").forEach((el) => {
+            const nav = el.getAttribute("data-shahtaj-nav") || "";
+            const isMenu = el.hasAttribute("data-shahtaj-menu");
+            const sub = el.getAttribute("data-shahtaj-sub") || "";
+            const group = (el.getAttribute("data-shahtaj-sub-group") || "")
+                .split(",")
+                .map((part) => part.trim())
+                .filter(Boolean);
+            let active = false;
+            if (isMenu) {
+                active = nav === tabName;
+                el.style.cssText = active ? menuStyleActive : menuStyleIdle;
+            } else if (group.length) {
+                active = nav === tabName && group.includes(subTabName || "");
+                el.style.cssText = active ? subStyleActive : subStyleIdle;
+            } else {
+                active = nav === tabName && sub === (subTabName || "");
+                el.style.cssText = active ? subStyleActive : subStyleIdle;
+            }
+        });
+        // Expand the active menu accordion immediately (before Owl flush).
+        root.querySelectorAll(".smooth-accordion").forEach((acc) => {
+            const menuBtn = acc.previousElementSibling;
+            const nav = menuBtn && menuBtn.getAttribute("data-shahtaj-nav");
+            if (nav && nav === tabName) {
+                acc.classList.add("open");
+            } else if (menuBtn && menuBtn.hasAttribute("data-shahtaj-menu")) {
+                acc.classList.remove("open");
+            }
+        });
+    }
+
     async switchTab(tabName, subTabName = '', options = {}) {
         if (tabName === 'staff' && !this.state.staffRole) {
             this.state.staffRole = defaultStaffRole();
@@ -822,6 +863,7 @@ export class ShahtajDashboard extends Component {
         const sameSub = sameTab && (this.state.activeSubTab || '') === subTabName;
         this._selectMenu(tabName);
         if (sameSub && !options.forceBusy) {
+            this._paintSidebarNav(tabName, subTabName);
             return;
         }
 
@@ -830,9 +872,13 @@ export class ShahtajDashboard extends Component {
         this.state.isSwitchingTab = this.state.renderedTab !== tabName
             || (this.state.renderedSubTab || '') !== subTabName;
 
+        // Paint sidebar synchronously before any await / content mount / RPC.
+        this._paintSidebarNav(tabName, subTabName);
+
         const token = ++this._navToken;
         try {
-            await new Promise((resolve) => requestAnimationFrame(resolve));
+            // Double rAF: first schedules paint, second runs after the browser has painted.
+            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
             if (token !== this._navToken) {
                 return;
             }

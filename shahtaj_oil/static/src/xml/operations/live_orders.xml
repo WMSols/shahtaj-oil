@@ -29,7 +29,7 @@
                     <t t-else="">Create Sales Order</t>
                 </h4>
                 <small class="text-muted">
-                    <t t-if="this.state.saleOrderForm.order_id">Change the shop, lines, prices, and taxes, then save.</t>
+                    <t t-if="this.state.saleOrderForm.order_id">Change the lines, prices, and taxes, then save.</t>
                     <t t-else="">Place an order for a shop directly from the portal.</t>
                 </small>
             </div>
@@ -40,12 +40,18 @@
         <div class="row g-3 mb-3">
             <div class="col-md-5">
                 <label class="small fw-bold">Shop <span class="text-danger">*</span></label>
-                <select class="form-select" t-model="this.state.saleOrderForm.partner_id">
-                    <option value="">-- Select Shop --</option>
-                    <t t-foreach="this.state.lookupShops" t-as="shop" t-key="shop.id">
-                        <option t-att-value="shop.id"><t t-esc="shop.name"/></option>
-                    </t>
-                </select>
+                <t t-if="this.state.saleOrderForm.order_id">
+                    <input type="text" class="form-control" readonly="readonly"
+                           t-att-value="this.saleOrderShopLabel()"/>
+                </t>
+                <t t-else="">
+                    <select class="form-select" t-on-change="(ev) => this.onSaleOrderShopChange(ev)">
+                        <option value="" t-att-selected="this.isSelectedId(this.state.saleOrderForm.partner_id, '')">-- Select Shop --</option>
+                        <t t-foreach="this.saleOrderShopOptions()" t-as="shop" t-key="shop.id">
+                            <option t-att-value="this.optionId(shop.id)" t-att-selected="this.isSelectedId(this.state.saleOrderForm.partner_id, shop.id)"><t t-esc="shop.name"/></option>
+                        </t>
+                    </select>
+                </t>
             </div>
             <div class="col-md-3">
                 <label class="small fw-bold">Order Date</label>
@@ -79,10 +85,10 @@
                     <t t-foreach="this.state.saleOrderForm.lines" t-as="line" t-key="line.id">
                         <tr>
                             <td class="ps-3">
-                                <select class="form-select form-select-sm" t-model="line.product_id" t-on-change="() => this.onSaleOrderProductChange(line)">
-                                    <option value="">-- Select Product --</option>
-                                    <t t-foreach="this.state.saleProducts" t-as="product" t-key="product.id">
-                                        <option t-att-value="product.id"><t t-esc="product.name"/></option>
+                                <select class="form-select form-select-sm" t-on-change="(ev) => this.onSaleOrderProductSelect(line, ev)">
+                                    <option value="" t-att-selected="this.isSelectedId(line.product_id, '')">-- Select Product --</option>
+                                    <t t-foreach="this.saleOrderProductOptions(line)" t-as="product" t-key="product.id">
+                                        <option t-att-value="this.optionId(product.id)" t-att-selected="this.isSelectedId(line.product_id, product.id)"><t t-esc="product.name"/></option>
                                     </t>
                                 </select>
                             </td>
@@ -104,10 +110,10 @@
                                 <input type="number" min="0" step="any" class="form-control form-control-sm text-end" t-model="line.price"/>
                             </td>
                             <td t-if="this.hasFinancialAccess">
-                                <select class="form-select form-select-sm" t-model="line.tax_id">
-                                    <option value="">No Tax</option>
+                                <select class="form-select form-select-sm" t-on-change="(ev) => this.onSaleOrderTaxSelect(line, ev)">
+                                    <option value="" t-att-selected="this.isSelectedId(line.tax_id, '')">No Tax</option>
                                     <t t-foreach="this.state.saleTaxes" t-as="tax" t-key="tax.id">
-                                        <option t-att-value="tax.id"><t t-esc="tax.name"/></option>
+                                        <option t-att-value="this.optionId(tax.id)" t-att-selected="this.isSelectedId(line.tax_id, tax.id)"><t t-esc="tax.name"/></option>
                                     </t>
                                 </select>
                             </td>
@@ -325,25 +331,11 @@
             <strong>Shop ID:</strong>
             <t t-esc="this.state.selectedOrder.shopId"/>
         </p>
-        <p class="text-muted mb-1 small d-flex align-items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-map-pin me-1">
-                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
-                <circle cx="12" cy="10" r="3"/>
-            </svg>
-            <t t-esc="this.state.selectedOrder.address"/>
-        </p>
-        <p class="text-muted mb-1 small d-flex align-items-center">
+        <p class="text-muted mb-0 small d-flex align-items-center">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-phone me-1">
                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
             </svg>
             <t t-esc="this.state.selectedOrder.phone"/>
-        </p>
-        <p class="text-muted mb-0 small d-flex align-items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail me-1">
-                <rect width="20" height="16" x="2" y="4" rx="2"/>
-                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-            </svg>
-            <t t-esc="this.state.selectedOrder.email"/>
         </p>
     </div>
 </div>

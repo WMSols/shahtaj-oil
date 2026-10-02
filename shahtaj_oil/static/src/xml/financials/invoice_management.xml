@@ -129,7 +129,7 @@
                     <t t-else="">
                         <div class="p-4 bg-light">
                             <div class="d-flex justify-content-between mb-4">
-                                <button class="btn btn-sm btn-light bg-white border fw-bold px-3 shadow-sm" t-on-click="() => this.state.selectedOrder = null">
+                                <button class="btn btn-sm btn-light bg-white border fw-bold px-3 shadow-sm" t-on-click="() => this.closeOrderDetail('allOrders')">
                                     <i class="fa fa-arrow-left me-1"></i> Back to Orders
                                 </button>
                                 <button t-if="this.canMutate and this.state.selectedOrder.invoice_status === 'to invoice'" class="btn btn-primary fw-bold text-white shadow-sm px-4" t-on-click="() => this.triggerCreateInvoice(this.state.selectedOrder)" t-att-disabled="this.state.isCreatingInvoice">
@@ -340,7 +340,7 @@
                     <t t-else="">
                         <div class="p-4 bg-light">
                             <div class="d-flex justify-content-between mb-4">
-                                <button class="btn btn-sm btn-light bg-white border fw-bold px-3 shadow-sm" t-on-click="() => this.state.selectedOrder = null" title="Go back to the pending orders list">
+                                <button class="btn btn-sm btn-light bg-white border fw-bold px-3 shadow-sm" t-on-click="() => this.closeOrderDetail('orders')" title="Go back to the pending orders list">
                                     <i class="fa fa-arrow-left me-1"></i> Back to Orders
                                 </button>
                                 <button t-if="this.canMutate" class="btn btn-primary fw-bold text-white shadow-sm px-4" t-on-click="() => this.triggerCreateInvoice(this.state.selectedOrder)" t-att-disabled="this.state.isCreatingInvoice">
@@ -499,6 +499,12 @@
                                        t-on-change="onInvoicesWalkInToggle"/>
                                 <label class="form-check-label small fw-bold text-nowrap ms-2" for="customerInvoicesWalkIn">Walk In</label>
                             </div>
+                            <div class="form-check form-switch mb-0 d-flex align-items-center">
+                                <input class="form-check-input mt-0" type="checkbox" role="switch" id="customerInvoicesLegacyBalance"
+                                       t-att-checked="this.state.filters.invoices.legacyBalance"
+                                       t-on-change="onInvoicesLegacyBalanceToggle"/>
+                                <label class="form-check-label small fw-bold text-nowrap ms-2" for="customerInvoicesLegacyBalance">Legacy Balance</label>
+                            </div>
                             <button class="btn btn-sm btn-outline-secondary fw-bold ms-auto" t-on-click="printCustomerInvoices" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                                 <i class="fa fa-print me-1"/> Print
                             </button>
@@ -539,6 +545,7 @@
                                                 <td class="ps-4 fw-bold text-primary">
                                                     <t t-esc="inv.display_name"/>
                                                     <span t-if="inv.isWalkIn" class="badge bg-warning text-dark ms-2">Walk-in</span>
+                                                    <span t-if="inv.isLegacyBalance" class="badge bg-info text-white ms-2">Legacy Balance</span>
                                                 </td>
                                                 <td class="fw-bold"><t t-esc="inv.shop"/></td>
                                                 <td><t t-esc="inv.date"/></td>
@@ -578,7 +585,7 @@
                         <div class="p-4 bg-light">
                             <div class="d-flex justify-content-between mb-4">
                                 <div class="d-flex gap-2">
-                                    <button class="btn btn-sm btn-light bg-white border fw-bold px-3 shadow-sm" t-on-click="() => this.state.selectedInvoice = null">
+                                    <button class="btn btn-sm btn-light bg-white border fw-bold px-3 shadow-sm" t-on-click="() => this.closeInvoiceDetail('invoices')">
                                         <i class="fa fa-arrow-left me-1"></i> Back
                                     </button>
                                     <t t-if="this.state.isEditingInvoice">
@@ -640,6 +647,7 @@
                                     <div class="d-flex justify-content-between align-items-center mb-3">
                                         <h4 class="text-dark fw-bold mb-0 d-flex align-items-center flex-wrap gap-2">Invoice: <t t-esc="this.state.selectedInvoice.display_name"/>
                                             <span t-if="this.state.selectedInvoice.isWalkIn" class="badge bg-warning text-dark">Walk-in Delivery</span>
+                                            <span t-if="this.state.selectedInvoice.isLegacyBalance" class="badge bg-info text-white">Legacy Balance</span>
                                         </h4>
                                         <span t-attf-class="badge fs-6 #{this.state.selectedInvoice.status === 'Paid' ? 'bg-success text-white' : this.state.selectedInvoice.status === 'Posted' ? 'bg-info text-white' : this.state.selectedInvoice.status === 'Partial' ? 'bg-warning text-dark' : this.state.selectedInvoice.status === 'Cancelled' ? 'bg-danger text-white' : 'bg-secondary text-dark'} px-3 py-2 shadow-sm">
                                             <t t-esc="this.state.selectedInvoice.status"/>
@@ -1074,7 +1082,7 @@
                     </t>
                     <t t-else="">
                         <div class="p-4 bg-light">
-                            <button class="btn btn-sm btn-light bg-white border fw-bold px-3 shadow-sm mb-4" t-on-click="() => this.state.selectedPayment = null">
+                            <button class="btn btn-sm btn-light bg-white border fw-bold px-3 shadow-sm mb-4" t-on-click="() => this.closePaymentDetail()">
                                 <i class="fa fa-arrow-left me-1"></i> Back to Payment Log
                             </button>
                             <div class="card p-4 shadow-sm border-0 border-start border-4 border-success">
@@ -1262,7 +1270,7 @@
                         <div class="p-4 bg-light">
                             <div class="d-flex justify-content-between mb-4">
                                 <div class="d-flex gap-2">
-                                    <button class="btn btn-sm btn-light bg-white border fw-bold px-3 shadow-sm" t-on-click="() => this.state.selectedInvoice = null">
+                                    <button class="btn btn-sm btn-light bg-white border fw-bold px-3 shadow-sm" t-on-click="() => this.closeInvoiceDetail('creditNotes')">
                                         <i class="fa fa-arrow-left me-1"></i> Back
                                     </button>
                                     <t t-if="this.state.isEditingInvoice">
