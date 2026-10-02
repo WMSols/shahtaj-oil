@@ -16,6 +16,7 @@ export class Expenses extends Component {
     setup() {
         this.notification = useService("notification");
         this.orm = useService("orm");
+        this._listFetchToken = 0;
         const today = new Date();
         const ITEMS_PER_PAGE = 50;
         this.state = useState({
@@ -111,6 +112,26 @@ export class Expenses extends Component {
         this.fetchActiveList(); // Dropdowns don't need debouncing, fetch immediately
     }
 
+    clearFilters(listKey) {
+        const defaults = {
+            expenses: { search: "", status: "all" },
+            expenseCategories: { search: "" },
+        };
+        if (!defaults[listKey]) {
+            return;
+        }
+        this.state.filters[listKey] = { ...defaults[listKey] };
+        if (this.state.pagination[listKey]) {
+            this.state.pagination[listKey].page = 1;
+        }
+        if (listKey === "expenses") {
+            this.state.tableExpenses = [];
+        } else if (listKey === "expenseCategories") {
+            this.state.tableExpenseCategories = [];
+        }
+        this.fetchActiveList();
+    }
+
     changePage(listKey, direction) {
         const pag = this.state.pagination[listKey];
         const newPage = pag.page + direction;
@@ -144,6 +165,7 @@ export class Expenses extends Component {
             : (this.state.activeSubTab === 'expenses' ? tabMap[this.state.expenseSubTab] : (this.state.activeSubTab === 'po_management' ? tabMap[this.state.poSubTab] : tabMap[this.state.invoiceSubTab]));
         if (!config) return;
 
+        const fetchToken = ++this._listFetchToken;
         this.state.isLoadingList = true;
         notifyPortalBusy(true);
         try {
@@ -366,10 +388,14 @@ export class Expenses extends Component {
                 this.state.tableExpenseCategories = records;
             }
         } catch (error) {
-            this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
+            if (fetchToken === this._listFetchToken) {
+                this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
+            }
         } finally {
-            this.state.isLoadingList = false;
-            notifyPortalBusy(false);
+            if (fetchToken === this._listFetchToken) {
+                this.state.isLoadingList = false;
+                notifyPortalBusy(false);
+            }
         }
     }
     showConfirm(title, message, onConfirmCallback) {

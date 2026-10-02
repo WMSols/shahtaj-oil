@@ -26,6 +26,9 @@
                     <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printSummary" t-att-disabled="this.state.isPrinting or this.state.isLoading" title="Print the rows that match the current filters">
                         <i class="fa fa-print me-1"/> Print
                     </button>
+                    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('performance')" t-att-disabled="this.state.isLoading" title="Clear all filters on this list">
+                        <i class="fa fa-times me-1"/> Clear filters
+                    </button>
                     <select class="form-select form-select-sm" style="max-width: 200px;" t-on-change="onDmFilterChange">
                         <option value="all" t-att-selected="this.state.filters.dm === 'all'">All delivery men</option>
                         <t t-foreach="this.state.deliveryMen" t-as="dm" t-key="dm.id">

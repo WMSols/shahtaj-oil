@@ -35,13 +35,16 @@
                                 <span class="input-group-text bg-white text-muted border-end-0">
                                     <i class="fa fa-search"></i>
                                 </span>
-                                <input t-att-value="this.state.filters.inventory.search" t-on-input="(ev) => this.onSearchInput(ev, 'inventory')" type="text" class="form-control border-start-0 ps-0" placeholder="Search product name..." t-model="this.state.productSearchQuery" />
+                                <input t-att-value="this.state.filters.inventory.search" t-on-input="(ev) => this.onSearchInput(ev, 'inventory')" type="text" class="form-control border-start-0 ps-0" placeholder="Search product name..." />
                             </div>
                             <select  class="form-select form-select-sm shadow-sm" style="width: 170px;" t-model="this.state.filters.inventory.sort" t-on-change="() => this.onFilterChange('inventory')" title="Reorder the list based on specific values">
                                 <option value="default">Default Sorting</option>
                                 <option t-if="this.showPrices" value="price_asc">Price: Low to High</option>
                                 <option t-if="this.showPrices" value="price_desc">Price: High to Low</option>
                             </select>
+                            <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('inventory')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                                <i class="fa fa-times me-1"/> Clear filters
+                            </button>
                             <button t-if="this.canManageProducts" class="btn btn-sm btn-dark fw-bold d-flex align-items-center text-white ms-2 shadow-sm text-nowrap" t-on-click="() => { this.resetForms(); this.state.showProductAddForm = true; }" title="Add a brand new product to your catalog">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus me-1">
                                     <path d="M5 12h14"/>
@@ -319,13 +322,16 @@
                         <span class="input-group-text bg-white text-muted border-end-0">
                             <i class="fa fa-search"></i>
                         </span>
-                        <input t-att-value="this.state.filters.management.search" t-on-input="(ev) => this.onSearchInput(ev, 'management')" type="text" class="form-control border-start-0 ps-0" placeholder="Search product name..." t-model="this.state.stockSearchQuery" />
+                        <input t-att-value="this.state.filters.management.search" t-on-input="(ev) => this.onSearchInput(ev, 'management')" type="text" class="form-control border-start-0 ps-0" placeholder="Search product name..." />
                     </div>
                     <select class="form-select form-select-sm shadow-sm" style="width: 140px;" t-model="this.state.filters.management.status" t-on-change="() => this.onFilterChange('management')" title="Filter to see only available or depleted items">
                         <option value="all">All Stock Levels</option>
                         <option value="in_stock">In Stock (&gt; 0)</option>
                         <option value="out_of_stock">Out of Stock (0)</option>
                     </select>
+                    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('management')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                        <i class="fa fa-times me-1"/> Clear filters
+                    </button>
                 </div>
             </div>
 <div class="position-relative">
@@ -468,6 +474,9 @@
                                t-att-value="this.state.filters.taxes.search" 
                                t-on-input="(ev) => this.onSearchInput(ev, 'taxes')"/>
                     </div>
+                    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('taxes')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                        <i class="fa fa-times me-1"/> Clear filters
+                    </button>
                 </div>
 
                 <div class="position-relative">

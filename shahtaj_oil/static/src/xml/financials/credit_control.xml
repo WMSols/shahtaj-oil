@@ -35,6 +35,9 @@
                         <button t-if="this.state.creditSubView === 'balances' and !this.state.selectedShopBalance" class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printShopBalances" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                             <i class="fa fa-print me-1"/> Print
                         </button>
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('credits')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                            <i class="fa fa-times me-1"/> Clear filters
+                        </button>
                             </div>
                         </div>
 

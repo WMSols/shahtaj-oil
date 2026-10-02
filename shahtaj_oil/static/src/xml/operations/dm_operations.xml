@@ -12,9 +12,9 @@
                             </button>
                             <div class="d-flex gap-2" t-if="this.showDmJobActions()">
                                 <button t-if="this.state.selectedDmJob.orderId" class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openAssignModal(this.state.selectedDmJob.orderId, true)">View DM Assignment</button>
-                                <button t-if="this.canMutate and this.canPickJob(this.state.selectedDmJob)" class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openPickModal(this.state.selectedDmJob.id)">Pick Stock</button>
+                                <button t-if="this.canMutate and this.showDmOverwriteButtons and this.canPickJob(this.state.selectedDmJob)" class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openPickModal(this.state.selectedDmJob.id)">Pick Stock</button>
                                 <button t-if="this.canMutate and this.canResetField(this.state.selectedDmJob)" class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.resetDmJobField(this.state.selectedDmJob.id)">Reset Pending</button>
-                                <button t-if="this.canMutate and this.canReturnWarehouse(this.state.selectedDmJob)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.returnDmJobWarehouse(this.state.selectedDmJob.id)">Return to WH</button>
+                                <button t-if="this.canMutate and this.showDmOverwriteButtons and this.canReturnWarehouse(this.state.selectedDmJob)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.returnDmJobWarehouse(this.state.selectedDmJob.id)">Return to WH</button>
                             </div>
                         </div>
                         <h4 class="fw-bold"><t t-esc="this.state.selectedDmJob.name"/></h4>
@@ -183,6 +183,9 @@
                                 <option value="draft">Draft</option>
                                 <option value="not_invoiced">Not invoiced</option>
                             </select>
+                            <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('dispatch')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                                <i class="fa fa-times me-1"/> Clear filters
+                            </button>
                         </div>
                     </div>
                     <div class="position-relative">
@@ -245,7 +248,7 @@
                                                     <t t-else="">Confirm</t>
                                                 </button>
                                                 <button t-if="this.canDispatchOrders and this.canAssignDeliveryMan(row)" class="btn btn-sm btn-dark text-white fw-bold me-1" t-on-click="() => this.openAssignModal(row.odoo_id)">Assign / Split</button>
-                                                <button t-if="this.canMutate and !row.dmJobCount and row.hasPostedInvoice and row.status !== 'Cancelled'" class="btn btn-sm btn-outline-primary fw-bold me-1" t-on-click="() => this.openDeliveryCustom(row.odoo_id)">Mark Delivery</button>
+                                                <button t-if="this.canMutate and this.showDmOverwriteButtons and !row.dmJobCount and row.hasPostedInvoice and row.status !== 'Cancelled'" class="btn btn-sm btn-outline-primary fw-bold me-1" t-on-click="() => this.openDeliveryCustom(row.odoo_id)">Mark Delivery</button>
                                                 <button class="btn btn-sm btn-outline-dark fw-bold" t-on-click="() => this.viewDelivery(row)">View</button>
                                             </td>
                                         </tr>
@@ -317,6 +320,9 @@
                         <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printDmJobs" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                             <i class="fa fa-print me-1"/> Print
                         </button>
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('dm_jobs')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                            <i class="fa fa-times me-1"/> Clear filters
+                        </button>
                     </div>
                     <div class="position-relative">
                         <t t-if="this.state.isLoadingList">
@@ -362,7 +368,7 @@
                                             <td class="text-end pe-4">
                                                 <button class="btn btn-sm btn-outline-dark fw-bold me-1" t-on-click="() => this.viewDmJob(job)">View</button>
                                                 <button t-if="this.canMutate and this.canResetField(job)" class="btn btn-sm btn-outline-secondary fw-bold me-1" t-on-click="() => this.resetDmJobField(job.id)">Reset</button>
-                                                <button t-if="this.canMutate and this.canReturnWarehouse(job)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.returnDmJobWarehouse(job.id)">Return WH</button>
+                                                <button t-if="this.canMutate and this.showDmOverwriteButtons and this.canReturnWarehouse(job)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.returnDmJobWarehouse(job.id)">Return WH</button>
                                             </td>
                                         </tr>
                                     </t>
@@ -394,6 +400,9 @@
                         <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.sessions.dateFrom" t-on-change="() => this.onFilterChange('sessions')"/>
                         <span class="text-muted small align-self-center">to</span>
                         <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.sessions.dateTo" t-on-change="() => this.onFilterChange('sessions')"/>
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('sessions')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                            <i class="fa fa-times me-1"/> Clear filters
+                        </button>
                     </div>
                     <div class="position-relative">
                         <t t-if="this.state.isLoadingList">
@@ -477,6 +486,9 @@
                         <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printRecovery" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                             <i class="fa fa-print me-1"/> Print
                         </button>
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('collections')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                            <i class="fa fa-times me-1"/> Clear filters
+                        </button>
                     </div>
                     <div class="position-relative">
                         <t t-if="this.state.isLoadingList">
@@ -557,6 +569,9 @@
                         <input type="date" class="form-control form-control-sm" style="max-width: 150px;" t-model="this.state.filters.settlements.dateTo" t-on-change="() => this.onFilterChange('settlements')"/>
                         <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printSettlements" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                             <i class="fa fa-print me-1"/> Print
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('settlements')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                            <i class="fa fa-times me-1"/> Clear filters
                         </button>
                         <button t-if="this.canSettleWallet" class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openSettleModal()">Settle Wallet</button>
                     </div>
@@ -759,7 +774,7 @@
 
                                     <!-- NEW: Auto-Hiding Mark Delivery Button -->
                                 <t t-set="hasPendingDelivery" t-value="this.state.selectedDelivery.full_lines and this.state.selectedDelivery.full_lines.some(l => l.qty > l.delivered)"/>
-                                <t t-if="this.canMutate and hasPendingDelivery and this.state.selectedDelivery.status !== 'Cancelled' and this.state.selectedDelivery.orderState !== 'cancel'">
+                                <t t-if="this.canMutate and this.showDmOverwriteButtons and hasPendingDelivery and this.state.selectedDelivery.status !== 'Cancelled' and this.state.selectedDelivery.orderState !== 'cancel'">
                                     <button class="btn btn-sm btn-primary shadow-sm fw-bold px-3 text-white d-flex align-items-center" t-on-click="() => this.openDeliveryCustom(this.state.selectedDelivery.odoo_id)">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package-check me-1">
                                             <path d="m16 16 2 2 4-4"/>

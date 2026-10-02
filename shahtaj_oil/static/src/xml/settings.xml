@@ -22,6 +22,27 @@
                 <div class="p-4">
                     <div class="row mb-4">
                         <div class="col-12">
+                            <div class="card border shadow-sm p-4 rounded-3 bg-white mb-4">
+                                <div class="d-flex justify-content-between align-items-center gap-3">
+                                    <div>
+                                        <h5 class="fw-bold mb-1">DM Overwrite Buttons</h5>
+                                        <small class="text-muted">
+                                            Show Mark Delivery, Pick Stock, and Return WH override actions in DM Operations.
+                                            Saved for this company — applies on the next Operations refresh.
+                                        </small>
+                                    </div>
+                                    <div class="form-check form-switch flex-shrink-0 mb-0">
+                                        <input class="form-check-input cursor-pointer" type="checkbox" role="switch"
+                                               id="dmOverwriteButtonsSwitch"
+                                               t-att-checked="this.state.dmOverwriteButtons"
+                                               t-att-disabled="this.state.isSavingDmOverwrite"
+                                               t-on-change="onDmOverwriteToggle"/>
+                                        <label class="form-check-label small fw-bold cursor-pointer" for="dmOverwriteButtonsSwitch">
+                                            <t t-esc="this.state.dmOverwriteButtons ? 'On' : 'Off'"/>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="card border shadow-sm p-4 rounded-3 bg-white">
                                 <div class="d-flex justify-content-between align-items-start mb-3">
                                     <div>

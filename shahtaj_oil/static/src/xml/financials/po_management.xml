@@ -197,6 +197,9 @@
                                 <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printPurchaseOrders" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                                     <i class="fa fa-print me-1"/> Print
                                 </button>
+                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('purchaseOrders')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                                    <i class="fa fa-times me-1"/> Clear filters
+                                </button>
                                 <button class="btn btn-sm btn-dark fw-bold text-white shadow-sm" t-on-click="openPurchaseOrderForm">New PO</button>
                             </div>
                         </div>
@@ -395,6 +398,9 @@
                                 <option value="Returned">Returned</option>
                                 <option value="Cancelled">Cancelled</option>
                             </select>
+                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('receipts')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                                    <i class="fa fa-times me-1"/> Clear filters
+                                </button>
                             </div>
                         </div>
                         <div class="position-relative">
@@ -544,6 +550,9 @@
                                 </select>
                                 <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printVendorBills" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                                     <i class="fa fa-print me-1"/> Print
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('vendorBills')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                                    <i class="fa fa-times me-1"/> Clear filters
                                 </button>
                             </div>
                         </div>
@@ -772,6 +781,9 @@
                                         Archived (<t t-esc="this.state.archivedVendorsCount || 0"/>)
                                     </button>
                                 </div>
+                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('vendors')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                                    <i class="fa fa-times me-1"/> Clear filters
+                                </button>
                             </div>
                             <button t-if="this.state.vendorViewMode !== 'archived'" class="btn btn-sm btn-dark fw-bold text-white shadow-sm" t-on-click="openVendorForm">
                                 <i class="fa fa-plus me-1"></i> New Vendor

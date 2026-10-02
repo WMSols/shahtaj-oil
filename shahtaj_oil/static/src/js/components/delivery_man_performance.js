@@ -12,6 +12,7 @@ export class DeliveryManPerformance extends Component {
         this.orm = useService("orm");
         this.action = useService("action");
         this.notification = useService("notification");
+        this._listFetchToken = 0;
         const today = new Date();
         this.todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
         const ITEMS_PER_PAGE = 50;
@@ -106,6 +107,7 @@ export class DeliveryManPerformance extends Component {
     }
 
     async fetchProgress() {
+        const fetchToken = ++this._listFetchToken;
         this.state.isLoading = true;
         notifyPortalBusy(true);
         const pag = this.state.pagination;
@@ -122,8 +124,14 @@ export class DeliveryManPerformance extends Component {
                     order: "name asc",
                 }),
             ]);
+            if (fetchToken !== this._listFetchToken) {
+                return;
+            }
             this.state.pagination.total = total;
             const stats = await this._jobStats(users.map((user) => user.id));
+            if (fetchToken !== this._listFetchToken) {
+                return;
+            }
             this.state.rows = users.map((user) => {
                 const bucket = stats[user.id] || { assigned: 0, done: 0 };
                 const pending = Math.max(bucket.assigned - bucket.done, 0);
@@ -141,10 +149,14 @@ export class DeliveryManPerformance extends Component {
             });
         } catch (error) {
             this.notification.add("Failed to load delivery progress: " + (error.data?.message || error.message), { type: "danger" });
-            this.state.rows = [];
+            if (fetchToken === this._listFetchToken) {
+                this.state.rows = [];
+            }
         } finally {
-            this.state.isLoading = false;
-            notifyPortalBusy(false);
+            if (fetchToken === this._listFetchToken) {
+                this.state.isLoading = false;
+                notifyPortalBusy(false);
+            }
         }
     }
 
@@ -268,6 +280,14 @@ export class DeliveryManPerformance extends Component {
 
     onFilterChange() {
         this.state.pagination.page = 1;
+        this.fetchProgress();
+    }
+
+    clearFilters(listKey = "performance") {
+        this.state.filters = { search: "", dm: "all" };
+        this.state.date = this.todayStr;
+        this.state.pagination.page = 1;
+        this.state.rows = [];
         this.fetchProgress();
     }
 

@@ -55,6 +55,9 @@
     <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printBookerPerformance" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
         <i class="fa fa-print me-1"/> Print
     </button>
+    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('schedules')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+        <i class="fa fa-times me-1"/> Clear filters
+    </button>
 </div>
 <div class="position-relative">
     <t t-if="this.state.isLoadingList">
@@ -357,6 +360,9 @@
     </select>
     <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printBookerPerformance" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
         <i class="fa fa-print me-1"/> Print
+    </button>
+    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('targets')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+        <i class="fa fa-times me-1"/> Clear filters
     </button>
 </div>
 <div class="position-relative">

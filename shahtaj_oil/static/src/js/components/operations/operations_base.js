@@ -61,12 +61,14 @@ export class OperationsBase extends Component {
         this.action = useService("action");
         this.checkinMapRef = useRef("checkinMapContainer");
         this.checkinMapInstance = null;
+        this._listFetchToken = 0;
         const ITEMS_PER_PAGE = 50;
         const today = new Date();
         this.todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
         this.state = useState({
             // Main Tab Navigation
             activeSubTab: this.props.requestedSubTab || 'orders', // 'checkins', 'orders', 'performance'
+            dmOverwriteButtons: false,
             
             selectedOrder: null,    
             selectedCheckin: null,  
@@ -245,6 +247,7 @@ export class OperationsBase extends Component {
             await Promise.all([
                 this.loadDropdownData(),
                 this.fetchActiveList(),
+                this.loadDmOverwriteSetting(),
             ]);
             if (pendingOrder) {
                 await this.viewOrder(pendingOrder);
@@ -1772,15 +1775,18 @@ export class OperationsBase extends Component {
             else if (this.state.deliveriesSubTab === 'settlements') tab = 'settlements';
             else tab = 'dispatch';
         }
-        
+
+        const fetchToken = ++this._listFetchToken;
         this.state.isLoadingList = true;
         notifyPortalBusy(true);
         try {
             const pag = this.state.pagination[tab];
             const filters = this.state.filters[tab] || {};
             if (!pag) {
-                this.state.isLoadingList = false;
-                notifyPortalBusy(false);
+                if (fetchToken === this._listFetchToken) {
+                    this.state.isLoadingList = false;
+                    notifyPortalBusy(false);
+                }
                 return;
             }
             const listQuery = this._operationsListQuery(tab, filters);
@@ -1791,19 +1797,25 @@ export class OperationsBase extends Component {
 
 
             if (tab === 'collections' && !this.canSeeDelivery('recovery')) {
-                this.state.isLoadingList = false;
-                notifyPortalBusy(false);
+                if (fetchToken === this._listFetchToken) {
+                    this.state.isLoadingList = false;
+                    notifyPortalBusy(false);
+                }
                 return;
             }
             if (tab === 'settlements' && !this.canSeeDelivery('settlements')) {
-                this.state.isLoadingList = false;
-                notifyPortalBusy(false);
+                if (fetchToken === this._listFetchToken) {
+                    this.state.isLoadingList = false;
+                    notifyPortalBusy(false);
+                }
                 return;
             }
             // 2. EXECUTE QUERY
             if (!model) {
-                this.state.isLoadingList = false;
-                notifyPortalBusy(false);
+                if (fetchToken === this._listFetchToken) {
+                    this.state.isLoadingList = false;
+                    notifyPortalBusy(false);
+                }
                 return;
             }
             const queryKwargs = {
@@ -1860,6 +1872,10 @@ export class OperationsBase extends Component {
                 ]);
             }
 
+            if (fetchToken !== this._listFetchToken) {
+                return;
+            }
+
             if (tab !== 'checkins') {
                 this.state.pagination[tab].total = total;
             }
@@ -1872,6 +1888,9 @@ export class OperationsBase extends Component {
                     this._customerInvoiceStates(records),
                     tab === "dispatch" ? this._dispatchUnassignedByOrder(orderIds) : Promise.resolve({ qtyByOrder: {}, stockStatesByOrder: {} }),
                 ]);
+                if (fetchToken !== this._listFetchToken) {
+                    return;
+                }
                 this.state[targetState] = records.map(o => {
                     const row = this._mapSaleOrderRow(o, lines);
                     this._applyCustomerInvoiceFlags(row, o.id, invoiceFlags);
@@ -1929,6 +1948,9 @@ export class OperationsBase extends Component {
             }
             else if (tab === 'checkins') {
                 const enrichment = await this._enrichCheckinRows(records);
+                if (fetchToken !== this._listFetchToken) {
+                    return;
+                }
                 const mapped = records.map((attempt) => this._mapGpsAttempt(attempt, enrichment));
                 const sessions = this._groupCheckinSessions(mapped);
                 const byId = new Map(sessions.map((session) => [session.id, session]));
@@ -1940,6 +1962,9 @@ export class OperationsBase extends Component {
             else if (tab === 'schedules') {
                 const dateStr = filters.date || '';
                 const stats = await this._loadScheduleProgressForDate(records, dateStr);
+                if (fetchToken !== this._listFetchToken) {
+                    return;
+                }
                 const dayMap = { '0': 'Monday', '1': 'Tuesday', '2': 'Wednesday', '3': 'Thursday', '4': 'Friday', '5': 'Saturday', '6': 'Sunday' };
                 const rows = records.map(r => {
                     const bookerId = r.order_booker_id ? r.order_booker_id[0] : null;
@@ -1985,10 +2010,14 @@ export class OperationsBase extends Component {
                 }
             }
         } catch (error) {
-            this.notification.add("Failed to fetch data: " + (error.data?.message || error.message), { type: "danger" });
+            if (fetchToken === this._listFetchToken) {
+                this.notification.add("Failed to fetch data: " + (error.data?.message || error.message), { type: "danger" });
+            }
         } finally {
-            this.state.isLoadingList = false;
-            notifyPortalBusy(false);
+            if (fetchToken === this._listFetchToken) {
+                this.state.isLoadingList = false;
+                notifyPortalBusy(false);
+            }
         }
     }
     async refreshData() {
@@ -2015,6 +2044,23 @@ export class OperationsBase extends Component {
 
     get canMutate() {
         return canMutate();
+    }
+
+    get showDmOverwriteButtons() {
+        return this.state.dmOverwriteButtons;
+    }
+
+    async loadDmOverwriteSetting() {
+        try {
+            const result = await this.orm.call(
+                "res.company",
+                "shahtaj_get_dm_overwrite_buttons",
+                [],
+            );
+            this.state.dmOverwriteButtons = Boolean(result?.enabled);
+        } catch (_error) {
+            this.state.dmOverwriteButtons = false;
+        }
     }
 
     get canSettleWallet() {
@@ -2091,8 +2137,6 @@ export class OperationsBase extends Component {
     closeDelivery() { 
         this.state.selectedDelivery = null;
         this.state.shopSnapshotOpen = false;
-        this._resetTabFilters("dispatch");
-        this.fetchActiveList();
     }
 
     toggleEditDelivery() {
@@ -3015,8 +3059,6 @@ export class OperationsBase extends Component {
     closeDmJob() {
         this.state.selectedDmJob = null;
         this.closeImagePreview();
-        this._resetTabFilters("dm_jobs");
-        this.fetchActiveList();
     }
 
     async resetDmJobField(jobId) {
@@ -3277,8 +3319,6 @@ export class OperationsBase extends Component {
 
     closeRecovery() {
         this.state.selectedRecovery = null;
-        this._resetTabFilters("collections");
-        this.fetchActiveList();
     }
 
     openRecoverySettle() {
@@ -3303,8 +3343,6 @@ export class OperationsBase extends Component {
 
     closeSettlement() {
         this.state.selectedSettlement = null;
-        this._resetTabFilters("settlements");
-        this.fetchActiveList();
     }
 
     async _ensureSettleJournals() {
@@ -3439,9 +3477,6 @@ export class OperationsBase extends Component {
             this.state.showRejectModal = false;
             this.state.showCreditOverride = false;
             this.state.isProcessingOverride = false;
-            // Reset filters and pagination for the tab being entered so the UI
-            // and the backend query are always in sync after a tab switch.
-            this._resetTabFilters(tabName);
         }
 
         this.fetchActiveList();
@@ -3450,12 +3485,93 @@ export class OperationsBase extends Component {
         this.state.perfSubTab = tabName;
         this.state.selectedSchedule = null;
         this.state.selectedTarget = null;
-        // Reset filters for the performance sub-tab being entered.
-        this._resetTabFilters(tabName);
         this.fetchActiveList();
     }
     _navSource() {
         return this._navProps || this.props;
+    }
+
+    _emptyDispatchFilters() {
+        return { search: '', dateFrom: '', dateTo: '', deliveryStatus: 'all', invoiceStatus: 'all' };
+    }
+
+    _emptyDmJobsFilters() {
+        return {
+            search: '',
+            dm: 'all',
+            dateFrom: '',
+            dateTo: '',
+            state: 'all',
+            field_state: 'all',
+            schedule: 'all',
+            walkIn: false,
+        };
+    }
+
+    _emptyOrdersFilters() {
+        return { search: '', status: '', booker: 'all', walkIn: false, dateFrom: '', dateTo: '' };
+    }
+
+    _emptyCheckinFilters() {
+        return {
+            search: '',
+            status: '',
+            purpose: 'all',
+            booker: 'all',
+            date: '',
+            role: 'all',
+            outcome: 'all',
+        };
+    }
+
+    _emptyFiltersFor(tabName) {
+        const empty = {
+            deliveries: { search: '', status: '' },
+            dispatch: this._emptyDispatchFilters(),
+            dm_jobs: this._emptyDmJobsFilters(),
+            sessions: { dm: 'all', dateFrom: '', dateTo: '' },
+            collections: { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all' },
+            settlements: { search: '', dm: 'all', journal: 'all', dateFrom: '', dateTo: '' },
+            checkins: this._emptyCheckinFilters(),
+            orders: this._emptyOrdersFilters(),
+            verification: { search: '', booker: 'all', reason: 'all' },
+            schedules: { booker: 'all', date: '' },
+            targets: { booker: 'all', type: 'all' },
+        };
+        return empty[tabName] ? { ...empty[tabName] } : null;
+    }
+
+    _tableStateForFilterTab(tabName) {
+        const map = {
+            deliveries: 'tableDeliveries',
+            dispatch: 'tableDispatch',
+            dm_jobs: 'tableDmJobs',
+            sessions: 'tableSessions',
+            collections: 'tableCollections',
+            settlements: 'tableSettlements',
+            checkins: 'tableCheckins',
+            orders: 'tableOrders',
+            verification: 'tableVerification',
+            schedules: 'tableSchedules',
+            targets: 'tableTargets',
+        };
+        return map[tabName] || null;
+    }
+
+    clearFilters(tabName) {
+        const empty = this._emptyFiltersFor(tabName);
+        if (!empty) {
+            return;
+        }
+        this.state.filters[tabName] = empty;
+        if (this.state.pagination[tabName]) {
+            this.state.pagination[tabName].page = 1;
+        }
+        const tableKey = this._tableStateForFilterTab(tabName);
+        if (tableKey && Array.isArray(this.state[tableKey])) {
+            this.state[tableKey] = [];
+        }
+        this.fetchActiveList();
     }
 
     _defaultDispatchFilters() {
@@ -3553,60 +3669,6 @@ export class OperationsBase extends Component {
         }
     }
 
-    _resetTabFilters(tabName) {
-        const defaultFilters = {
-            deliveries: { search: '', status: '' },
-            dispatch:   this._defaultDispatchFilters(),
-            dm_jobs:    this._defaultDmJobsFilters(),
-            sessions:   { dm: 'all', dateFrom: '', dateTo: '' },
-            collections:{ search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all' },
-            settlements:{ search: '', dm: 'all', journal: 'all', dateFrom: '', dateTo: '' },
-                        checkins:   this._defaultCheckinFilters(),
-            orders:     this._defaultOrdersFilters(),
-            verification: { search: '', booker: 'all', reason: 'all' },
-            schedules:  { booker: 'all', date: '' },
-            targets:    { booker: 'all', type: 'all' },
-        };
-        if (defaultFilters[tabName]) {
-            this.state.filters[tabName] = { ...defaultFilters[tabName] };
-            this.state.pagination[tabName].page = 1;
-        }
-        // When entering the performance tab, reset both its sub-tabs
-        // so filters don't bleed across navigation.
-        if (tabName === 'performance') {
-            this.state.filters.schedules = { ...defaultFilters.schedules };
-            this.state.filters.targets   = { ...defaultFilters.targets };
-            this.state.pagination.schedules.page = 1;
-            this.state.pagination.targets.page   = 1;
-            this.state.perfSubTab = 'schedules';
-        }
-        if (tabName === 'deliveries') {
-            this.state.selectedDelivery = null;
-            this.state.selectedDmJob = null;
-            this.state.selectedSettlement = null;
-            this.state.selectedRecovery = null;
-            const requestedDeliveries = this._navSource().requestedDeliveriesSubTab;
-            this.state.deliveriesSubTab = requestedDeliveries === 'manual'
-                ? 'dispatch'
-                : (requestedDeliveries || 'dispatch');
-            this.state.filters.dispatch = this._defaultDispatchFilters();
-            this.state.filters.dm_jobs = this._defaultDmJobsFilters();
-            this.state.filters.sessions = { dm: 'all', dateFrom: '', dateTo: '' };
-            this.state.filters.collections = { search: '', dm: 'all', dateFrom: '', dateTo: '', state: 'all' };
-            this.state.filters.settlements = { search: '', dm: 'all', journal: 'all', dateFrom: '', dateTo: '' };
-            this.state.pagination.dispatch.page = 1;
-            this.state.pagination.dm_jobs.page = 1;
-            this.state.pagination.sessions.page = 1;
-            this.state.pagination.collections.page = 1;
-            this.state.pagination.settlements.page = 1;
-        }
-        if (tabName === 'orders') {
-            this.state.ordersSubTab = 'live';
-            this.state.filters.verification = { search: '', booker: 'all', reason: 'all' };
-            this.state.pagination.verification.page = 1;
-        }
-    }
-
     setOrdersSubTab(tabName) {
         if (tabName === "verification" && !canMutate()) {
             return;
@@ -3624,15 +3686,11 @@ export class OperationsBase extends Component {
     viewSchedule(sched) { this.state.selectedSchedule = sched; }
     closeSchedule() {
         this.state.selectedSchedule = null;
-        this._resetTabFilters("schedules");
-        this.fetchActiveList();
     }
 
     viewTarget(tgt) { this.state.selectedTarget = tgt; }
     closeTarget() {
         this.state.selectedTarget = null;
-        this._resetTabFilters("targets");
-        this.fetchActiveList();
     }
 
     // --- ORDER ACTIONS (EXISTING) ---
@@ -3719,8 +3777,6 @@ export class OperationsBase extends Component {
     closeOrder() {
         this.state.selectedOrder = null;
         this.state.shopSnapshotOpen = false;
-        this._resetTabFilters("orders");
-        this.fetchActiveList();
     }
 
     async openSaleOrderForm() {
@@ -4280,8 +4336,6 @@ export class OperationsBase extends Component {
     closeCheckin() {
         this.state.selectedCheckin = null;
         this.state.shopSnapshotOpen = false;
-        this._resetTabFilters("checkins");
-        this.fetchActiveList();
     }
 
     async _resolveWalkInSaleOrder(log) {

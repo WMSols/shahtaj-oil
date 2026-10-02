@@ -14,6 +14,7 @@ export class SchedulesTargets extends Component {
         this.orm = useService("orm");
         const ITEMS_PER_PAGE = 50;
         this.notification = useService("notification");
+        this._listFetchToken = 0;
         this.state = useState({
             activeMainTab: this.props.requestedSubTab || 'schedules',
             viewMode: 'list',
@@ -110,6 +111,13 @@ export class SchedulesTargets extends Component {
         this.debouncedFetchBookers();
     }
 
+    clearFilters(listKey = "bookers") {
+        this.state.filters.bookers = { search: "" };
+        this.state.pagination.bookers.page = 1;
+        this.state.tableBookers = [];
+        this.fetchBookersList();
+    }
+
     changePage(direction) {
         const pag = this.state.pagination.bookers;
         const newPage = pag.page + direction;
@@ -122,6 +130,7 @@ export class SchedulesTargets extends Component {
     }
 
     async fetchBookersList() {
+        const fetchToken = ++this._listFetchToken;
         this.state.isLoadingList = true;
         try {
             const pag = this.state.pagination.bookers;
@@ -144,6 +153,10 @@ export class SchedulesTargets extends Component {
                 })
             ]);
 
+            if (fetchToken !== this._listFetchToken) {
+                return;
+            }
+
             this.state.pagination.bookers.total = total;
             this.state.tableBookers = users.map(u => ({
                 id: u.id,
@@ -155,7 +168,9 @@ export class SchedulesTargets extends Component {
         } catch (error) {
             this.notification.add("Failed to fetch bookers: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
-            this.state.isLoadingList = false;
+            if (fetchToken === this._listFetchToken) {
+                this.state.isLoadingList = false;
+            }
         }
     }
 

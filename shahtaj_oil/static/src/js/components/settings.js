@@ -14,6 +14,8 @@ export class PortalSettings extends Component {
             isSavingGps: false,
             isSavingCompany: false,
             isSavingLogo: false,
+            isSavingDmOverwrite: false,
+            dmOverwriteButtons: false,
             companyId: null,
             companyForm: {
                 name: "",
@@ -42,6 +44,37 @@ export class PortalSettings extends Component {
                 this._stopConnectionProbe();
             }
         });
+    }
+
+    async onDmOverwriteToggle(ev) {
+        const enabled = Boolean(ev.target.checked);
+        const previous = this.state.dmOverwriteButtons;
+        this.state.dmOverwriteButtons = enabled;
+        this.state.isSavingDmOverwrite = true;
+        try {
+            const result = await this.orm.call(
+                "res.company",
+                "shahtaj_set_dm_overwrite_buttons",
+                [],
+                { enabled }
+            );
+            this.state.dmOverwriteButtons = Boolean(result?.enabled);
+            this.notification.add(
+                this.state.dmOverwriteButtons
+                    ? "DM overwrite buttons enabled."
+                    : "DM overwrite buttons disabled.",
+                { type: "success" }
+            );
+        } catch (error) {
+            this.state.dmOverwriteButtons = previous;
+            ev.target.checked = previous;
+            this.notification.add(
+                error.data?.message || error.message || "Failed to save DM overwrite setting",
+                { type: "danger" }
+            );
+        } finally {
+            this.state.isSavingDmOverwrite = false;
+        }
     }
 
     get currentYear() {
@@ -120,10 +153,11 @@ export class PortalSettings extends Component {
         this.state.isLoading = true;
         notifyPortalBusy(true);
         try {
-            const [limits, profile, appInfo] = await Promise.all([
+            const [limits, profile, appInfo, dmOverwrite] = await Promise.all([
                 this.orm.call("res.company", "shahtaj_get_shop_distance_limits", []),
                 this.orm.call("res.company", "shahtaj_get_company_profile", []),
                 this.orm.call("res.company", "shahtaj_get_app_info", []),
+                this.orm.call("res.company", "shahtaj_get_dm_overwrite_buttons", []),
             ]);
             this.state.gpsForm.min_m = limits.min_m ?? 0;
             this.state.gpsForm.max_m = limits.max_m ?? 100;
@@ -133,6 +167,7 @@ export class PortalSettings extends Component {
             this.state.companyForm.logo_preview = this._logoPreviewSrc(profile.logo);
             this.state.appName = appInfo.name || "Shahtaj Oil";
             this.state.appVersion = appInfo.version || "";
+            this.state.dmOverwriteButtons = Boolean(dmOverwrite?.enabled);
         } catch (error) {
             this.notification.add(
                 error.data?.message || error.message || "Failed to load settings",

@@ -23,6 +23,7 @@ export class WarehouseInventory extends Component {
     setup() {
         this.orm = useService("orm");
         this.notification = useService("notification");
+        this._listFetchToken = 0;
         // Universal items per page shared across Inventory, Stock, and Taxes
         const ITEMS_PER_PAGE = 50;
         this.state = useState({
@@ -117,6 +118,29 @@ export class WarehouseInventory extends Component {
         this.fetchActiveList(); 
     }
 
+    clearFilters(listKey) {
+        const defaults = {
+            inventory: { search: "", sort: "default" },
+            management: { search: "", status: "all" },
+            taxes: { search: "" },
+        };
+        if (!defaults[listKey]) {
+            return;
+        }
+        this.state.filters[listKey] = { ...defaults[listKey] };
+        if (this.state.pagination[listKey]) {
+            this.state.pagination[listKey].page = 1;
+        }
+        if (listKey === "inventory") {
+            this.state.tableInventory = [];
+        } else if (listKey === "management") {
+            this.state.tableStock = [];
+        } else if (listKey === "taxes") {
+            this.state.tableTaxes = [];
+        }
+        this.fetchActiveList();
+    }
+
     changePage(tabName, direction) {
         const pag = this.state.pagination[tabName];
         const newPage = pag.page + direction;
@@ -157,6 +181,7 @@ export class WarehouseInventory extends Component {
         const tab = this.state.activeSubTab;
         if (!['inventory', 'management', 'taxes'].includes(tab)) return;
 
+        const fetchToken = ++this._listFetchToken;
         this.state.isLoadingList = true;
         notifyPortalBusy(true);
         try {
@@ -198,6 +223,10 @@ export class WarehouseInventory extends Component {
                 this.orm.searchRead(model, domain, fields, { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: order })
             ]);
 
+            if (fetchToken !== this._listFetchToken) {
+                return;
+            }
+
             this.state.pagination[tab].total = total;
             
             if (tab === 'inventory' || tab === 'management') {
@@ -208,8 +237,10 @@ export class WarehouseInventory extends Component {
         } catch (error) {
             this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
-            this.state.isLoadingList = false;
-            notifyPortalBusy(false);
+            if (fetchToken === this._listFetchToken) {
+                this.state.isLoadingList = false;
+                notifyPortalBusy(false);
+            }
         }
     }
     

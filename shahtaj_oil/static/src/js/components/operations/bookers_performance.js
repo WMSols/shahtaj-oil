@@ -61,8 +61,6 @@ export class BookersPerformance extends OperationsBase {
         this.state.selectedSchedule = null;
         this.state.scheduleVisits = [];
         this.state.scheduleVisitsLoading = false;
-        this._resetTabFilters("schedules");
-        this.fetchActiveList();
     }
 
     async printScheduleVisits() {

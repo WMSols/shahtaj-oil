@@ -26,7 +26,8 @@ export class TerritoryBase extends Component {
         this.notification = useService("notification");
         this.action = useService("action");
         this.mapRef = useRef("mapContainer");
-        this.mapInstance = null; 
+        this.mapInstance = null;
+        this._listFetchToken = 0;
         // Universal items per page shared across Zones, Routes, and Shops
         const ITEMS_PER_PAGE = 50;
         this.state = useState({
@@ -205,6 +206,35 @@ export class TerritoryBase extends Component {
         this.fetchActiveList(); 
     }
 
+    clearFilters(listKey) {
+        if (listKey === "areas") {
+            this.state.areaSearchQuery = "";
+            this.state.areaFilterStatus = "all";
+            this.state.pagination.areas.page = 1;
+            this.state.tableAreas = [];
+        } else if (listKey === "routes") {
+            this.state.routeSearchQuery = "";
+            this.state.routeFilterStatus = "all";
+            this.state.routeFilterZone = "all";
+            this.state.pagination.routes.page = 1;
+            this.state.tableRoutes = [];
+        } else if (listKey === "shops") {
+            this.state.shopSearchQuery = "";
+            this.state.shopFilterCategory = "all";
+            this.state.shopFilterStatus = "all";
+            this.state.shopFilterVerified = "all";
+            this.state.shopFilterBooker = "all";
+            this.state.shopFilterRegisteredOn = "";
+            this.state.shopFilterRegistrar = "all";
+            this.state.shopFilterRoute = "all";
+            this.state.pagination.shops.page = 1;
+            this.state.tableShops = [];
+        } else {
+            return;
+        }
+        this.fetchActiveList();
+    }
+
     _applyShopNav(props) {
         this.state.shopFilterStatus = props.requestedShopStatus || 'all';
         this.state.shopFilterRegisteredOn = props.requestedShopRegisteredOn || '';
@@ -344,6 +374,7 @@ export class TerritoryBase extends Component {
         const tab = this.state.activeSubTab;
         if (!['areas', 'routes', 'shops'].includes(tab)) return;
 
+        const fetchToken = ++this._listFetchToken;
         this.state.isLoadingList = true;
         try {
             const pag = this.state.pagination[tab];
@@ -393,6 +424,10 @@ export class TerritoryBase extends Component {
 
             const [total, records, assignedShops] = await Promise.all(requests);
 
+            if (fetchToken !== this._listFetchToken) {
+                return;
+            }
+
             this.state.pagination[tab].total = total;
             this.state[targetState] = records;
             if (tab === 'routes') {
@@ -402,7 +437,9 @@ export class TerritoryBase extends Component {
         } catch (error) {
             this.notification.add("Failed to fetch data: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
-            this.state.isLoadingList = false;
+            if (fetchToken === this._listFetchToken) {
+                this.state.isLoadingList = false;
+            }
         }
     }
     async refreshData() {

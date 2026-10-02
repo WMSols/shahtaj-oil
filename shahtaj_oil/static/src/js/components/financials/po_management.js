@@ -27,6 +27,7 @@ export class PoManagement extends Component {
         this.notification = useService("notification");
         this.orm = useService("orm");
         this.action = useService("action");
+        this._listFetchToken = 0;
         const today = new Date();
         this.todayStr = formatDate(today);
         const ITEMS_PER_PAGE = 50;
@@ -197,6 +198,30 @@ export class PoManagement extends Component {
         this.fetchActiveList(); // Dropdowns don't need debouncing, fetch immediately
     }
 
+    _defaultPoFilters(listKey) {
+        const defaults = {
+            purchaseOrders: { search: "", status: "all", vendor: "all", dateFrom: "", dateTo: "" },
+            receipts: { search: "", status: "all", vendor: "all", dateFrom: "", dateTo: "" },
+            vendorBills: { search: "", status: "all", vendor: "all", dateFrom: "", dateTo: "" },
+            vendors: { search: "" },
+        };
+        return { ...(defaults[listKey] || {}) };
+    }
+
+    clearFilters(listKey) {
+        if (!this.state.filters[listKey]) {
+            return;
+        }
+        this.state.filters[listKey] = this._defaultPoFilters(listKey);
+        if (this.state.pagination[listKey]) {
+            this.state.pagination[listKey].page = 1;
+        }
+        if (Array.isArray(this.state[listKey])) {
+            this.state[listKey] = [];
+        }
+        this.fetchActiveList();
+    }
+
     changePage(listKey, direction) {
         const pag = this.state.pagination[listKey];
         const newPage = pag.page + direction;
@@ -328,6 +353,7 @@ export class PoManagement extends Component {
             return;
         }
 
+        const fetchToken = ++this._listFetchToken;
         this.state.isLoadingList = true;
         notifyPortalBusy(true);
         try {
@@ -369,6 +395,9 @@ export class PoManagement extends Component {
                 ]);
                 records = fetchedRecords;
                 this.state.pagination[stateKey].total = total;
+            }
+            if (fetchToken !== this._listFetchToken) {
+                return;
             }
             // 5. MAP DATA TO UI
             if (stateKey === 'credits') {
@@ -479,10 +508,14 @@ export class PoManagement extends Component {
                 this.state.tableExpenseCategories = records;
             }
         } catch (error) {
-            this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
+            if (fetchToken === this._listFetchToken) {
+                this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
+            }
         } finally {
-            this.state.isLoadingList = false;
-            notifyPortalBusy(false);
+            if (fetchToken === this._listFetchToken) {
+                this.state.isLoadingList = false;
+                notifyPortalBusy(false);
+            }
         }
     }
     requestTabSwitch(tabName, subTabName) {

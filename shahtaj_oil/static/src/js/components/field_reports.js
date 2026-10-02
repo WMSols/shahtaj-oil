@@ -87,6 +87,7 @@ export class FieldReports extends Component {
         this.orm = useService("orm");
         this.notification = useService("notification");
         this.threadRef = useRef("thread");
+        this._listFetchToken = 0;
         this.state = useState({
             pill: "reports",
             mode: "list",
@@ -262,6 +263,7 @@ export class FieldReports extends Component {
     }
 
     async loadReports() {
+        const fetchToken = ++this._listFetchToken;
         this.state.isLoading = true;
         try {
             const domain = [];
@@ -304,13 +306,25 @@ export class FieldReports extends Component {
                     { limit: this.state.pageSize, offset, order: "create_date desc, id desc" }
                 ),
             ]);
+            if (fetchToken !== this._listFetchToken) {
+                return;
+            }
             this.state.total = total;
             this.state.reports = rows;
         } catch (error) {
             this.notification.add(error.data?.message || error.message || "Could not load reports.", { type: "danger" });
         } finally {
-            this.state.isLoading = false;
+            if (fetchToken === this._listFetchToken) {
+                this.state.isLoading = false;
+            }
         }
+    }
+
+    clearFilters(listKey = "reports") {
+        this.state.filters = { search: "", state: "all", role: "all", booker: "all", deliveryMan: "all", dateFrom: "", dateTo: "" };
+        this.state.page = 1;
+        this.state.reports = [];
+        this.loadReports();
     }
 
     onSearch(ev) {

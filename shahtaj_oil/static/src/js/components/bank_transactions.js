@@ -17,12 +17,14 @@ export class BankTransactions extends Component {
         this.orm = useService("orm");
         this.notification = useService("notification");
         this.action = useService("action");
+        this._listFetchToken = 0;
         const ITEMS_PER_PAGE = 50;
         
         this.state = useState({
             activeTab: 'transactions', 
             viewMode: 'list', 
             selectedTransaction: null,
+            selectedSettlement: null,
             isLoading: { data: true, saveJournal: false },
             isPrinting: false,
             
@@ -34,11 +36,15 @@ export class BankTransactions extends Component {
             searchTimeout: null,
             tableTransactions: [],
             tableJournals: [],
+            tableSettlements: [],
             lookupJournals: [], // Used strictly for the dropdown
+            lookupSettleJournals: [],
+            lookupDeliveryMen: [],
             
             pagination: {
                 transactions: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
-                journals: { page: 1, limit: ITEMS_PER_PAGE, total: 0 }
+                journals: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
+                settlements: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
             },
             filters: {
                 transactions: { 
@@ -48,11 +54,18 @@ export class BankTransactions extends Component {
                     dateFrom: this.props.initialDateFrom || '',
                     dateTo: this.props.initialDateTo || '', 
                 },
-                journals: { search: '' }
+                journals: { search: '' },
+                settlements: {
+                    dm: 'all',
+                    journal: 'all',
+                    dateFrom: this.props.initialDateFrom || '',
+                    dateTo: this.props.initialDateTo || '',
+                },
             },
             
             // Replaces the old frontend getter
-            totals: { moneyIn: 0, moneyOut: 0, net: 0 }
+            totals: { moneyIn: 0, moneyOut: 0, net: 0 },
+            settlementTotal: 0,
         });
 
         this.debounceSearch = (func, wait) => {
@@ -77,6 +90,7 @@ export class BankTransactions extends Component {
             this.state.activeTab = 'transactions';
             this.state.viewMode = 'list';
             this.state.selectedTransaction = null;
+            this.state.selectedSettlement = null;
             this.state.pagination.transactions.page = 1;
             this.fetchActiveList();
         });
@@ -93,6 +107,7 @@ export class BankTransactions extends Component {
         }
         await Promise.all([
             this.loadLookupJournals(),
+            this.loadSettlementLookups(),
             this.fetchActiveList(),
         ]);
     }
@@ -107,6 +122,43 @@ export class BankTransactions extends Component {
     onFilterChange(tabName) {
         this.state.pagination[tabName].page = 1;
         this.fetchActiveList(); 
+    }
+
+    clearFilters(listKey) {
+        const defaults = {
+            transactions: {
+                search: "",
+                journal: "all",
+                direction: "all",
+                sortBy: "date_desc",
+                dateFrom: "",
+                dateTo: "",
+            },
+            journals: { search: "" },
+            settlements: {
+                dm: "all",
+                journal: "all",
+                dateFrom: "",
+                dateTo: "",
+            },
+        };
+        if (!defaults[listKey]) {
+            return;
+        }
+        this.state.filters[listKey] = { ...defaults[listKey] };
+        if (this.state.pagination[listKey]) {
+            this.state.pagination[listKey].page = 1;
+        }
+        if (listKey === "transactions") {
+            this.state.tableTransactions = [];
+            this.state.totals = { moneyIn: 0, moneyOut: 0, net: 0 };
+        } else if (listKey === "journals") {
+            this.state.tableJournals = [];
+        } else if (listKey === "settlements") {
+            this.state.tableSettlements = [];
+            this.state.settlementTotal = 0;
+        }
+        this.fetchActiveList();
     }
 
     changePage(tabName, direction) {
@@ -132,7 +184,10 @@ export class BankTransactions extends Component {
     }
 
     async refreshData() {
-        await this.loadLookupJournals();
+        await Promise.all([
+            this.loadLookupJournals(),
+            this.loadSettlementLookups(),
+        ]);
         await this.fetchActiveList();
     }
 
@@ -142,8 +197,45 @@ export class BankTransactions extends Component {
         );
     }
 
+    async loadSettlementLookups() {
+        const [journals, deliveryMen] = await Promise.all([
+            this.orm.searchRead(
+                "account.journal",
+                [["type", "in", ["bank", "cash"]], ["code", "!=", "DMCASH"]],
+                ["id", "name"],
+                { order: "name asc" },
+            ),
+            this.orm.searchRead(
+                "res.users",
+                [["shahtaj_is_delivery_man", "=", true], ["active", "=", true]],
+                ["id", "name"],
+                { order: "name asc" },
+            ),
+        ]);
+        this.state.lookupSettleJournals = journals || [];
+        this.state.lookupDeliveryMen = deliveryMen || [];
+    }
+
+    _settlementDomain(filters) {
+        const domain = [];
+        if (filters.dm && filters.dm !== "all") {
+            domain.push(["delivery_man_id", "=", parseInt(filters.dm, 10)]);
+        }
+        if (filters.journal && filters.journal !== "all") {
+            domain.push(["bank_journal_id", "=", parseInt(filters.journal, 10)]);
+        }
+        if (filters.dateFrom) {
+            domain.push(["settlement_date", ">=", filters.dateFrom]);
+        }
+        if (filters.dateTo) {
+            domain.push(["settlement_date", "<=", filters.dateTo]);
+        }
+        return domain;
+    }
+
     // --- THE MASTER DATA ENGINE ---
     async fetchActiveList() {
+        const fetchToken = ++this._listFetchToken;
         this.state.isLoading.data = true;
         notifyPortalBusy(true);
         try {
@@ -157,6 +249,9 @@ export class BankTransactions extends Component {
                     "shahtaj_cash_activity_page",
                     [filters, pag.page, pag.limit],
                 );
+                if (fetchToken !== this._listFetchToken) {
+                    return;
+                }
                 const rows = pageResult.rows || [];
                 this.state.totals = {
                     moneyIn: pageResult.moneyIn || 0,
@@ -173,15 +268,53 @@ export class BankTransactions extends Component {
                     this.orm.searchCount('account.journal', domain),
                     this.orm.searchRead('account.journal', domain, ["id", "name", "type", "code"], { limit: pag.limit, offset: (pag.page - 1) * pag.limit, order: "id desc" })
                 ]);
+                if (fetchToken !== this._listFetchToken) {
+                    return;
+                }
                 
                 this.state.pagination.journals.total = total;
                 this.state.tableJournals = records;
+            } else if (tab === 'settlements') {
+                const domain = this._settlementDomain(filters || {});
+                const [total, records, groups] = await Promise.all([
+                    this.orm.searchCount("shahtaj.dm.wallet.settlement", domain),
+                    this.orm.searchRead(
+                        "shahtaj.dm.wallet.settlement",
+                        domain,
+                        ["id", "name", "settlement_date", "delivery_man_id", "amount", "bank_journal_id", "settled_by_id", "move_id", "state", "notes"],
+                        {
+                            limit: pag.limit,
+                            offset: (pag.page - 1) * pag.limit,
+                            order: "settlement_date desc, id desc",
+                        },
+                    ),
+                    this.orm.call("shahtaj.dm.wallet.settlement", "read_group", [domain, ["amount"], []]),
+                ]);
+                if (fetchToken !== this._listFetchToken) {
+                    return;
+                }
+                this.state.pagination.settlements.total = total;
+                this.state.settlementTotal = (groups && groups[0] && (groups[0].amount || 0)) || 0;
+                this.state.tableSettlements = (records || []).map((row) => ({
+                    id: row.id,
+                    name: row.name || "—",
+                    date: row.settlement_date || "—",
+                    dm: row.delivery_man_id ? row.delivery_man_id[1] : "—",
+                    amount: row.amount || 0,
+                    journal: row.bank_journal_id ? row.bank_journal_id[1] : "—",
+                    settledBy: row.settled_by_id ? row.settled_by_id[1] : "—",
+                    move: row.move_id ? row.move_id[1] : "—",
+                    state: row.state || "",
+                    notes: row.notes || "",
+                }));
             }
         } catch (error) {
             this.notification.add("Failed to load data: " + (error.data?.message || error.message), { type: "danger" });
         } finally {
-            this.state.isLoading.data = false;
-            notifyPortalBusy(false);
+            if (fetchToken === this._listFetchToken) {
+                this.state.isLoading.data = false;
+                notifyPortalBusy(false);
+            }
         }
     }
 
@@ -190,6 +323,7 @@ export class BankTransactions extends Component {
         this.state.activeTab = tabName;
         this.state.viewMode = 'list';
         this.state.selectedTransaction = null;
+        this.state.selectedSettlement = null;
         this.fetchActiveList();
     }
 
@@ -201,6 +335,34 @@ export class BankTransactions extends Component {
     goBack() {
         this.state.viewMode = 'list';
         this.state.selectedTransaction = null;
+    }
+
+    viewSettlement(row) {
+        this.state.selectedSettlement = row;
+    }
+
+    closeSettlement() {
+        this.state.selectedSettlement = null;
+    }
+
+    settlementStateLabel(state) {
+        const map = {
+            posted: "Posted",
+            cancelled: "Cancelled",
+        };
+        return map[state] || (state ? String(state).replace(/_/g, " ") : "—");
+    }
+
+    settlementStateBadgeClass(state) {
+        const map = {
+            posted: "bg-success text-white",
+            cancelled: "bg-danger text-white",
+        };
+        return map[state] || "bg-light text-dark border";
+    }
+
+    formatMoney(amount) {
+        return (amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     openJournalModal() {

@@ -29,6 +29,9 @@
                                         </option>
                                     </t>
                             </select>
+                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('routes')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                                    <i class="fa fa-times me-1"/> Clear filters
+                                </button>
                             </div>
                             
                             <button class="btn btn-sm btn-dark d-flex align-items-center text-white ms-2 shadow-sm" t-on-click="() => this.state.showRouteForm = true" title="Create a new travel route">

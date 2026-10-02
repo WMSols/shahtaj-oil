@@ -17,6 +17,7 @@ export class CreditControl extends Component {
         this.notification = useService("notification");
         this.orm = useService("orm");
         this.action = useService("action");
+        this._listFetchToken = 0;
         const ITEMS_PER_PAGE = 50;
         this.state = useState({
             activeSubTab: "credit",
@@ -76,6 +77,15 @@ export class CreditControl extends Component {
         this.fetchActiveList(); // Dropdowns don't need debouncing, fetch immediately
     }
 
+    clearFilters(listKey = "credits") {
+        this.state.filters.credits = { search: "", status: "all", hasCreditLimit: false };
+        if (this.state.pagination.credits) {
+            this.state.pagination.credits.page = 1;
+        }
+        this.state.credits = [];
+        this.fetchActiveList();
+    }
+
     onHasCreditLimitFilterChange(ev) {
         this.state.filters.credits.hasCreditLimit = Boolean(ev.target.checked);
         this.onFilterChange('credits');
@@ -114,6 +124,7 @@ export class CreditControl extends Component {
             : (this.state.activeSubTab === 'expenses' ? tabMap[this.state.expenseSubTab] : (this.state.activeSubTab === 'po_management' ? tabMap[this.state.poSubTab] : tabMap[this.state.invoiceSubTab]));
         if (!config) return;
 
+        const fetchToken = ++this._listFetchToken;
         this.state.isLoadingList = true;
         notifyPortalBusy(true);
         try {
@@ -336,10 +347,14 @@ export class CreditControl extends Component {
                 this.state.tableExpenseCategories = records;
             }
         } catch (error) {
-            this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
+            if (fetchToken === this._listFetchToken) {
+                this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
+            }
         } finally {
-            this.state.isLoadingList = false;
-            notifyPortalBusy(false);
+            if (fetchToken === this._listFetchToken) {
+                this.state.isLoadingList = false;
+                notifyPortalBusy(false);
+            }
         }
     }
     setCreditSubView(viewName) {

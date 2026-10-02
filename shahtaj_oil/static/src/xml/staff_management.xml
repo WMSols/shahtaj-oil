@@ -134,6 +134,9 @@
                             <option value="all">All Statuses</option>
                             <option value="online">Currently Online</option>
                         </select>
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('staff')" t-att-disabled="this.state.loading.fetch" title="Clear all filters on this list">
+                            <i class="fa fa-times me-1"/> Clear filters
+                        </button>
                     </div>
                 </div>
 
@@ -243,11 +246,16 @@
                         <h2 class="fw-bold text-danger mb-1">Archived Staff</h2>
                         <small class="text-muted">Manage suspended or deactivated employee accounts.</small>
                     </div>
-                    <div class="input-group input-group-sm w-100 w-md-auto shadow-sm" style="max-width: 300px;">
-                        <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
-                        <input type="text" class="form-control border-start-0 ps-0" placeholder="Search archived staff..." 
-                               t-att-value="this.state.filters.archive.search" 
-                               t-on-input="(ev) => this.onSearchInput(ev, 'archive')" />
+                    <div class="d-flex align-items-center gap-2 w-100 w-md-auto" style="max-width: 420px;">
+                        <div class="input-group input-group-sm shadow-sm flex-grow-1">
+                            <span class="input-group-text bg-white border-end-0"><i class="fa fa-search text-muted"></i></span>
+                            <input type="text" class="form-control border-start-0 ps-0" placeholder="Search archived staff..." 
+                                   t-att-value="this.state.filters.archive.search" 
+                                   t-on-input="(ev) => this.onSearchInput(ev, 'archive')" />
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('archive')" t-att-disabled="this.state.loading.fetch" title="Clear all filters on this list">
+                            <i class="fa fa-times me-1"/> Clear filters
+                        </button>
                     </div>
                 </div>
 

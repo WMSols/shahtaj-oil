@@ -22,6 +22,7 @@ export class StaffManagement extends Component {
     setup() {
         this.orm = useService("orm");
         this.notification = useService("notification");
+        this._listFetchToken = 0;
         const ITEMS_PER_PAGE = 50;
         const initialRole = this.props.requestedStaffRole === "delivery_man"
             ? "delivery_man"
@@ -171,6 +172,26 @@ export class StaffManagement extends Component {
         this.fetchStaffData();
     }
 
+    clearFilters(listKey) {
+        const defaults = {
+            staff: { search: "", status: "all" },
+            archive: { search: "" },
+        };
+        if (!defaults[listKey]) {
+            return;
+        }
+        this.state.filters[listKey] = { ...defaults[listKey] };
+        if (this.state.pagination[listKey]) {
+            this.state.pagination[listKey].page = 1;
+        }
+        if (listKey === "staff") {
+            this.state.tableStaff = [];
+        } else if (listKey === "archive") {
+            this.state.archivedStaffTable = [];
+        }
+        this.fetchStaffData();
+    }
+
     changePage(tabName, direction) {
         const pag = this.state.pagination[tabName];
         const newPage = pag.page + direction;
@@ -250,6 +271,7 @@ export class StaffManagement extends Component {
     }
 
     async fetchStaffData(isBackgroundPoll = false) {
+        const fetchToken = isBackgroundPoll ? this._listFetchToken : ++this._listFetchToken;
         if (!isBackgroundPoll) {
             this.state.loading.fetch = true;
             notifyPortalBusy(true);
@@ -289,6 +311,10 @@ export class StaffManagement extends Component {
                 ),
             ]);
 
+            if (fetchToken !== this._listFetchToken) {
+                return;
+            }
+
             this.state.pagination[tab].total = total;
             const mapped = users.map((u) => this._mapStaffRow(u));
             if (tab === "archive") this.state.archivedStaffTable = mapped;
@@ -298,7 +324,7 @@ export class StaffManagement extends Component {
                 this.notification.add("Failed to fetch data: " + (error.data?.message || error.message), { type: "danger" });
             }
         } finally {
-            if (!isBackgroundPoll) {
+            if (!isBackgroundPoll && fetchToken === this._listFetchToken) {
                 this.state.loading.fetch = false;
                 notifyPortalBusy(false);
             }

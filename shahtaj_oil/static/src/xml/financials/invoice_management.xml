@@ -63,6 +63,9 @@
                                 <option value="Draft">Draft</option>
                                 <option value="Cancelled">Cancelled</option>
                             </select>
+                            <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('allOrders')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                                <i class="fa fa-times me-1"/> Clear filters
+                            </button>
                         </div>
 
                         <div class="position-relative">
@@ -274,6 +277,9 @@
                                    t-model="this.state.filters.orders.dateTo"
                                    t-on-change="() => this.onFilterChange('orders')"
                                    title="To date"/>
+                            <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('orders')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                                <i class="fa fa-times me-1"/> Clear filters
+                            </button>
                         </div>
 
                         <div class="position-relative">
@@ -507,6 +513,9 @@
                             </div>
                             <button class="btn btn-sm btn-outline-secondary fw-bold ms-auto" t-on-click="printCustomerInvoices" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                                 <i class="fa fa-print me-1"/> Print
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('invoices')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                                <i class="fa fa-times me-1"/> Clear filters
                             </button>
                         </div>
 
@@ -1011,6 +1020,9 @@
                                 <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printCustomerPayments" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                                     <i class="fa fa-print me-1"/> Print
                                 </button>
+                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('payments')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                                    <i class="fa fa-times me-1"/> Clear filters
+                                </button>
                                 <button t-if="this.canMutate" class="btn btn-sm btn-dark fw-bold text-white shadow-sm"
                                         t-on-click="openCollectModal"
                                         t-att-disabled="this.state.collectModal.loading">
@@ -1201,6 +1213,9 @@
                             </select>
                             <button class="btn btn-sm btn-outline-secondary fw-bold ms-auto" t-on-click="printCreditNotes" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
                                 <i class="fa fa-print me-1"/> Print
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('creditNotes')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
+                                <i class="fa fa-times me-1"/> Clear filters
                             </button>
                         </div>
                         

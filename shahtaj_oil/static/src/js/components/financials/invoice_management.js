@@ -27,6 +27,7 @@ export class InvoiceManagement extends Component {
         this.notification = useService("notification");
         this.orm = useService("orm");
         this.action = useService("action");
+        this._listFetchToken = 0;
         const ITEMS_PER_PAGE = 50;
         this.state = useState({
             activeSubTab: "invoices",
@@ -242,31 +243,28 @@ export class InvoiceManagement extends Component {
         this.state.selectedInvoice = null;
         this.state.selectedInvoiceLines = [];
         this.state.isEditingInvoice = false;
-        if (this.state.filters[listKey]) {
-            this.state.filters[listKey] = this._defaultInvoiceFilters(listKey);
-        }
-        if (this.state.pagination[listKey]) {
-            this.state.pagination[listKey].page = 1;
-        }
-        this.fetchActiveList();
     }
 
     closeOrderDetail(listKey = "orders") {
         this.state.selectedOrder = null;
         this.state.selectedOrderLines = [];
-        if (this.state.filters[listKey]) {
-            this.state.filters[listKey] = this._defaultInvoiceFilters(listKey);
-        }
-        if (this.state.pagination[listKey]) {
-            this.state.pagination[listKey].page = 1;
-        }
-        this.fetchActiveList();
     }
 
     closePaymentDetail() {
         this.state.selectedPayment = null;
-        this.state.filters.payments = this._defaultInvoiceFilters("payments");
-        this.state.pagination.payments.page = 1;
+    }
+
+    clearFilters(listKey) {
+        if (!this.state.filters[listKey]) {
+            return;
+        }
+        this.state.filters[listKey] = this._defaultInvoiceFilters(listKey);
+        if (this.state.pagination[listKey]) {
+            this.state.pagination[listKey].page = 1;
+        }
+        if (Array.isArray(this.state[listKey])) {
+            this.state[listKey] = [];
+        }
         this.fetchActiveList();
     }
 
@@ -446,6 +444,7 @@ export class InvoiceManagement extends Component {
             return;
         }
 
+        const fetchToken = ++this._listFetchToken;
         this.state.isLoadingList = true;
         notifyPortalBusy(true);
         try {
@@ -470,6 +469,9 @@ export class InvoiceManagement extends Component {
                         creditSubView: "balances",
                     }, pag.page, pag.limit],
                 );
+                if (fetchToken !== this._listFetchToken) {
+                    return;
+                }
                 records = page.records || [];
                 this.state.pagination[stateKey].total = page.total || 0;
             } else {
@@ -482,6 +484,9 @@ export class InvoiceManagement extends Component {
                         context: queryContext,
                     }),
                 ]);
+                if (fetchToken !== this._listFetchToken) {
+                    return;
+                }
                 records = fetchedRecords;
                 this.state.pagination[stateKey].total = total;
             }
@@ -594,10 +599,14 @@ export class InvoiceManagement extends Component {
                 this.state.tableExpenseCategories = records;
             }
         } catch (error) {
-            this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
+            if (fetchToken === this._listFetchToken) {
+                this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
+            }
         } finally {
-            this.state.isLoadingList = false;
-            notifyPortalBusy(false);
+            if (fetchToken === this._listFetchToken) {
+                this.state.isLoadingList = false;
+                notifyPortalBusy(false);
+            }
         }
     }
     showConfirm(title, message, onConfirmCallback) {
