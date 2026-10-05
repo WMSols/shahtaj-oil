@@ -399,13 +399,9 @@
                         <option t-att-value="booker.id"><t t-esc="booker.name"/></option>
                     </t>
                 </select>
-                <select class="form-select form-select-sm shadow-sm" style="width: 160px;" t-model="this.state.shopFilterRoute" t-on-change="() => this.onFilterChange('shops')">
-                    <option value="all">All Routes</option>
-                    <option value="unassigned">Unassigned Only</option>
-                    <t t-foreach="this.state.routes" t-as="route" t-key="route.id">
-                        <option t-att-value="route.id"><t t-esc="route.name"/></option>
-                    </t>
-                </select>
+                <RouteFilter routeId="this.state.shopFilterRoute"
+                             routeName="this.state.shopFilterRouteName"
+                             onSelect="(routeId, routeName) => this.onShopRouteFilterSelect(routeId, routeName)"/>
                 <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printShops" t-att-disabled="this.state.isPrintingShops or this.state.isLoadingList" title="Print the shops that match the current filters">
                     <i class="fa fa-print me-1"/> Print
                 </button>

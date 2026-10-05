@@ -8,6 +8,7 @@ import { printFilter, printListPdf } from "../../shahtaj_list_export";
 import { filterOptionValue, setScalarFilter } from "../../shahtaj_filter_ui";
 import { applyTerritoryDashboardToState, getTerritoryDashboard } from "./territory_cache";
 import { ensureLeaflet } from "../../shahtaj_leaflet";
+import { RouteFilter } from "./route_filter";
 
 export class TerritoryBase extends Component {
     static props = {
@@ -20,7 +21,7 @@ export class TerritoryBase extends Component {
         requestedShopRegisteredOn: { type: String, optional: true },
         requestedShopRegistrar: { type: String, optional: true },
     };
-    static components = { ConfirmModal };
+    static components = { ConfirmModal, RouteFilter };
     
     setup() {
         this.orm = useService("orm");
@@ -63,6 +64,7 @@ export class TerritoryBase extends Component {
             shopFilterRegisteredOn: this.props.requestedShopRegisteredOn || '',
             shopFilterRegistrar: this.props.requestedShopRegistrar || 'all',
             shopFilterRoute: 'all',
+            shopFilterRouteName: '',
             routeFilterZone: 'all',  
             bookers: [],
             // Custom Modal State
@@ -242,12 +244,25 @@ export class TerritoryBase extends Component {
             this.state.shopFilterRegisteredOn = "";
             this.state.shopFilterRegistrar = "all";
             this.state.shopFilterRoute = "all";
+            this.state.shopFilterRouteName = "";
             this.state.pagination.shops.page = 1;
             this.state.tableShops = [];
         } else {
             return;
         }
         this.fetchActiveList();
+    }
+
+    onShopRouteFilterSelect(routeId, routeName) {
+        this.state.shopFilterRoute = routeId || "all";
+        if (!routeId || routeId === "all") {
+            this.state.shopFilterRouteName = "";
+        } else if (routeId === "unassigned") {
+            this.state.shopFilterRouteName = "Unassigned Only";
+        } else {
+            this.state.shopFilterRouteName = routeName || "";
+        }
+        this.onFilterChange("shops");
     }
 
     _applyShopNav(props) {
@@ -333,7 +348,7 @@ export class TerritoryBase extends Component {
             const verifiedLabels = { verified: "On-site Verified", unverified: "Not Verified" };
             const routeLabel = this.state.shopFilterRoute === "unassigned"
                 ? "Unassigned Only"
-                : this._lookupName(this.state.routes, this.state.shopFilterRoute);
+                : (this.state.shopFilterRouteName || this._lookupName(this.state.routes, this.state.shopFilterRoute));
             await printListPdf(this.orm, this.action, {
                 title: "Registered Shops",
                 filters: [

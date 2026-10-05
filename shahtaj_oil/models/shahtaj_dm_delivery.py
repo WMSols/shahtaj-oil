@@ -756,6 +756,12 @@ class ShahtajDmDelivery(models.Model):
                     'delivery is already finished.',
                     names=', '.join(finished.mapped('display_name')),
                 ))
+            changing = self.filtered(
+                lambda rec: any(
+                    rec._shahtaj_planning_field_changed(fname, vals[fname])
+                    for fname in planning_vals
+                )
+            )
             if changing:
                 self.env['shahtaj.activity.log'].log_model_field_changes(
                     changing,
