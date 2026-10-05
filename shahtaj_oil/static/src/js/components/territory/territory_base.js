@@ -5,6 +5,7 @@ import { useService } from "@web/core/utils/hooks";
 import { ConfirmModal } from "../confirm_modal";
 import { hasFinancialAccess } from "../../shahtaj_access";
 import { printFilter, printListPdf } from "../../shahtaj_list_export";
+import { filterOptionValue, setScalarFilter } from "../../shahtaj_filter_ui";
 import { applyTerritoryDashboardToState, getTerritoryDashboard } from "./territory_cache";
 import { ensureLeaflet } from "../../shahtaj_leaflet";
 
@@ -204,6 +205,20 @@ export class TerritoryBase extends Component {
     onFilterChange(tabName) {
         this.state.pagination[tabName].page = 1;
         this.fetchActiveList(); 
+    }
+
+    onRouteFilterField(field, ev) {
+        setScalarFilter(this.state, field, ev.target.value);
+        this.onFilterChange("routes");
+    }
+
+    onRouteSearchInput(ev) {
+        this.state.routeSearchQuery = ev.target.value;
+        this.onSearchInput("routes");
+    }
+
+    filterOptionValue(id) {
+        return filterOptionValue(id);
     }
 
     clearFilters(listKey) {

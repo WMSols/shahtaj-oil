@@ -4,6 +4,7 @@ import { Component, useState, onMounted, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { hasFinancialAccess, notifyPortalBusy } from "../shahtaj_access";
 import { printFilter, printListPdf } from "../shahtaj_list_export";
+import { filterOptionValue, setFilterField } from "../shahtaj_filter_ui";
 
 export class BankTransactions extends Component {
     static props = {
@@ -122,6 +123,15 @@ export class BankTransactions extends Component {
     onFilterChange(tabName) {
         this.state.pagination[tabName].page = 1;
         this.fetchActiveList(); 
+    }
+
+    onFilterField(listKey, field, ev) {
+        setFilterField(this.state, listKey, field, ev.target.value);
+        this.onFilterChange(listKey);
+    }
+
+    filterOptionValue(id) {
+        return filterOptionValue(id);
     }
 
     clearFilters(listKey) {

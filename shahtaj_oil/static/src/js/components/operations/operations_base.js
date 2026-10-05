@@ -18,6 +18,7 @@ import {
 } from "../../shahtaj_access";
 import { ConfirmModal } from "../confirm_modal";
 import { printListPdf } from "../../shahtaj_list_export";
+import { filterOptionValue, setFilterField } from "../../shahtaj_filter_ui";
 import {
     applyOperationsCatalogsToState,
     applyOperationsLookupsToState,
@@ -387,6 +388,21 @@ export class OperationsBase extends Component {
     onFilterChange(tabName) {
         this.state.pagination[tabName].page = 1;
         this.fetchActiveList(); 
+    }
+
+    onFilterField(listKey, field, ev) {
+        setFilterField(this.state, listKey, field, ev.target.value);
+        this.onFilterChange(listKey);
+    }
+
+    filterOptionValue(id) {
+        return filterOptionValue(id);
+    }
+
+    /** Same pattern as DM Performance isDmSelected — keep dynamic user options selected after remount. */
+    isFilterOptionSelected(listKey, field, value) {
+        const current = this.state.filters[listKey] && this.state.filters[listKey][field];
+        return String(current ?? "") === String(value ?? "");
     }
 
     onOrdersWalkInToggle(ev) {

@@ -4,6 +4,7 @@ import { Component, useState, onMounted, onWillUpdateProps, onWillUnmount } from
 import { useService } from "@web/core/utils/hooks";
 import { canSee, hasFinancialAccess, notifyPortalBusy, portalAccessState } from "../../shahtaj_access";
 import { printFilter, printListPdf } from "../../shahtaj_list_export";
+import { filterOptionValue, setFilterField } from "../../shahtaj_filter_ui";
 import { ConfirmModal } from "../confirm_modal";
 import {
     applyLookupsToState,
@@ -196,6 +197,15 @@ export class PoManagement extends Component {
     onFilterChange(listKey) {
         this.state.pagination[listKey].page = 1;
         this.fetchActiveList(); // Dropdowns don't need debouncing, fetch immediately
+    }
+
+    onFilterField(listKey, field, ev) {
+        setFilterField(this.state, listKey, field, ev.target.value);
+        this.onFilterChange(listKey);
+    }
+
+    filterOptionValue(id) {
+        return filterOptionValue(id);
     }
 
     _defaultPoFilters(listKey) {

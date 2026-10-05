@@ -51,8 +51,8 @@
                                t-att-value="this.state.filters.bookers.search" 
                                t-on-input="onSearchInput"/>
                     </div>
-                    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('bookers')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
-                        <i class="fa fa-times me-1"/> Clear filters
+                    <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('bookers')" t-att-disabled="this.state.isLoadingList" title="Clear search on this list">
+                        <i class="fa fa-times me-1"/> Clear Search
                     </button>
                 </div>
                 

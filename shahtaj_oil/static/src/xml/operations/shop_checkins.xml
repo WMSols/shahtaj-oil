@@ -85,20 +85,19 @@
                            t-on-input="(ev) => this.onSearchInput(ev, 'checkins')"/>
                      <small class="fw-bold text-muted" title="Filters for required data">Filters: </small>
                     <select class="form-select form-select-sm" style="max-width: 200px;"
-                            t-model="this.state.filters.checkins.booker"
-                            t-on-change="() => this.onFilterChange('checkins')">
-                        <option value="all">All Field Users</option>
+                            t-on-change="(ev) => this.onFilterField('checkins', 'booker', ev)">
+                        <option value="all" t-att-selected="this.isFilterOptionSelected('checkins', 'booker', 'all')">All Field Users</option>
                         <t t-foreach="this.state.lookupFieldUsers" t-as="b" t-key="b.id">
-                            <option t-att-value="b.id"><t t-esc="b.name"/></option>
+                            <option t-att-value="this.filterOptionValue(b.id)" t-att-selected="this.isFilterOptionSelected('checkins', 'booker', b.id)"><t t-esc="b.name"/></option>
                         </t>
                     </select>
                     <input type="date" class="form-control form-control-sm" style="max-width: 160px;"
-                           t-model="this.state.filters.checkins.date"
-                           t-on-change="() => this.onFilterChange('checkins')"
+                           t-att-value="this.state.filters.checkins.date"
+                           t-on-change="(ev) => this.onFilterField('checkins', 'date', ev)"
                            title="Optional: show GPS attempts for this date only"/>
                     <select class="form-select form-select-sm" style="max-width: 180px;"
-                            t-model="this.state.filters.checkins.purpose"
-                            t-on-change="() => this.onFilterChange('checkins')">
+                            t-att-value="this.state.filters.checkins.purpose"
+                            t-on-change="(ev) => this.onFilterField('checkins', 'purpose', ev)">
                         <option value="all">All Purposes</option>
                         <option value="check_in">Check-in</option>
                         <option value="place_order">Place Order</option>
@@ -106,15 +105,15 @@
                         <option value="walk_in">Walk In</option>
                     </select>
                     <select class="form-select form-select-sm" style="max-width: 180px;"
-                            t-model="this.state.filters.checkins.role"
-                            t-on-change="() => this.onFilterChange('checkins')">
+                            t-att-value="this.state.filters.checkins.role"
+                            t-on-change="(ev) => this.onFilterField('checkins', 'role', ev)">
                         <option value="all">All Roles</option>
                         <option value="order_booker">Order Bookers</option>
                         <option value="delivery_man">Delivery Men</option>
                     </select>
                     <select class="form-select form-select-sm" style="max-width: 200px;"
-                            t-model="this.state.filters.checkins.outcome"
-                            t-on-change="() => this.onFilterChange('checkins')"
+                            t-att-value="this.state.filters.checkins.outcome"
+                            t-on-change="(ev) => this.onFilterField('checkins', 'outcome', ev)"
                             title="Filter by the linked shop visit outcome">
                         <option value="all">All Visit Outcomes</option>
                         <option value="in_progress">In Progress</option>
@@ -125,8 +124,8 @@
                         <option value="cancelled">Cancelled</option>
                     </select>
                     <select class="form-select form-select-sm" style="max-width: 240px;" 
-                            t-model="this.state.filters.checkins.status" 
-                            t-on-change="() => this.onFilterChange('checkins')">
+                            t-att-value="this.state.filters.checkins.status" 
+                            t-on-change="(ev) => this.onFilterField('checkins', 'status', ev)">
                         <option value="">All GPS Results</option>
                         <option value="ok">GPS OK</option>
                         <option value="blocked">All Blocked</option>

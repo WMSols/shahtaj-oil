@@ -18,13 +18,13 @@
                            <div class="input-group input-group-sm shadow-sm" style="width: 250px;">
                                 <span class="input-group-text bg-white text-muted border-end-0"><i class="fa fa-search"></i></span>
                                 <input type="text" class="form-control border-start-0 ps-0" placeholder="Search route name..." 
-                                       t-model="this.state.routeSearchQuery" t-on-input="() => this.onSearchInput('routes')" />
+                                       t-att-value="this.state.routeSearchQuery" t-on-input="(ev) => this.onRouteSearchInput(ev)" />
                             </div>
                             <div class="d-flex gap-2">
-                                <select class="form-select form-select-sm shadow-sm" style="width: 150px;" t-model="this.state.routeFilterZone" t-on-change="() => this.onFilterChange('routes')">
+                                <select class="form-select form-select-sm shadow-sm" style="width: 150px;" t-att-value="this.state.routeFilterZone" t-on-change="(ev) => this.onRouteFilterField('routeFilterZone', ev)">
                                 <option value="all">All Zones</option>
                                 <t t-foreach="this.state.areas.filter(a => a.active)" t-as="a" t-key="a.id">
-                                        <option t-att-value="a.id">
+                                        <option t-att-value="this.filterOptionValue(a.id)">
                                             <t t-esc="a.name"/>
                                         </option>
                                     </t>

@@ -41,16 +41,15 @@
 <div class="p-3 bg-light border-bottom d-flex flex-wrap gap-2 align-items-center">
     <small class="fw-bold text-muted">Filters: </small>
     <select class="form-select form-select-sm shadow-sm" style="max-width: 200px;" 
-            t-model="this.state.filters.schedules.booker" 
-            t-on-change="() => this.onFilterChange('schedules')">
-        <option value="all">All Bookers</option>
+            t-on-change="(ev) => this.onFilterField('schedules', 'booker', ev)">
+        <option value="all" t-att-selected="this.isFilterOptionSelected('schedules', 'booker', 'all')">All Bookers</option>
         <t t-foreach="this.state.lookupBookers" t-as="b" t-key="b.id">
-            <option t-att-value="b.id"><t t-esc="b.name"/></option>
+            <option t-att-value="this.filterOptionValue(b.id)" t-att-selected="this.isFilterOptionSelected('schedules', 'booker', b.id)"><t t-esc="b.name"/></option>
         </t>
     </select>
     <input type="date" class="form-control form-control-sm shadow-sm" style="max-width: 160px;"
-           t-model="this.state.filters.schedules.date"
-           t-on-change="() => this.onFilterChange('schedules')"
+           t-att-value="this.state.filters.schedules.date"
+           t-on-change="(ev) => this.onFilterField('schedules', 'date', ev)"
            title="Optional: show this booker's performance on a specific date"/>
     <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="printBookerPerformance" t-att-disabled="this.state.isPrintingList or this.state.isLoadingList" title="Print the rows that match the current filters">
         <i class="fa fa-print me-1"/> Print
@@ -342,17 +341,16 @@
 <div class="p-3 bg-light border-bottom d-flex gap-2">
     <small class="fw-bold text-muted">Filters: </small>
     <select class="form-select form-select-sm shadow-sm w-25" 
-            t-model="this.state.filters.targets.booker" 
-            t-on-change="() => this.onFilterChange('targets')">
-        <option value="all">All Bookers</option>
+            t-on-change="(ev) => this.onFilterField('targets', 'booker', ev)">
+        <option value="all" t-att-selected="this.isFilterOptionSelected('targets', 'booker', 'all')">All Bookers</option>
         <t t-foreach="this.state.lookupBookers" t-as="b" t-key="b.id">
-            <option t-att-value="b.id"><t t-esc="b.name"/></option>
+            <option t-att-value="this.filterOptionValue(b.id)" t-att-selected="this.isFilterOptionSelected('targets', 'booker', b.id)"><t t-esc="b.name"/></option>
         </t>
     </select>
 
     <select class="form-select form-select-sm shadow-sm w-25" 
-            t-model="this.state.filters.targets.type" 
-            t-on-change="() => this.onFilterChange('targets')">
+            t-att-value="this.state.filters.targets.type" 
+            t-on-change="(ev) => this.onFilterField('targets', 'type', ev)">
         <option value="all">All Target Types</option>
         <t t-foreach="this.state.lookupTargetTypes" t-as="type" t-key="type.value">
             <option t-att-value="type.value"><t t-esc="type.label"/></option>

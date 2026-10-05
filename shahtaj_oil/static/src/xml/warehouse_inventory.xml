@@ -37,7 +37,7 @@
                                 </span>
                                 <input t-att-value="this.state.filters.inventory.search" t-on-input="(ev) => this.onSearchInput(ev, 'inventory')" type="text" class="form-control border-start-0 ps-0" placeholder="Search product name..." />
                             </div>
-                            <select  class="form-select form-select-sm shadow-sm" style="width: 170px;" t-model="this.state.filters.inventory.sort" t-on-change="() => this.onFilterChange('inventory')" title="Reorder the list based on specific values">
+                            <select class="form-select form-select-sm shadow-sm" style="width: 170px;" t-att-value="this.state.filters.inventory.sort" t-on-change="(ev) => this.onFilterField('inventory', 'sort', ev)" title="Reorder the list based on specific values">
                                 <option value="default">Default Sorting</option>
                                 <option t-if="this.showPrices" value="price_asc">Price: Low to High</option>
                                 <option t-if="this.showPrices" value="price_desc">Price: High to Low</option>
@@ -74,10 +74,10 @@
                                 </div>
                                 <div class="col-md-6">
                                     <label class="small fw-bold">Primary Vendor / Supplier</label>
-                                    <select class="form-select shadow-sm" t-model="this.state.productForm.vendor_id">
+                                    <select class="form-select shadow-sm" t-att-value="this.state.productForm.vendor_id" t-on-change="(ev) => this.onProductVendorChange(ev, 'new')">
                                         <option value="">-- Choose Vendor (Optional) --</option>
                                         <t t-foreach="this.state.allVendors" t-as="vendor" t-key="vendor.id">
-                                            <option t-att-value="vendor.id"><t t-esc="vendor.name"/></option>
+                                            <option t-att-value="this.filterOptionValue(vendor.id)"><t t-esc="vendor.name"/></option>
                                         </t>
                                     </select>
                                 </div>
@@ -170,10 +170,10 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="small fw-bold">Primary Vendor</label>
-                                <select class="form-select" t-model="this.state.currentProduct.vendor_id">
+                                <select class="form-select" t-att-value="this.state.currentProduct.vendor_id" t-on-change="(ev) => this.onProductVendorChange(ev, 'edit')">
                                     <option value="">-- None / Select Vendor --</option>
                                     <t t-foreach="this.state.allVendors" t-as="vendor" t-key="vendor.id">
-                                        <option t-att-value="vendor.id"><t t-esc="vendor.name"/></option>
+                                        <option t-att-value="this.filterOptionValue(vendor.id)"><t t-esc="vendor.name"/></option>
                                     </t>
                                 </select>
                             </div>
@@ -324,7 +324,7 @@
                         </span>
                         <input t-att-value="this.state.filters.management.search" t-on-input="(ev) => this.onSearchInput(ev, 'management')" type="text" class="form-control border-start-0 ps-0" placeholder="Search product name..." />
                     </div>
-                    <select class="form-select form-select-sm shadow-sm" style="width: 140px;" t-model="this.state.filters.management.status" t-on-change="() => this.onFilterChange('management')" title="Filter to see only available or depleted items">
+                    <select class="form-select form-select-sm shadow-sm" style="width: 140px;" t-att-value="this.state.filters.management.status" t-on-change="(ev) => this.onFilterField('management', 'status', ev)" title="Filter to see only available or depleted items">
                         <option value="all">All Stock Levels</option>
                         <option value="in_stock">In Stock (&gt; 0)</option>
                         <option value="out_of_stock">Out of Stock (0)</option>

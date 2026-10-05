@@ -128,6 +128,7 @@
     'shahtaj_oil/static/src/js/shahtaj_read_cache.js',
     'shahtaj_oil/static/src/js/shahtaj_leaflet.js',
     'shahtaj_oil/static/src/js/shahtaj_list_export.js',
+    'shahtaj_oil/static/src/js/shahtaj_filter_ui.js',
     'shahtaj_oil/static/src/js/shahtaj_geolocate_widget.js',
     'shahtaj_oil/static/src/xml/dashboard.xml',
     'shahtaj_oil/static/src/js/components/staff_management.js',

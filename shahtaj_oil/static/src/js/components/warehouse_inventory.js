@@ -13,6 +13,7 @@ import {
     notifyPortalBusy,
     showPrices,
 } from "../shahtaj_access";
+import { filterOptionValue, setFilterField } from "../shahtaj_filter_ui";
 
 export class WarehouseInventory extends Component {
     static props = {
@@ -84,8 +85,11 @@ export class WarehouseInventory extends Component {
             if (canMutate() && hasFinancialAccess()) {
                 extras.push(this.loadSaleTaxes());
             }
+            if (canManageProducts()) {
+                extras.push(this.loadVendors());
+            }
             if (canMutate()) {
-                extras.push(this.loadVendors(), this.loadArchivedData());
+                extras.push(this.loadArchivedData());
             }
             await Promise.all(extras);
             await this.fetchActiveList();
@@ -116,6 +120,54 @@ export class WarehouseInventory extends Component {
     onFilterChange(tabName) {
         this.state.pagination[tabName].page = 1;
         this.fetchActiveList(); 
+    }
+
+    onFilterField(listKey, field, ev) {
+        setFilterField(this.state, listKey, field, ev.target.value);
+        this.onFilterChange(listKey);
+    }
+
+    onProductVendorChange(ev, formTarget) {
+        const value = ev.target.value;
+        if (formTarget === "edit" && this.state.currentProduct) {
+            this.state.currentProduct.vendor_id = value;
+        } else if (formTarget === "new") {
+            this.state.productForm.vendor_id = value;
+        }
+    }
+
+    filterOptionValue(id) {
+        return filterOptionValue(id);
+    }
+
+    _ensureVendorInDropdown(vendorId, vendorName) {
+        if (!vendorId) {
+            return;
+        }
+        const id = parseInt(String(vendorId), 10);
+        if (!id) {
+            return;
+        }
+        if (!this.state.allVendors.some((v) => v.id === id)) {
+            this.state.allVendors = [
+                ...this.state.allVendors,
+                { id, name: vendorName || `Vendor #${id}` },
+            ];
+        }
+    }
+
+    _vendorIdFromProduct(product) {
+        const raw = product.shahtaj_vendor_id;
+        if (Array.isArray(raw) && raw.length > 0) {
+            return filterOptionValue(raw[0]);
+        }
+        if (typeof raw === "number") {
+            return filterOptionValue(raw);
+        }
+        if (typeof raw === "string" && raw) {
+            return raw;
+        }
+        return "";
     }
 
     clearFilters(listKey) {
@@ -411,8 +463,11 @@ export class WarehouseInventory extends Component {
             if (canMutate() && hasFinancialAccess()) {
                 extras.push(this.loadSaleTaxes());
             }
+            if (this.canManageProducts) {
+                extras.push(this.loadVendors());
+            }
             if (canMutate()) {
-                extras.push(this.loadVendors(), this.loadArchivedData());
+                extras.push(this.loadArchivedData());
             }
             await Promise.all(extras);
         } finally {
@@ -589,15 +644,9 @@ export class WarehouseInventory extends Component {
         if (product.taxes_id && product.taxes_id.length > 0) {
             currentTaxId = product.taxes_id[0].toString();
         }
-        let currentVendorId = "";
-        if (Array.isArray(product.shahtaj_vendor_id) && product.shahtaj_vendor_id.length > 0) {
-            currentVendorId = product.shahtaj_vendor_id[0].toString();
-        } else if (typeof product.shahtaj_vendor_id === 'number') {
-            currentVendorId = product.shahtaj_vendor_id.toString();
-        } else if (typeof product.shahtaj_vendor_id === 'string' && product.shahtaj_vendor_id) {
-            currentVendorId = product.shahtaj_vendor_id;
-        }
-        
+        const currentVendorId = this._vendorIdFromProduct(product);
+        this._ensureVendorInDropdown(currentVendorId, product.shahtaj_vendor_name);
+
         this.state.currentProduct = {
             ...product,
             tax_id: currentTaxId,

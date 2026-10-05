@@ -383,15 +383,15 @@
                                 <input type="text" class="form-control border-start-0 ps-0" placeholder="Search receipts or returns..." t-att-value="this.state.filters.receipts.search" t-on-input="(ev) => this.onSearchInput(ev, 'receipts')"/>
                             </div>
                             <div class="d-flex gap-2 flex-wrap">
-                                <select class="form-select form-select-sm shadow-sm" style="width: 180px;" t-model="this.state.filters.receipts.vendor" t-on-change="() => this.onFilterChange('receipts')" title="Filter by vendor">
+                                <select class="form-select form-select-sm shadow-sm" style="width: 180px;" t-att-value="this.state.filters.receipts.vendor" t-on-change="(ev) => this.onFilterField('receipts', 'vendor', ev)" title="Filter by vendor">
                                     <option value="all">All Vendors</option>
                                     <t t-foreach="this.state.poLookups.vendors" t-as="vendor" t-key="vendor.id">
-                                        <option t-att-value="vendor.id"><t t-esc="vendor.name"/></option>
+                                        <option t-att-value="this.filterOptionValue(vendor.id)"><t t-esc="vendor.name"/></option>
                                     </t>
                                 </select>
-                                <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;" t-model="this.state.filters.receipts.dateFrom" t-on-change="() => this.onFilterChange('receipts')" title="Scheduled date from"/>
-                                <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;" t-model="this.state.filters.receipts.dateTo" t-on-change="() => this.onFilterChange('receipts')" title="Scheduled date to"/>
-                                <select class="form-select form-select-sm shadow-sm" style="width: 200px;" t-model="this.state.filters.receipts.status" t-on-change="() => this.onFilterChange('receipts')">
+                                <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;" t-att-value="this.state.filters.receipts.dateFrom" t-on-change="(ev) => this.onFilterField('receipts', 'dateFrom', ev)" title="Scheduled date from"/>
+                                <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;" t-att-value="this.state.filters.receipts.dateTo" t-on-change="(ev) => this.onFilterField('receipts', 'dateTo', ev)" title="Scheduled date to"/>
+                                <select class="form-select form-select-sm shadow-sm" style="width: 200px;" t-att-value="this.state.filters.receipts.status" t-on-change="(ev) => this.onFilterField('receipts', 'status', ev)">
                                 <option value="all">All Receipt Statuses</option>
                                 <option value="Ready">Ready / Waiting</option>
                                 <option value="Product Received">Product Received</option>
@@ -533,15 +533,15 @@
                                 <input type="text" class="form-control border-start-0 ps-0" placeholder="Search bills or vendors..." t-att-value="this.state.filters.vendorBills.search" t-on-input="(ev) => this.onSearchInput(ev, 'vendorBills')"/>
                             </div>
                             <div class="d-flex gap-2 flex-wrap">
-                                <select class="form-select form-select-sm shadow-sm" style="width: 180px;" t-model="this.state.filters.vendorBills.vendor" t-on-change="() => this.onFilterChange('vendorBills')" title="Filter by vendor">
+                                <select class="form-select form-select-sm shadow-sm" style="width: 180px;" t-att-value="this.state.filters.vendorBills.vendor" t-on-change="(ev) => this.onFilterField('vendorBills', 'vendor', ev)" title="Filter by vendor">
                                     <option value="all">All Vendors</option>
                                     <t t-foreach="this.state.poLookups.vendors" t-as="vendor" t-key="vendor.id">
-                                        <option t-att-value="vendor.id"><t t-esc="vendor.name"/></option>
+                                        <option t-att-value="this.filterOptionValue(vendor.id)"><t t-esc="vendor.name"/></option>
                                     </t>
                                 </select>
-                                <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;" t-model="this.state.filters.vendorBills.dateFrom" t-on-change="() => this.onFilterChange('vendorBills')" title="Bill date from"/>
-                                <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;" t-model="this.state.filters.vendorBills.dateTo" t-on-change="() => this.onFilterChange('vendorBills')" title="Bill date to"/>
-                                <select class="form-select form-select-sm shadow-sm" style="width: 180px;" t-model="this.state.filters.vendorBills.status" t-on-change="() => this.onFilterChange('vendorBills')">
+                                <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;" t-att-value="this.state.filters.vendorBills.dateFrom" t-on-change="(ev) => this.onFilterField('vendorBills', 'dateFrom', ev)" title="Bill date from"/>
+                                <input type="date" class="form-control form-control-sm shadow-sm" style="width: 150px;" t-att-value="this.state.filters.vendorBills.dateTo" t-on-change="(ev) => this.onFilterField('vendorBills', 'dateTo', ev)" title="Bill date to"/>
+                                <select class="form-select form-select-sm shadow-sm" style="width: 180px;" t-att-value="this.state.filters.vendorBills.status" t-on-change="(ev) => this.onFilterField('vendorBills', 'status', ev)">
                                     <option value="all">All Bill Statuses</option>
                                     <option value="Draft">Draft</option>
                                     <option value="Posted">Posted</option>
@@ -781,8 +781,8 @@
                                         Archived (<t t-esc="this.state.archivedVendorsCount || 0"/>)
                                     </button>
                                 </div>
-                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('vendors')" t-att-disabled="this.state.isLoadingList" title="Clear all filters on this list">
-                                    <i class="fa fa-times me-1"/> Clear filters
+                                <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('vendors')" t-att-disabled="this.state.isLoadingList" title="Clear search on this list">
+                                    <i class="fa fa-times me-1"/> Clear Search
                                 </button>
                             </div>
                             <button t-if="this.state.vendorViewMode !== 'archived'" class="btn btn-sm btn-dark fw-bold text-white shadow-sm" t-on-click="openVendorForm">

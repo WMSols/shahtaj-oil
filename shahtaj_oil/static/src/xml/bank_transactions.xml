@@ -329,8 +329,8 @@
             </span>
             <input type="text" class="form-control border-start-0" placeholder="Search journals..." t-att-value="this.state.filters.journals.search" t-on-input="(ev) => this.onSearchInput(ev, 'journals')"/>
         </div>
-        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('journals')" t-att-disabled="this.state.isLoading.data" title="Clear all filters on this list">
-            <i class="fa fa-times me-1"/> Clear filters
+        <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('journals')" t-att-disabled="this.state.isLoading.data" title="Clear search on this list">
+            <i class="fa fa-times me-1"/> Clear Search
         </button>
     </div>
 
@@ -408,29 +408,29 @@
         <div class="row g-3 mb-4 align-items-end">
             <div class="col-md-3">
                 <label class="small fw-bold text-muted mb-1">Delivery Man</label>
-                <select class="form-select" t-model="this.state.filters.settlements.dm" t-on-change="() => this.onFilterChange('settlements')">
+                <select class="form-select" t-att-value="this.state.filters.settlements.dm" t-on-change="(ev) => this.onFilterField('settlements', 'dm', ev)">
                     <option value="all">All delivery men</option>
                     <t t-foreach="this.state.lookupDeliveryMen" t-as="dm" t-key="'cash-dm-' + dm.id">
-                        <option t-att-value="dm.id"><t t-esc="dm.name"/></option>
+                        <option t-att-value="this.filterOptionValue(dm.id)"><t t-esc="dm.name"/></option>
                     </t>
                 </select>
             </div>
             <div class="col-md-3">
                 <label class="small fw-bold text-muted mb-1">Deposit Journal</label>
-                <select class="form-select" t-model="this.state.filters.settlements.journal" t-on-change="() => this.onFilterChange('settlements')">
+                <select class="form-select" t-att-value="this.state.filters.settlements.journal" t-on-change="(ev) => this.onFilterField('settlements', 'journal', ev)">
                     <option value="all">All journals</option>
                     <t t-foreach="this.state.lookupSettleJournals" t-as="j" t-key="'cash-sj-' + j.id">
-                        <option t-att-value="j.id"><t t-esc="j.name"/></option>
+                        <option t-att-value="this.filterOptionValue(j.id)"><t t-esc="j.name"/></option>
                     </t>
                 </select>
             </div>
             <div class="col-md-2">
                 <label class="small fw-bold text-muted mb-1">From</label>
-                <input type="date" class="form-control" t-model="this.state.filters.settlements.dateFrom" t-on-change="() => this.onFilterChange('settlements')"/>
+                <input type="date" class="form-control" t-att-value="this.state.filters.settlements.dateFrom" t-on-change="(ev) => this.onFilterField('settlements', 'dateFrom', ev)"/>
             </div>
             <div class="col-md-2">
                 <label class="small fw-bold text-muted mb-1">To</label>
-                <input type="date" class="form-control" t-model="this.state.filters.settlements.dateTo" t-on-change="() => this.onFilterChange('settlements')"/>
+                <input type="date" class="form-control" t-att-value="this.state.filters.settlements.dateTo" t-on-change="(ev) => this.onFilterField('settlements', 'dateTo', ev)"/>
             </div>
             <div class="col-md-2 d-flex flex-column gap-2">
                 <button class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.clearFilters('settlements')" t-att-disabled="this.state.isLoading.data" title="Clear all filters on this list">
