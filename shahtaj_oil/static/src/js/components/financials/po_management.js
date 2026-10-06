@@ -1443,21 +1443,13 @@ export class PoManagement extends Component {
                 billId = ids.find((id) => !previousIds.has(id)) || false;
             }
             this.notification.add("Vendor bill created successfully.", { type: "success" });
-            this._openBillAfterTab = billId || null;
-            this.requestTabSwitch("financials", "vendor_bills");
+            // Stay inside PO Management — a dashboard sub-tab switch remounts this
+            // component (contentReady gap) and races the bill open with "Component is destroyed".
+            this.setPoSubTab("vendor_bills");
             if (billId) {
-                const openId = billId;
-                setTimeout(() => {
-                    if (this._openBillAfterTab !== openId) {
-                        return;
-                    }
-                    this._openBillAfterTab = null;
-                    this.state.poSubTab = "vendor_bills";
-                    this._reloadVendorBill(openId);
-                }, 50);
+                await this._reloadVendorBill(billId);
             }
         } catch (error) {
-            this._openBillAfterTab = null;
             this.notification.add("Failed to create vendor bill: " + (error.data?.message || error.message), { type: "danger" });
         }
     }
