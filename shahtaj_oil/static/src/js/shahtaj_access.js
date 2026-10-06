@@ -30,6 +30,7 @@ export function hasFinancialAccess() {
  * hideCards: overview cards to remove (the cash "Financials" card is "financials").
  * canMutate: false means view and print only.
  * KPO and Warehouse can mutate every tab they are allowed to open.
+ * canApproveOrders: false means Needs Verification is view-only (no approve/reject).
  * showPrices: false hides product and stock price columns.
  */
 const ROLE_ACCESS = {
@@ -60,6 +61,7 @@ const ROLE_ACCESS = {
         ],
         cards: ["orders", "invoices"],
         canMutate: true,
+        canApproveOrders: false,
         canSettleWallet: true,
         canManageProducts: true,
         canResetOrderToDraft: false,
@@ -301,6 +303,15 @@ export function defaultHome() {
 
 export function canMutate() {
     return currentConfig().canMutate !== false;
+}
+
+/** Approve / reject Needs Verification orders (Dist + Manager). KPO is view-only. */
+export function canApproveOrders() {
+    const config = currentConfig();
+    if (config.canApproveOrders === false) {
+        return false;
+    }
+    return canMutate();
 }
 
 export function canSettleWallet() {

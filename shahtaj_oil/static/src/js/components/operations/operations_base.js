@@ -3,6 +3,7 @@
 import { Component, useState, onWillStart, onWillUpdateProps, useEffect, useRef } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import {
+    canApproveOrders,
     canDispatchOrders,
     canEditDispatchDetails,
     canMutate,
@@ -2060,6 +2061,10 @@ export class OperationsBase extends Component {
 
     get canMutate() {
         return canMutate();
+    }
+
+    get canApproveOrders() {
+        return canApproveOrders();
     }
 
     get showDmOverwriteButtons() {
@@ -4131,7 +4136,7 @@ export class OperationsBase extends Component {
     }
 
     openRejectModal() {
-        if (!this.state.selectedOrder) return;
+        if (!canApproveOrders() || !this.state.selectedOrder) return;
         this.state.rejectReason = '';
         this.state.showRejectModal = true;
     }
@@ -4166,7 +4171,7 @@ export class OperationsBase extends Component {
     }
 
     async approveSelectedOrder() {
-        if (!this.state.selectedOrder || this.state.isApprovingOrder) return;
+        if (!canApproveOrders() || !this.state.selectedOrder || this.state.isApprovingOrder) return;
         this.state.isApprovingOrder = true;
         try {
             const result = await this.orm.call("sale.order", "action_shahtaj_approve_order", [[this.state.selectedOrder.odoo_id]]);
@@ -4186,7 +4191,7 @@ export class OperationsBase extends Component {
 
     async proceedCreditOverride() {
         const form = this.state.creditOverride;
-        if (!form.orderId || this.state.isProcessingOverride) return;
+        if (!canApproveOrders() || !form.orderId || this.state.isProcessingOverride) return;
         this.state.isProcessingOverride = true;
         try {
             const vals = {
@@ -4214,7 +4219,7 @@ export class OperationsBase extends Component {
     }
 
     async rejectSelectedOrder() {
-        if (!this.state.selectedOrder || this.state.isRejectingOrder) return;
+        if (!canApproveOrders() || !this.state.selectedOrder || this.state.isRejectingOrder) return;
         const reason = (this.state.rejectReason || '').trim();
         if (!reason) {
             this.notification.add("Please enter a rejection reason.", { type: "warning" });
