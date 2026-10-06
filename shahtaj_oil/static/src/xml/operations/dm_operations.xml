@@ -13,7 +13,7 @@
                             <div class="d-flex gap-2" t-if="this.showDmJobActions()">
                                 <button t-if="this.state.selectedDmJob.orderId" class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openAssignModal(this.state.selectedDmJob.orderId, true)">View DM Assignment</button>
                                 <button t-if="this.canMutate and this.showDmOverwriteButtons and this.canPickJob(this.state.selectedDmJob)" class="btn btn-sm btn-dark text-white fw-bold" t-on-click="() => this.openPickModal(this.state.selectedDmJob.id)">Pick Stock</button>
-                                <button t-if="this.canMutate and this.canResetField(this.state.selectedDmJob)" class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.resetDmJobField(this.state.selectedDmJob.id)">Reset Pending</button>
+                                <button t-if="this.canMutate and this.showDmOverwriteButtons and this.canResetField(this.state.selectedDmJob)" class="btn btn-sm btn-outline-secondary fw-bold" t-on-click="() => this.resetDmJobField(this.state.selectedDmJob.id)">Reset Pending</button>
                                 <button t-if="this.canMutate and this.showDmOverwriteButtons and this.canReturnWarehouse(this.state.selectedDmJob)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.returnDmJobWarehouse(this.state.selectedDmJob.id)">Return to WH</button>
                             </div>
                         </div>
@@ -367,7 +367,7 @@
                                             <td><span t-attf-class="badge #{this.fieldStateBadgeClass(job.fieldState)}"><t t-esc="this.fieldStateLabel(job.fieldState)"/></span></td>
                                             <td class="text-end pe-4">
                                                 <button class="btn btn-sm btn-outline-dark fw-bold me-1" t-on-click="() => this.viewDmJob(job)">View</button>
-                                                <button t-if="this.canMutate and this.canResetField(job)" class="btn btn-sm btn-outline-secondary fw-bold me-1" t-on-click="() => this.resetDmJobField(job.id)">Reset</button>
+                                                <button t-if="this.canMutate and this.showDmOverwriteButtons and this.canResetField(job)" class="btn btn-sm btn-outline-secondary fw-bold me-1" t-on-click="() => this.resetDmJobField(job.id)">Reset</button>
                                                 <button t-if="this.canMutate and this.showDmOverwriteButtons and this.canReturnWarehouse(job)" class="btn btn-sm btn-outline-danger fw-bold" t-on-click="() => this.returnDmJobWarehouse(job.id)">Return WH</button>
                                             </td>
                                         </tr>
