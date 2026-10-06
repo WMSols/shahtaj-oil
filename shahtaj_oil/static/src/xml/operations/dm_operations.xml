@@ -45,6 +45,28 @@
                             </t>
                         </div>
 
+                        <div class="card border-0 shadow-sm rounded-3 mb-3 overflow-hidden"
+                             t-if="this.state.selectedDmJob.hasShopClosedPhoto and this.state.selectedDmJob.shopClosedImage">
+                            <button type="button" class="btn shahtaj-accordion-toggle w-100 text-start d-flex align-items-center justify-content-between p-3" t-on-click="() => this.toggleDmJobSection('shopClosed')">
+                                <h6 class="mb-0 fw-bold text-dark text-uppercase small">Shop Closed Photo</h6>
+                                <i t-attf-class="fa #{this.state.dmJobSections.shopClosed ? 'fa-chevron-up' : 'fa-chevron-down'} text-muted"/>
+                            </button>
+                            <t t-if="this.state.dmJobSections.shopClosed">
+                                <div class="border-top p-3">
+                                    <span class="text-muted small d-block mb-2">Shop Closed Photo</span>
+                                    <button type="button" class="btn p-0 border-0 bg-transparent"
+                                            t-on-click="() => this.openImagePreview(this.proofImageSrc(this.state.selectedDmJob.shopClosedImage), 'Shop Closed Photo')"
+                                            title="Click to enlarge">
+                                        <img t-att-src="this.proofImageSrc(this.state.selectedDmJob.shopClosedImage)"
+                                             alt="Shop Closed Photo"
+                                             class="rounded border shadow-sm"
+                                             style="width: 280px; height: 280px; object-fit: cover; cursor: zoom-in;"/>
+                                    </button>
+                                    <div class="text-muted small mt-1">Click to enlarge</div>
+                                </div>
+                            </t>
+                        </div>
+
                         <div class="card border-0 shadow-sm rounded-3 mb-3 overflow-hidden">
                             <button type="button" class="btn shahtaj-accordion-toggle w-100 text-start d-flex align-items-center justify-content-between p-3" t-on-click="() => this.toggleDmJobSection('order')">
                                 <h6 class="mb-0 fw-bold text-dark text-uppercase small">Order Details</h6>

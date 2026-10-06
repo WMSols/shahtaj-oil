@@ -91,7 +91,7 @@ export class OperationsBase extends Component {
             tableSettlements: [],
             lookupDeliveryMen: [],
             lookupJournals: [],
-            dmJobSections: { delivery: true, order: true, shop: false, gps: false, products: true },
+            dmJobSections: { delivery: true, order: true, shop: false, gps: false, shopClosed: true, products: true },
             settleModal: {
                 open: false,
                 wizardId: null,
@@ -2996,7 +2996,7 @@ export class OperationsBase extends Component {
     }
 
     async viewDmJob(job) {
-        this.state.dmJobSections = { delivery: true, order: true, shop: false, gps: false, products: true };
+        this.state.dmJobSections = { delivery: true, order: true, shop: false, gps: false, shopClosed: true, products: true };
         const detailFields = [
             "display_name", "delivery_man_id", "scheduled_date", "scheduled_time",
             "picked_at", "delivered_at", "state", "field_state", "assignment_mode",
@@ -3004,6 +3004,7 @@ export class OperationsBase extends Component {
             "sale_order_id", "partner_id", "order_booker_id", "order_date", "notes", "is_walk_in",
             "gps_verified", "check_in_distance_m", "receiver_name",
             "check_in_latitude", "check_in_longitude", "has_delivery_proof", "delivery_proof_image",
+            "has_shop_closed_photo", "shop_closed_image",
         ];
         if (this.hasFinancialAccess) {
             detailFields.push(
@@ -3056,6 +3057,8 @@ export class OperationsBase extends Component {
             gpsLng: rec.check_in_longitude || 0,
             hasProof: !!rec.has_delivery_proof,
             proofImage: rec.delivery_proof_image || "",
+            hasShopClosedPhoto: !!rec.has_shop_closed_photo,
+            shopClosedImage: rec.shop_closed_image || "",
             lines: lines.map((l) => ({
                 id: l.id,
                 product: l.product_id ? l.product_id[1] : "Product",
