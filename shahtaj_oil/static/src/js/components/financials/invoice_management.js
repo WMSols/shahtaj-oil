@@ -337,7 +337,8 @@ export class InvoiceManagement extends Component {
         filters = filters || {};
         const domain = [];
         if (stateKey === "allOrders") domain.push(["shahtaj_visit_id", "!=", false]);
-        if (stateKey === "orders") domain.push(["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]);
+        // Remaining qty only — excludes fully/over-invoiced orders stuck on invoice_status.
+        if (stateKey === "orders") domain.push(["shahtaj_visit_id", "!=", false], ["shahtaj_has_qty_to_invoice", "=", true]);
         if (stateKey === "invoices") {
             domain.push(["move_type", "in", ["out_invoice"]]);
             if (filters.legacyBalance) {
@@ -422,8 +423,8 @@ export class InvoiceManagement extends Component {
         if (!['invoices', 'expenses', 'credit', 'po_management'].includes(this.state.activeSubTab)) return;
         
         const tabMap = {
-            'all_orders': { stateKey: 'allOrders', model: 'sale.order', fields: ["name", "partner_id", "date_order", "amount_total", "amount_untaxed", "state", "user_id", "payment_term_id", "pricelist_id", "shahtaj_visit_id", "invoice_status"] },
-            'orders': { stateKey: 'orders', model: 'sale.order', fields: ["name", "partner_id", "date_order", "amount_total", "amount_untaxed", "state", "user_id", "payment_term_id", "pricelist_id", "shahtaj_visit_id", "invoice_status"] },
+            'all_orders': { stateKey: 'allOrders', model: 'sale.order', fields: ["name", "partner_id", "date_order", "amount_total", "amount_untaxed", "state", "user_id", "payment_term_id", "pricelist_id", "shahtaj_visit_id", "invoice_status", "shahtaj_is_partially_invoiced"] },
+            'orders': { stateKey: 'orders', model: 'sale.order', fields: ["name", "partner_id", "date_order", "amount_total", "amount_untaxed", "state", "user_id", "payment_term_id", "pricelist_id", "shahtaj_visit_id", "invoice_status", "shahtaj_is_partially_invoiced"] },
             'customer_invoices': { stateKey: 'invoices', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id", "shahtaj_is_walk_in", "shahtaj_is_legacy_balance"] },
             'credit_notes': { stateKey: 'creditNotes', model: 'account.move', fields: ["name", "partner_id", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "amount_residual", "payment_state", "state", "journal_id"] },
             'payments': { stateKey: 'payments', model: 'account.payment', fields: ["name", "partner_id", "date", "amount", "journal_id", "memo", "state", "shahtaj_payment_channel", "shahtaj_payer_bank_name", "shahtaj_payer_account_number", "shahtaj_instrument_reference", "shahtaj_payment_notes"] },
@@ -543,6 +544,7 @@ export class InvoiceManagement extends Component {
                     visit: o.shahtaj_visit_id ? o.shahtaj_visit_id[1] : "N/A",
                     status: o.state === "cancel" ? "Cancelled" : (o.state === "draft" ? "Draft" : "Confirmed"),
                     invoice_status: o.invoice_status,
+                    isPartialInvoice: !!o.shahtaj_is_partially_invoiced,
                 }));
             }
             else if (stateKey === 'payments') {

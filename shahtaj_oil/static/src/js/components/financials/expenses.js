@@ -178,7 +178,7 @@ export class Expenses extends Component {
             }
             
             if (stateKey === 'allOrders') domain.push(["shahtaj_visit_id", "!=", false]);
-            if (stateKey === 'orders') domain.push(["shahtaj_visit_id", "!=", false], ["invoice_status", "=", "to invoice"]);
+            if (stateKey === 'orders') domain.push(["shahtaj_visit_id", "!=", false], ["shahtaj_has_qty_to_invoice", "=", true]);
             if (stateKey === 'invoices') domain.push(["move_type", "in", ["out_invoice"]], ["partner_id.is_shahtaj_shop", "=", true]);
             if (stateKey === 'creditNotes') domain.push(["move_type", "=", "out_refund"], ["partner_id.is_shahtaj_shop", "=", true]);
             if (stateKey === 'payments') domain.push(["partner_id.is_shahtaj_shop", "=", true]);
