@@ -846,7 +846,7 @@
                                                     <div class="so-ov-metric-label">Out of stock</div>
                                                     <div class="d-flex align-items-center justify-content-between gap-2">
                                                         <div class="so-ov-metric-value" t-esc="this.state.kpis.outOfStockProducts"/>
-                                                        <span t-if="this.state.kpis.outOfStockProducts > 0" class="badge rounded-pill bg-danger">Low</span>
+                                                        <span t-if="this.state.kpis.outOfStockProducts > 0" class="badge rounded-pill text-white bg-danger">Low</span>
                                                     </div>
                                                 </div>
                                             </div>
