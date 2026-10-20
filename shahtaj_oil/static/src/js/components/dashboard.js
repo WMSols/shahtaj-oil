@@ -58,6 +58,8 @@ export class ShahtajDashboard extends Component {
             shopStatus: 'all',
             shopRegisteredOn: '',
             shopRegistrar: 'all',
+            openShopId: false,
+            openShopNonce: 0,
             staffStatus: 'all',
             stockStatus: 'all',
             orderDate: '',
@@ -138,7 +140,15 @@ export class ShahtajDashboard extends Component {
                 filters.checkinRole = ev.detail.checkinRole || 'all';
                 filters.checkinDate = ev.detail.checkinDate || '';
             }
-            this.switchTab(ev.detail.tab, ev.detail.subTab, { filters });
+            const shopId = ev.detail.shopId ? parseInt(ev.detail.shopId, 10) : false;
+            if (shopId) {
+                this.state.openShopId = shopId;
+                this.state.openShopNonce += 1;
+            }
+            this.switchTab(ev.detail.tab, ev.detail.subTab, {
+                filters,
+                forceBusy: !!(ev.detail.forceBusy || shopId),
+            });
         });
         onWillStart(async () => {
             await loadPortalAccess();

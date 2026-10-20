@@ -1015,7 +1015,7 @@
                         </div>
                     </div>
                     <div t-if="this.contentReady and this.state.renderedTab === 'territory'" class="h-100">
-                        <TerritoryRoutes requestedSubTab="this.state.renderedSubTab" requestedShopStatus="this.state.shopStatus" requestedShopRegisteredOn="this.state.shopRegisteredOn" requestedShopRegistrar="this.state.shopRegistrar" />
+                        <TerritoryRoutes requestedSubTab="this.state.renderedSubTab" requestedShopStatus="this.state.shopStatus" requestedShopRegisteredOn="this.state.shopRegisteredOn" requestedShopRegistrar="this.state.shopRegistrar" requestedOpenShopId="this.state.openShopId" requestedOpenShopNonce="this.state.openShopNonce" />
                     </div>
 
                     <div t-if="this.contentReady and this.state.renderedTab === 'warehouse'" class="h-100">

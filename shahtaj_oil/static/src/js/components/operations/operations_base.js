@@ -4428,6 +4428,26 @@ export class OperationsBase extends Component {
         return ranked.length ? ranked[0].order : false;
     }
 
+    viewShopFromCheckin(log) {
+        const shopId = log && (log.shopId || this._m2oId(log.shop_id));
+        if (!shopId) {
+            this.notification.add("No shop is linked to this GPS attempt.", { type: "warning" });
+            return;
+        }
+        if (!canSee("territory", "shops")) {
+            this.notification.add("You do not have access to shop details.", { type: "warning" });
+            return;
+        }
+        window.dispatchEvent(new CustomEvent("shahtaj-dashboard-switch", {
+            detail: {
+                tab: "territory",
+                subTab: "shops",
+                shopId,
+                forceBusy: true,
+            },
+        }));
+    }
+
     async viewOrderFromCheckin(log) {
         if (!log.sale_order_id) return;
         
