@@ -1,8 +1,8 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, onWillUpdateProps } from "@odoo/owl";
+import { Component, useState, onWillStart, onWillUpdateProps, onWillDestroy } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { canMutate, canSee, hasFinancialAccess, notifyPortalBusy } from "../../shahtaj_access";
+import { canMutate, canSee, hasFinancialAccess, openPortalBusy, releaseOwnerPortalBusy } from "../../shahtaj_access";
 import { printFilter, printListPdf } from "../../shahtaj_list_export";
 import { invalidateFinancialStats } from "./financials_cache";
 
@@ -35,6 +35,7 @@ export class CreditControl extends Component {
                 credits: { page: 1, limit: ITEMS_PER_PAGE, total: 0 },
             },
         });
+        onWillDestroy(() => releaseOwnerPortalBusy(this));
         this.debounceSearch = (func, wait) => {
             return (...args) => {
                 clearTimeout(this.state.searchTimeout);
@@ -160,7 +161,7 @@ export class CreditControl extends Component {
 
         const fetchToken = ++this._listFetchToken;
         this.state.isLoadingList = true;
-        notifyPortalBusy(true);
+        const endBusy = openPortalBusy(this);
         try {
             const { stateKey, model, fields } = config;
             const pag = this.state.pagination[stateKey];
@@ -387,9 +388,9 @@ export class CreditControl extends Component {
                 this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
             }
         } finally {
+            endBusy();
             if (fetchToken === this._listFetchToken) {
                 this.state.isLoadingList = false;
-                notifyPortalBusy(false);
             }
         }
     }

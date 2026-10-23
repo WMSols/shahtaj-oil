@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, onWillUpdateProps, useEffect, useRef } from "@odoo/owl";
+import { Component, useState, onWillStart, onWillUpdateProps, onWillDestroy, useEffect, useRef } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import {
     canApproveOrders,
@@ -14,7 +14,8 @@ import {
     hasFinancialAccess,
     isDistributorPortal,
     loadPortalAccess,
-    notifyPortalBusy,
+    openPortalBusy,
+    releaseOwnerPortalBusy,
     showPrices,
 } from "../../shahtaj_access";
 import { ConfirmModal } from "../confirm_modal";
@@ -58,6 +59,7 @@ export class OperationsBase extends Component {
         onRefreshSettled: { type: Function, optional: true },
     };
     setup() {
+        onWillDestroy(() => releaseOwnerPortalBusy(this));
         this.orm = useService("orm");
         this.notification = useService("notification");
         this.action = useService("action");
@@ -1795,15 +1797,11 @@ export class OperationsBase extends Component {
 
         const fetchToken = ++this._listFetchToken;
         this.state.isLoadingList = true;
-        notifyPortalBusy(true);
+        const endBusy = openPortalBusy(this);
         try {
             const pag = this.state.pagination[tab];
             const filters = this.state.filters[tab] || {};
             if (!pag) {
-                if (fetchToken === this._listFetchToken) {
-                    this.state.isLoadingList = false;
-                    notifyPortalBusy(false);
-                }
                 return;
             }
             const listQuery = this._operationsListQuery(tab, filters);
@@ -1814,25 +1812,13 @@ export class OperationsBase extends Component {
 
 
             if (tab === 'collections' && !this.canSeeDelivery('recovery')) {
-                if (fetchToken === this._listFetchToken) {
-                    this.state.isLoadingList = false;
-                    notifyPortalBusy(false);
-                }
                 return;
             }
             if (tab === 'settlements' && !this.canSeeDelivery('settlements')) {
-                if (fetchToken === this._listFetchToken) {
-                    this.state.isLoadingList = false;
-                    notifyPortalBusy(false);
-                }
                 return;
             }
             // 2. EXECUTE QUERY
             if (!model) {
-                if (fetchToken === this._listFetchToken) {
-                    this.state.isLoadingList = false;
-                    notifyPortalBusy(false);
-                }
                 return;
             }
             const queryKwargs = {
@@ -2031,9 +2017,9 @@ export class OperationsBase extends Component {
                 this.notification.add("Failed to fetch data: " + (error.data?.message || error.message), { type: "danger" });
             }
         } finally {
+            endBusy();
             if (fetchToken === this._listFetchToken) {
                 this.state.isLoadingList = false;
-                notifyPortalBusy(false);
             }
         }
     }

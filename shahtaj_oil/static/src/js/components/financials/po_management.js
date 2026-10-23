@@ -1,8 +1,8 @@
 /** @odoo-module **/
 
-import { Component, useState, onMounted, onWillUpdateProps, onWillUnmount } from "@odoo/owl";
+import { Component, useState, onMounted, onWillUpdateProps, onWillUnmount, onWillDestroy } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { canSee, hasFinancialAccess, notifyPortalBusy, portalAccessState } from "../../shahtaj_access";
+import { canSee, hasFinancialAccess, openPortalBusy, portalAccessState, releaseOwnerPortalBusy } from "../../shahtaj_access";
 import { printFilter, printListPdf } from "../../shahtaj_list_export";
 import { filterOptionValue, setFilterField } from "../../shahtaj_filter_ui";
 import { ConfirmModal } from "../confirm_modal";
@@ -112,6 +112,7 @@ export class PoManagement extends Component {
             this._consumePendingPoPrefill();
         };
         window.addEventListener("shahtaj-open-create-po", this._onOpenCreatePo);
+        onWillDestroy(() => releaseOwnerPortalBusy(this));
         onWillUnmount(() => {
             window.removeEventListener("shahtaj-open-create-po", this._onOpenCreatePo);
         });
@@ -365,7 +366,7 @@ export class PoManagement extends Component {
 
         const fetchToken = ++this._listFetchToken;
         this.state.isLoadingList = true;
-        notifyPortalBusy(true);
+        const endBusy = openPortalBusy(this);
         try {
             const { stateKey, model, fields } = config;
             const pag = this.state.pagination[stateKey];
@@ -522,9 +523,9 @@ export class PoManagement extends Component {
                 this.notification.add("Failed to fetch list: " + (error.data?.message || error.message), { type: "danger" });
             }
         } finally {
+            endBusy();
             if (fetchToken === this._listFetchToken) {
                 this.state.isLoadingList = false;
-                notifyPortalBusy(false);
             }
         }
     }

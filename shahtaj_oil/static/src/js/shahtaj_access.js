@@ -397,6 +397,7 @@ export function canSeeCard(card) {
 }
 
 let portalBusyCount = 0;
+const portalBusyEnds = new Set();
 
 export function notifyPortalBusy(busy) {
     portalBusyCount = Math.max(0, portalBusyCount + (busy ? 1 : -1));
@@ -405,7 +406,71 @@ export function notifyPortalBusy(busy) {
     }));
 }
 
+export function openPortalBusy(owner) {
+    const generation = (owner._portalBusyGen || 0) + 1;
+    owner._portalBusyGen = generation;
+    if (!owner._portalBusyActive) {
+        owner._portalBusyActive = true;
+        notifyPortalBusy(true);
+    }
+    let released = false;
+    const end = () => {
+        if (released) {
+            return;
+        }
+        released = true;
+        portalBusyEnds.delete(end);
+        if (owner._portalBusyEnds) {
+            owner._portalBusyEnds.delete(end);
+        }
+        if (owner._portalBusyGen !== generation || !owner._portalBusyActive) {
+            return;
+        }
+        owner._portalBusyActive = false;
+        notifyPortalBusy(false);
+    };
+    end.cancel = () => {
+        if (released) {
+            return;
+        }
+        released = true;
+        portalBusyEnds.delete(end);
+        if (owner._portalBusyEnds) {
+            owner._portalBusyEnds.delete(end);
+        }
+        if (owner._portalBusyGen === generation) {
+            owner._portalBusyActive = false;
+        }
+    };
+    if (!owner._portalBusyEnds) {
+        owner._portalBusyEnds = new Set();
+    }
+    owner._portalBusyEnds.add(end);
+    portalBusyEnds.add(end);
+    return end;
+}
+
+export function releaseOwnerPortalBusy(owner) {
+    if (!owner) {
+        return;
+    }
+    owner._portalBusyGen = (owner._portalBusyGen || 0) + 1;
+    if (owner._portalBusyActive) {
+        owner._portalBusyActive = false;
+        notifyPortalBusy(false);
+    }
+    const ends = owner._portalBusyEnds;
+    if (ends) {
+        for (const end of [...ends]) {
+            end.cancel();
+        }
+    }
+}
+
 export function resetPortalBusy() {
+    for (const end of [...portalBusyEnds]) {
+        end.cancel();
+    }
     portalBusyCount = 0;
     window.dispatchEvent(new CustomEvent("shahtaj-portal-busy", {
         detail: { busy: false },
