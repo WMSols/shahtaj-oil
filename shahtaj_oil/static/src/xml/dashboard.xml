@@ -720,7 +720,7 @@
                                             <div class="row g-2">
                                                 <div t-att-class="this.obMetricColClass" t-if="this.canSeeCard('checkins')">
                                                     <div class="so-ov-metric" t-on-click="() => this.openTodayCheckins()">
-                                                        <div class="so-ov-metric-label">Check-ins</div>
+                                                        <div class="so-ov-metric-label">Shop Visits</div>
                                                         <div class="so-ov-metric-value" t-esc="this.state.kpis.todayCheckins"/>
                                                     </div>
                                                 </div>
