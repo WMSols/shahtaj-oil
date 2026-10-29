@@ -34,8 +34,6 @@
         'data/shahtaj_expense_data.xml',
         'data/shahtaj_dm_data.xml',
         'data/shahtaj_field_report_data.xml',
-        # --- Moved Menu Here ----
-        'views/menus.xml', # All combined Menus
 
         # ── 3. CORE VIEWS + ACTIONS (no inherit from other module views) ──
         'views/shahtaj_route_views.xml',
@@ -119,7 +117,9 @@
         'data/shahtaj_ui_mode_sync.xml',
         'data/shahtaj_user_access_sync.xml',
 
-        # ── 10. MENUS (ALWAYS LAST; includes distributor portal client action) ──
+        # ── 10. MENUS (after every action they reference) ──
+        'views/menus.xml',
+        'views/menus_late.xml',
         'views/shahtaj_api_test_menu.xml',
     ],
     'assets': {
